@@ -16,6 +16,8 @@ Welche du brauchst, steht unter Einstellungen › System › Info › Systemtyp 
 - **Ohne Installation (empfohlen):** die beiden Dateien `Notizen-1.4.0-<arm64 oder x64>-ohne-Installation.zip.teil0` und `.teil1` sowie `zusammenfuegen.bat` herunterladen, alle in denselben Ordner legen und `zusammenfuegen.bat` doppelklicken. Daraus entsteht die normale Zip. Entpacken und `Notizen\Notizen.exe` starten. (Aufgeteilt, weil GitHub einzelne Dateien über 100 MB ablehnt.)
 - **Mit Installer:** `Notizen-1.4.0-arm64.zip` bzw. `Notizen-1.4.0-x64.zip` herunterladen, entpacken und die Setup-Datei starten.
 
+**Ohne Windows (Mac, Linux, Tablet):** [`Notizen-Browser.html`](Notizen-Browser.html) herunterladen und im Browser öffnen.
+
 Für das x64-Programm beim Bauen `npx electron-builder --win --x64` mit `"arch": ["x64"]` im `win.target` verwenden.
 
 ## Aufbau
