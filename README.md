@@ -7,9 +7,16 @@ Handschrift-App im Stil von GoodNotes für das Surface Pro 11 (Windows ARM64, Su
 Bücher mit Seiten, unendliche Arbeitsfläche, Stift, Textmarker, Radierer, Lasso, Formen und Pfeile, Graphen-Vorlagen (x/y, x/y/z), eigene Formen, Am Raster ausrichten, PDF-Import, Darkmode, Sichern/Wiederherstellen. Bedienung: siehe [ANLEITUNG.md](ANLEITUNG.md).
 
 ## Fertiges Windows-Programm herunterladen
-Im Ordner [`windows/`](windows):
-- **Ohne Installation (empfohlen):** die beiden Dateien `…ohne-Installation.zip.teil0` und `.teil1` sowie `zusammenfuegen.bat` herunterladen, alle in denselben Ordner legen und `zusammenfuegen.bat` doppelklicken. Daraus entsteht `Notizen-1.4.0-arm64-ohne-Installation.zip`. Entpacken und `Notizen\Notizen.exe` starten. (Aufgeteilt, weil GitHub einzelne Dateien über 100 MB ablehnt.)
-- **Mit Installer:** `Notizen-1.4.0-arm64.zip` herunterladen, entpacken und `Notizen-Setup-1.4.0-arm64.exe` starten.
+Im Ordner [`windows/`](windows) gibt es zwei Ausführungen:
+- **arm64** für Windows-Geräte mit ARM-Prozessor (z. B. Surface Pro 11 mit Snapdragon).
+- **x64** für normale Windows-PCs und Laptops mit Intel- oder AMD-Prozessor.
+
+Welche du brauchst, steht unter Einstellungen › System › Info › Systemtyp („ARM-basierter Prozessor“ = arm64, „x64-basierter Prozessor“ = x64).
+
+- **Ohne Installation (empfohlen):** die beiden Dateien `Notizen-1.4.0-<arm64 oder x64>-ohne-Installation.zip.teil0` und `.teil1` sowie `zusammenfuegen.bat` herunterladen, alle in denselben Ordner legen und `zusammenfuegen.bat` doppelklicken. Daraus entsteht die normale Zip. Entpacken und `Notizen\Notizen.exe` starten. (Aufgeteilt, weil GitHub einzelne Dateien über 100 MB ablehnt.)
+- **Mit Installer:** `Notizen-1.4.0-arm64.zip` bzw. `Notizen-1.4.0-x64.zip` herunterladen, entpacken und die Setup-Datei starten.
+
+Für das x64-Programm beim Bauen `npx electron-builder --win --x64` mit `"arch": ["x64"]` im `win.target` verwenden.
 
 ## Aufbau
 - `app.js` – das JavaScript der App (lesbare Quelle).
