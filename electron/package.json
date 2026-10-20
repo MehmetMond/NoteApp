@@ -1,0 +1,42 @@
+{
+  "name": "notizen",
+  "productName": "Notizen",
+  "version": "1.4.0",
+  "description": "Handschriftliche Notizen mit unendlicher Arbeitsfläche",
+  "author": "Baerda",
+  "main": "main.js",
+  "build": {
+    "appId": "de.baerda.notizen",
+    "productName": "Notizen",
+    "files": [
+      "main.js",
+      "app/**",
+      "icon.png"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Notizen",
+      "artifactName": "Notizen-Setup-${version}-arm64.${ext}"
+    },
+    "fileAssociations": []
+  },
+  "devDependencies": {
+    "electron": "^38.8.6",
+    "electron-builder": "^26.15.3"
+  }
+}

@@ -1,0 +1,2280 @@
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+
+/* ---------- Zustand ---------- */
+const PALETTE = ['ink', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'];
+// Strichstärken in Weltkoordinaten: ein Strich ist bei jedem Zoom gleich dick wie die anderen.
+// Die Voreinstellungen lassen sich per Schieberegler ändern (aktive Dicke nochmal antippen).
+const SIZES = { pen: [1, 2, 3.5, 6, 10], hl: [8, 14, 22, 32] };
+const SIZE_DEFAULT = { pen: 2, hl: 1 };
+const SIZE_RANGE = { pen: [0.5, 30], hl: [4, 80] };
+const HL_ALPHA = { light: 0.42, dark: 0.45 };
+const S = {
+  note: null,          // Eintrag aus dem Index (Name, Ansicht, Hintergrund, Vorschaubild)
+  items: [],           // Striche und Bilder der offenen Notiz, in Zeichenreihenfolge
+  saved: new Map(),    // id -> Objekt, so wie es zuletzt gespeichert wurde
+  view: { tx: 0, ty: 0, z: 1 },
+  level: 1,            // Zoomstufe, in der die Kacheln gerendert werden
+  tool: 'pen', color: { pen: 'ink', hl: '#fdd835' }, size: {}, presets: {}, sizeIdx: {},
+  sel: null, undo: [], redo: [], fingerDraw: false, dark: false,
+  busy: 0, thumbDirty: false,
+  shape: 'rect',       // gewählte Form des Formen-Werkzeugs
+  snap: false,         // Am Raster ausrichten
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('notizen.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('notizen.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+S.dark = store.get('dark', matchMedia('(prefers-color-scheme: dark)').matches);
+S.fingerDraw = store.get('fingerDraw', false);
+S.snap = store.get('snap', false) === true;
+Object.assign(S.color, store.get('color', {}));
+{
+  const pre = store.get('presets', {}), idx = store.get('sizeIdx', {}), old = store.get('size', {});
+  for (const k of ['pen', 'hl']) {
+    const [lo, hi] = SIZE_RANGE[k], p = pre[k];
+    const ps = S.presets[k] = Array.isArray(p) && p.length === SIZES[k].length && p.every(v => typeof v === 'number' && v >= lo && v <= hi) ? p : [...SIZES[k]];
+    let i = idx[k];
+    if (!(Number.isInteger(i) && i >= 0 && i < ps.length)) {
+      i = SIZE_DEFAULT[k];
+      if (typeof old[k] === 'number') ps.forEach((v, j) => { if (Math.abs(v - old[k]) < Math.abs(ps[i] - old[k])) i = j; });   // Wert aus Version 1.2
+    }
+    S.sizeIdx[k] = i; S.size[k] = ps[i];
+  }
+}
+
+function colorOf(c) { return c === 'ink' ? (S.dark ? '#f1f1f1' : '#1b1b1d') : c; }
+function paperColor() { return S.dark ? '#1c1d20' : '#fcfcfa'; }
+function patternColor() { return S.dark ? '#43464c' : '#c9c9c4'; }
+function hlAlpha() { return S.dark ? HL_ALPHA.dark : HL_ALPHA.light; }
+
+/* ---------- Hinweis ---------- */
+let toastT;
+function toast(msg, ms = 2200) {
+  const t = $('#toast'); t.textContent = msg; t.style.opacity = 1;
+  clearTimeout(toastT); if (ms) toastT = setTimeout(() => t.style.opacity = 0, ms);
+}
+
+/* ---------- Speicher (IndexedDB) ----------
+   index:  ein kleiner Eintrag pro Notiz (Name, Datum, Vorschaubild, Ansicht, Hintergrund)
+   items:  jeder Strich und jedes Bild als eigener Datensatz, Schlüssel [Notiz, id]
+   images: die Bilddaten (Blob) einmal pro Bild, dazu eine kleine Vorschau
+   books:  die Bücher (Name, Farbe); jede Notiz (Seite) gehört über meta.book zu einem Buch
+   shapes: eigene Formen (gespeicherte Striche), für alle Bücher und Seiten gleich */
+let db = null;
+function reqP(r) { return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+function txDone(tx) {
+  return new Promise((res, rej) => {
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error || new Error('Speicherfehler'));
+    tx.onabort = () => rej(tx.error || new Error('Speichern abgebrochen (Speicher voll?)'));
+  });
+}
+function dataURLToBlob(s) {
+  const i = s.indexOf(','), head = s.slice(0, i), body = s.slice(i + 1);
+  const mime = (head.match(/data:([^;,]+)/) || [])[1] || 'application/octet-stream';
+  if (!/;base64/.test(head)) return new Blob([decodeURIComponent(body)], { type: mime });
+  const bin = atob(body), u = new Uint8Array(bin.length);
+  for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
+  return new Blob([u], { type: mime });
+}
+// Notiz aus Version 1 (alles in einem Datensatz, Bilder als Data-URL) in die neue Form bringen
+function legacyToRecords(n) {
+  const id = n.id || uid();
+  const meta = { id, name: n.name || 'Notiz', created: n.created || n.updated || Date.now(), updated: n.updated || Date.now(),
+    thumb: n.thumb || null, bg: n.bg || 'dots', view: n.view || { tx: 0, ty: 0, z: 1 } };
+  const items = [], images = [], bySrc = new Map();
+  (n.items || []).forEach((it, k) => {
+    if (it.t === 's' && it.pts) items.push({ ...it, pts: Float32Array.from(it.pts), o: k, n: id });
+    else if (it.t === 'i' && it.src) {
+      let img = bySrc.get(it.src);
+      if (!img) { img = uid(); bySrc.set(it.src, img); images.push({ id: img, n: id, blob: dataURLToBlob(it.src), low: null, w: 0, h: 0 }); }
+      const { src, ...rest } = it; items.push({ ...rest, img, o: k, n: id });
+    }
+  });
+  return { meta, items, images };
+}
+// Version 4 = 3 + eigene Formen. Jeder Speicher wird nur angelegt, wenn er fehlt: so kommt jede ältere Datenbank
+// (auch eine Version 3 ohne „shapes“) auf denselben Stand.
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('notizen-app', 4);
+    r.onupgradeneeded = () => {
+      const d = r.result, t = r.transaction;
+      if (!d.objectStoreNames.contains('index')) d.createObjectStore('index', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath: ['n', 'id'] }).createIndex('n', 'n');
+      if (!d.objectStoreNames.contains('images')) d.createObjectStore('images', { keyPath: 'id' }).createIndex('n', 'n');
+      if (!d.objectStoreNames.contains('books')) d.createObjectStore('books', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('shapes')) d.createObjectStore('shapes', { keyPath: 'id' });
+      if (d.objectStoreNames.contains('notes')) {
+        const idx = t.objectStore('index'), its = t.objectStore('items'), ims = t.objectStore('images');
+        t.objectStore('notes').openCursor().onsuccess = ev => {
+          const c = ev.target.result;
+          if (!c) { d.deleteObjectStore('notes'); return; }
+          const { meta, items, images } = legacyToRecords(c.value);
+          idx.put(meta); items.forEach(i => its.put(i)); images.forEach(i => ims.put(i));
+          c.continue();
+        };
+      }
+    };
+    r.onsuccess = () => { db = r.result; db.onversionchange = () => db.close(); res(); };
+    r.onerror = () => rej(r.error);
+    r.onblocked = () => toast('Bitte andere Fenster mit den Notizen schließen', 6000);
+  });
+}
+const dbIndexAll = () => reqP(db.transaction('index').objectStore('index').getAll());
+const dbIndexGet = id => reqP(db.transaction('index').objectStore('index').get(id));
+async function dbIndexPut(meta) { const tx = db.transaction('index', 'readwrite'); tx.objectStore('index').put(meta); return txDone(tx); }
+const dbItems = n => reqP(db.transaction('items').objectStore('items').index('n').getAll(n));
+const dbImageGet = id => reqP(db.transaction('images').objectStore('images').get(id));
+async function dbImagePut(rec) { const tx = db.transaction('images', 'readwrite'); tx.objectStore('images').put(rec); return txDone(tx); }
+async function dbDeleteNote(id) { return dbDeleteNotes([id]); }
+// Seiten (und auf Wunsch ihr Buch) in einer Transaktion löschen: ganz oder gar nicht
+async function dbDeleteNotes(ids, bookId) {
+  const tx = db.transaction(['index', 'items', 'images', 'books'], 'readwrite');
+  for (const id of ids) {
+    tx.objectStore('index').delete(id);
+    tx.objectStore('items').delete(IDBKeyRange.bound([id], [id, []]));
+    const st = tx.objectStore('images');
+    st.index('n').openKeyCursor(IDBKeyRange.only(id)).onsuccess = ev => { const c = ev.target.result; if (c) { st.delete(c.primaryKey); c.continue(); } };
+  }
+  if (bookId) tx.objectStore('books').delete(bookId);
+  return txDone(tx);
+}
+const dbBookGet = id => reqP(db.transaction('books').objectStore('books').get(id));
+async function dbBookPut(b) { const tx = db.transaction('books', 'readwrite'); tx.objectStore('books').put(b); return txDone(tx); }
+async function dbBookDelete(id) { const tx = db.transaction('books', 'readwrite'); tx.objectStore('books').delete(id); return txDone(tx); }
+const dbShapesAll = () => reqP(db.transaction('shapes').objectStore('shapes').getAll());
+const dbShapeGet = id => reqP(db.transaction('shapes').objectStore('shapes').get(id));
+async function dbShapePut(r) { const tx = db.transaction('shapes', 'readwrite'); tx.objectStore('shapes').put(r); return txDone(tx); }
+async function dbShapeDelete(id) { const tx = db.transaction('shapes', 'readwrite'); tx.objectStore('shapes').delete(id); return txDone(tx); }
+
+/* Bücher: Farben der Einbände (Name, hell, dunkel) */
+const BOOK_COLORS = {
+  blue: ['Blau', '#5b8ce2', '#2b53a6'], red: ['Rot', '#dc5f55', '#a3302d'], green: ['Grün', '#4fa072', '#276445'],
+  orange: ['Orange', '#ef9446', '#bf5d1d'], purple: ['Lila', '#9270d3', '#5b3c98'], teal: ['Petrol', '#3a98a0', '#1a5c66'],
+  pink: ['Rosa', '#ea8aac', '#b9547e'], graphite: ['Graphit', '#6a7079', '#33373e'], mustard: ['Senf', '#e2b445', '#a87b12'],
+};
+const DEFAULT_BOOK = 'Meine Notizen';
+const bookColor = c => BOOK_COLORS[c] || BOOK_COLORS.blue;
+function coverVars(el, c) { const [, a, b] = bookColor(c); el.style.setProperty('--c1', a); el.style.setProperty('--c2', b); }
+// Jede Notiz ohne (gültiges) Buch kommt ins Buch „Meine Notizen“, das bei Bedarf angelegt wird.
+// Lesen und Schreiben in einer Transaktion: zwei gleichzeitige Aufrufe legen das Buch nicht doppelt an.
+async function ensureBooks() {
+  try { return await ensureBooksTx(); }
+  catch (e) {
+    // Schreiben geht nicht (z. B. Speicher voll): nur lesen und Seiten ohne Buch vorläufig im Standardbuch zeigen
+    const books = await reqP(db.transaction('books').objectStore('books').getAll()), notes = await dbIndexAll();
+    const ids = new Set(books.map(b => b.id)), orphans = notes.filter(n => !ids.has(n.book));
+    if (orphans.length) {
+      let def = books.filter(b => b.name === DEFAULT_BOOK).sort(byCreated)[0];
+      if (!def) { def = { id: 'standard', name: DEFAULT_BOOK, color: 'blue', created: 0 }; books.push(def); }
+      for (const n of orphans) n.book = def.id;
+    }
+    return { books, notes };
+  }
+}
+function ensureBooksTx() {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(['books', 'index'], 'readwrite'), bs = tx.objectStore('books'), is = tx.objectStore('index');
+    const out = { books: null, notes: null };
+    const step = () => {
+      if (!out.books || !out.notes) return;
+      const ids = new Set(out.books.map(b => b.id)), orphans = out.notes.filter(n => !ids.has(n.book));
+      if (!orphans.length) return;
+      let def = out.books.filter(b => b.name === DEFAULT_BOOK).sort(byCreated)[0];
+      if (!def) { def = { id: uid(), name: DEFAULT_BOOK, color: 'blue', created: Date.now() }; bs.put(def); out.books.push(def); }
+      for (const n of orphans) { n.book = def.id; is.put(n); }
+    };
+    bs.getAll().onsuccess = e => { out.books = e.target.result; step(); };
+    is.getAll().onsuccess = e => { out.notes = e.target.result; step(); };
+    txDone(tx).then(() => res(out), rej);
+  });
+}
+// Seiten eines Buchs: in der Reihenfolge, in der sie angelegt wurden (wie in einem echten Heft)
+const byCreated = (a, b) => (a.created || 0) - (b.created || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const pagesWord = n => n === 1 ? '1 Seite' : n + ' Seiten';
+const booksWord = n => n === 1 ? '1 Buch' : n + ' Bücher';
+
+/* Speichern: nur geänderte Striche/Bilder werden geschrieben */
+let saveT = null, firstDirty = 0, saving = Promise.resolve();
+function markDirty() {
+  if (!S.note) return;
+  S.note.updated = Date.now(); S.thumbDirty = true;
+  const now = performance.now(); if (!firstDirty) firstDirty = now;
+  clearTimeout(saveT);
+  saveT = setTimeout(saveNow, Math.max(0, Math.min(400, 2000 - (now - firstDirty))));
+}
+function saveNow() {
+  clearTimeout(saveT); saveT = null; firstDirty = 0;
+  const note = S.note; if (!note) return saving;
+  saving = saving.then(async () => {
+    if (S.note !== note) return;
+    const n = note.id, prev = S.saved, cur = new Map();
+    for (const it of S.items) cur.set(it.id, it);
+    const tx = db.transaction(['items', 'index'], 'readwrite'), st = tx.objectStore('items');
+    for (const [id, it] of cur) if (prev.get(id) !== it) st.put({ ...it, n });
+    for (const id of prev.keys()) if (!cur.has(id)) st.delete([n, id]);
+    tx.objectStore('index').put({ ...note, view: { ...S.view } });
+    await txDone(tx);
+    if (S.note === note) S.saved = cur;
+    S.saveError = null;
+  }).catch(e => { S.saveError = e; toast('Speichern fehlgeschlagen: ' + e.message, 6000); markDirtyLater(); });
+  return saving;
+}
+function markDirtyLater() { clearTimeout(saveT); saveT = setTimeout(saveNow, 3000); }
+let viewSaveT = null;
+function viewChanged() {
+  clearTimeout(viewSaveT);
+  viewSaveT = setTimeout(() => { if (S.note) { const m = { ...S.note, view: { ...S.view } }; saving = saving.then(() => dbIndexPut(m)).catch(() => {}); } }, 1200);
+}
+
+/* ---------- Bilder: Blob in der Datenbank, dekodiert in zwei Stufen ---------- */
+const IM = new Map();  // Bild-id -> { rec, low, full, ... }
+const MAX_FULL = 8, LOW_W = 640;
+let frameNo = 0;
+async function decodeBlob(blob) {
+  try { return await createImageBitmap(blob); } catch (e) {
+    // Fallback z. B. für SVG
+    const url = URL.createObjectURL(blob);
+    try {
+      const im = new Image(); im.src = url; await im.decode();
+      return await createImageBitmap(im);
+    } finally { URL.revokeObjectURL(url); }
+  }
+}
+function canvasToBlob(c, type, q) { return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('Bild konnte nicht kodiert werden')), type, q)); }
+async function makeLow(bmp, type) {
+  const s = Math.min(1, LOW_W / bmp.width), c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s));
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
+  return canvasToBlob(c, type === 'image/jpeg' ? 'image/jpeg' : 'image/webp', 0.85);
+}
+function imgEntry(id) {
+  let e = IM.get(id);
+  if (!e) { e = { rec: null, low: null, full: null, fullLoading: null, state: 'new', used: 0 }; IM.set(id, e); e.ready = loadLow(id, e); }
+  return e;
+}
+async function loadLow(id, e) {
+  e.state = 'loading';
+  try {
+    const rec = await dbImageGet(id);
+    if (!rec) { e.state = 'missing'; invalidateImage(id); return; }
+    e.rec = rec;
+    if (!rec.low) {
+      const bmp = await decodeBlob(rec.blob);
+      rec.w = bmp.width; rec.h = bmp.height; rec.low = await makeLow(bmp, rec.blob.type); bmp.close();
+      dbImagePut(rec).catch(() => {});
+    }
+    e.low = await createImageBitmap(rec.low);
+    e.state = 'ok';
+  } catch (err) { e.state = 'error'; }
+  invalidateImage(id);
+}
+function wantFull(id, e) {
+  if (e.full || e.fullLoading || !e.rec || e.fullFailed) return;
+  e.fullLoading = decodeBlob(e.rec.blob).then(b => {
+    e.full = b; e.fullLoading = null; e.used = frameNo;
+    if (IM.get(id) === e) { invalidateImage(id); evictFull(); } else b.close();
+  }).catch(() => { e.fullLoading = null; e.fullFailed = true; });
+}
+function evictFull() {
+  const full = [...IM.values()].filter(e => e.full && e.used < frameNo).sort((a, b) => a.used - b.used);
+  let count = [...IM.values()].filter(e => e.full).length;
+  while (count > MAX_FULL && full.length) { const e = full.shift(); e.full.close(); e.full = null; count--; }
+}
+function releaseImages() { for (const e of IM.values()) { e.low && e.low.close(); e.full && e.full.close(); } IM.clear(); }
+function invalidateImage(id) { for (const it of S.items) if (it.t === 'i' && it.img === id) invalidateBox(itemBox(it)); }
+function drawImageItem(ctx, it, devScale, quality = true) {
+  const e = imgEntry(it.img); e.used = frameNo;
+  const devW = it.w * devScale;
+  let bmp = null;
+  if (e.low && (!quality || devW <= e.low.width * 1.3)) bmp = e.low;
+  else { wantFull(it.img, e); bmp = e.full || e.low; }
+  if (bmp) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(bmp, it.x, it.y, it.w, it.h); return; }
+  ctx.fillStyle = 'rgba(128,128,128,.15)'; ctx.fillRect(it.x, it.y, it.w, it.h);
+  if (e.state === 'error' || e.state === 'missing') {
+    ctx.strokeStyle = 'rgba(128,128,128,.6)'; ctx.lineWidth = 2 / devScale;
+    ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(it.x + it.w, it.y + it.h); ctx.moveTo(it.x + it.w, it.y); ctx.lineTo(it.x, it.y + it.h); ctx.stroke();
+  }
+}
+
+/* ---------- Striche ---------- */
+const pathCache = new Map();
+const radAt = (pts, i, w, hl) => w / 2 * (hl ? 1 : (0.45 + pts[i * 3 + 2] * 1.1));
+// Ein Stück eines Strichs: Kreis am Punkt i und Verbindung zum Punkt i-1.
+// Alle Teile haben denselben Umlaufsinn, damit "nonzero" sie vereinigt.
+function addPiece(P, pts, i, w, hl) {
+  const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl);
+  P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2);
+  if (i > 0) {
+    const x0 = pts[i * 3 - 3], y0 = pts[i * 3 - 2], r0 = radAt(pts, i - 1, w, hl);
+    const dx = x - x0, dy = y - y0, L = Math.hypot(dx, dy);
+    if (L > 0.01) {
+      const nx = -dy / L, ny = dx / L;
+      P.moveTo(x0 + nx * r0, y0 + ny * r0); P.lineTo(x0 - nx * r0, y0 - ny * r0);
+      P.lineTo(x - nx * r, y - ny * r); P.lineTo(x + nx * r, y + ny * r);
+    }
+  }
+}
+// Fertiger Strich: Verbindungen überall, Kreise nur an den Enden und in Kurven (> 20°).
+// Bei kleineren Winkeln füllen zwei Dreiecke die Lücke zwischen den Verbindungen; das spart viel Rechenzeit.
+const COS20 = Math.cos(20 * Math.PI / 180);
+// Dreieck mit gleichem Umlaufsinn wie alle anderen Teile
+function tri(P, cx, cy, ax, ay, bx, by) {
+  if ((ax - cx) * (by - cy) - (ay - cy) * (bx - cx) < 0) { const tx = ax, ty = ay; ax = bx; ay = by; bx = tx; by = ty; }
+  P.moveTo(cx, cy); P.lineTo(ax, ay); P.lineTo(bx, by);
+}
+function buildPath(pts, w, hl) {
+  const P = new Path2D(), n = pts.length / 3;
+  let px = 0, py = 0, has = false;   // Richtung des vorherigen Abschnitts
+  for (let i = 0; i < n; i++) {
+    const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl);
+    let circle = i === 0 || i === n - 1;
+    if (i > 0) {
+      const x0 = pts[i * 3 - 3], y0 = pts[i * 3 - 2], r0 = radAt(pts, i - 1, w, hl);
+      const dx = x - x0, dy = y - y0, L = Math.hypot(dx, dy);
+      if (L > 0.01) {
+        const ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
+        P.moveTo(x0 + nx * r0, y0 + ny * r0); P.lineTo(x0 - nx * r0, y0 - ny * r0);
+        P.lineTo(x - nx * r, y - ny * r); P.lineTo(x + nx * r, y + ny * r);
+        if (has) {
+          if (px * ux + py * uy < COS20) circleAt(P, pts, i - 1, w, hl);
+          else { const qx = -py, qy = px; tri(P, x0, y0, x0 + qx * r0, y0 + qy * r0, x0 + nx * r0, y0 + ny * r0); tri(P, x0, y0, x0 - qx * r0, y0 - qy * r0, x0 - nx * r0, y0 - ny * r0); }
+        }
+        px = ux; py = uy; has = true;
+      }
+    }
+    if (circle) { P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); }
+  }
+  return P;
+}
+function circleAt(P, pts, i, w, hl) { const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl); P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); }
+function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl); pathCache.set(s, p); } return p; }
+function prunePaths() {
+  if (pathCache.size < S.items.length * 1.5 + 300) return;
+  const cur = new Set(S.items); for (const k of pathCache.keys()) if (!cur.has(k)) pathCache.delete(k);
+}
+function bboxOf(pts, m) {
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  for (let i = 0; i < pts.length; i += 3) { const x = pts[i], y = pts[i + 1]; if (x < a) a = x; if (y < b) b = y; if (x > c) c = x; if (y > d) d = y; }
+  return [a - m, b - m, c + m, d + m];
+}
+const itemBox = it => it.t === 's' ? it.bb : [it.x, it.y, it.x + it.w, it.y + it.h];
+const boxHit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+function makeStroke(pts, c, w, hl) { const p = Float32Array.from(pts); return { t: 's', id: uid(), c, w, hl: !!hl, pts: p, bb: bboxOf(p, w) }; }
+// Ein Strich mit seinem Pfad: Kacheln, Formvorschau und Vorschaubilder zeichnen alle genau so
+function fillStroke(ctx, s, P) {
+  ctx.fillStyle = colorOf(s.c);
+  if (s.hl) { ctx.globalAlpha = hlAlpha(); if (!S.dark) ctx.globalCompositeOperation = 'multiply'; }
+  ctx.fill(P);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
+function drawItem(ctx, it, devScale) {
+  if (it.t === 's') fillStroke(ctx, it, strokePath(it));
+  else if (it.t === 'i') drawImageItem(ctx, it, devScale);
+}
+
+/* ---------- Canvas & Kacheln ----------
+   cvMain zeigt Hintergrund + zwischengespeicherte Kacheln (512 px), cvLive den Strich,
+   der gerade geschrieben wird, sowie Lasso und Auswahl. */
+const cvMain = $('#cvMain'), cvLive = $('#cvLive');
+const ctxMain = cvMain.getContext('2d', { alpha: false });
+const ctxLive = cvLive.getContext('2d', { desynchronized: true });
+let VW = 0, VH = 0, DPR = 1;
+const T = 512, MAX_TILES = 110;
+const tiles = new Map();
+const tilePool = [];
+let fallbackL = null;
+const tkey = (L, i, j) => L + ':' + i + ':' + j;
+function clearTiles() { for (const t of tiles.values()) tilePool.push(t); tiles.clear(); fallbackL = null; requestDraw(); }
+function invalidateBox(b) {
+  if (!b) return;
+  for (const [k, t] of tiles) if (boxHit(t.wb, b)) { tiles.delete(k); tilePool.push(t); }
+  requestDraw();
+}
+function newTile() {
+  const c = document.createElement('canvas'); c.width = c.height = T;
+  return { c, ctx: c.getContext('2d', { alpha: false }) };
+}
+function hiddenIds() {
+  if (action && action.kind === 'erase') return action.removed;
+  if (action && (action.kind === 'move' || action.kind === 'scale')) return S.sel.ids;
+  return null;
+}
+function renderTile(L, i, j) {
+  const t = tilePool.pop() || newTile(), s = L * DPR, ctx = t.ctx;
+  t.L = L; t.wb = [i * T / s, j * T / s, (i + 1) * T / s, (j + 1) * T / s];
+  fillBg(ctx, L, -i * T, -j * T, T, T);
+  ctx.setTransform(s, 0, 0, s, -i * T, -j * T);
+  const hid = hiddenIds();
+  for (const it of S.items) {
+    if (hid && hid.has(it.id)) continue;
+    if (boxHit(itemBox(it), t.wb)) drawItem(ctx, it, s);
+  }
+  tiles.set(tkey(L, i, j), t);
+  return t;
+}
+function tileRange(L) {
+  const k = S.view.z / L, txD = Math.round(S.view.tx * DPR), tyD = Math.round(S.view.ty * DPR);
+  const W = cvMain.width, H = cvMain.height;
+  return { k, txD, tyD, i0: Math.floor(-txD / k / T), i1: Math.floor((W - txD) / k / T), j0: Math.floor(-tyD / k / T), j1: Math.floor((H - tyD) / k / T) };
+}
+function drawLevel(ctx, L, touch) {
+  const r = tileRange(L);
+  if ((r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400) return;
+  for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) {
+    const key = tkey(L, i, j), t = tiles.get(key); if (!t) continue;
+    if (touch) { tiles.delete(key); tiles.set(key, t); }
+    const x0 = Math.floor(i * T * r.k + r.txD), x1 = Math.floor((i + 1) * T * r.k + r.txD);
+    const y0 = Math.floor(j * T * r.k + r.tyD), y1 = Math.floor((j + 1) * T * r.k + r.tyD);
+    if (r.k === 1) ctx.drawImage(t.c, x0, y0); else ctx.drawImage(t.c, x0, y0, x1 - x0, y1 - y0);
+  }
+}
+const patCache = new Map();
+// Papier + Muster; Punkte liegen bei offX + k * Abstand (Gerätepixel)
+function fillBg(ctx, z, offX, offY, W, H) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = paperColor(); ctx.fillRect(0, 0, W, H);
+  const bg = S.note.bg || 'dots'; if (bg === 'blank') return;
+  let sp = (bg === 'lines' ? 34 : 28) * z; while (sp < 14) sp *= 2;
+  const spD = sp * DPR, C = Math.max(4, Math.round(spD)), f = C / spD;
+  const rD = clamp(1.25 * Math.sqrt(z), 0.8, 2.2) * DPR, lw = Math.max(1, DPR * 0.8);
+  const key = bg + '|' + C + '|' + (bg === 'dots' ? rD.toFixed(2) : lw) + '|' + S.dark;
+  let pat = patCache.get(key);
+  if (!pat) {
+    const c = document.createElement('canvas'); c.width = c.height = C;
+    const g = c.getContext('2d'); g.fillStyle = g.strokeStyle = patternColor();
+    if (bg === 'dots') { g.beginPath(); g.arc(C / 2, C / 2, rD * f, 0, 6.2832); g.fill(); }
+    else { g.globalAlpha = 0.75; g.fillRect(0, C / 2 - lw * f / 2, C, lw * f); if (bg === 'grid') g.fillRect(C / 2 - lw * f / 2, 0, lw * f, C); }
+    if (patCache.size > 24) patCache.clear();
+    pat = ctxMain.createPattern(c, 'repeat'); patCache.set(key, pat);
+  }
+  const ox = (offX % spD + spD) % spD, oy = (offY % spD + spD) % spD;
+  pat.setTransform(new DOMMatrix([1 / f, 0, 0, 1 / f, ox - spD / 2, oy - spD / 2]));
+  ctx.fillStyle = pat; ctx.fillRect(0, 0, W, H);
+}
+let drawQ = false, liveQ = false;
+function requestDraw() { if (!drawQ) { drawQ = true; requestAnimationFrame(() => { if (drawQ) draw(); }); } }
+function requestLive() { if (!liveQ) { liveQ = true; requestAnimationFrame(drawLive); } }
+function draw() {
+  drawQ = false; if (!S.note) return;
+  frameNo++;
+  const ctx = ctxMain, L = S.level;
+  fillBg(ctx, S.view.z, Math.round(S.view.tx * DPR), Math.round(S.view.ty * DPR), cvMain.width, cvMain.height);
+  const r = tileRange(L), missing = [];
+  let have = 0;
+  for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) if (!tiles.has(tkey(L, i, j))) missing.push([i, j]); else have++;
+  if (missing.length) {
+    const ci = (cvMain.width / 2 - r.txD) / r.k / T - 0.5, cj = (cvMain.height / 2 - r.tyD) / r.k / T - 0.5;
+    missing.sort((a, b) => Math.hypot(a[0] - ci, a[1] - cj) - Math.hypot(b[0] - ci, b[1] - cj));
+    // Beim Öffnen alles sofort zeichnen, beim Verschieben/Zoomen nur wenige ms pro Bild (Rest folgt)
+    const first = have === 0 && fallbackL == null;
+    const t0 = performance.now(), budget = first ? 250 : 7, maxN = first ? Infinity : (gesture || wheelT ? 3 : 8);
+    let done = 0;
+    while (missing.length && done < maxN && performance.now() - t0 < budget) { const [i, j] = missing.shift(); renderTile(L, i, j); done++; }
+  }
+  if (missing.length && fallbackL != null && fallbackL !== L) drawLevel(ctx, fallbackL, false);
+  drawLevel(ctx, L, true);
+  if (missing.length) requestDraw();
+  else { if (fallbackL != null && !gesture && !wheelT) fallbackL = null; schedulePrefetch(); }
+  // älteste Kacheln verwerfen
+  for (const [k, t] of tiles) { if (tiles.size <= MAX_TILES) break; tiles.delete(k); tilePool.push(t); }
+  if (tilePool.length > 40) tilePool.length = 40;
+  $('#zoom').textContent = Math.round(S.view.z * 100) + ' %';
+  placeSelbar();
+  if (action && action.kind === 'shape') requestLive();   // Formvorschau enthält Kachelpixel: mitziehen
+}
+// In Ruhepausen die Kacheln rund um den sichtbaren Bereich vorab zeichnen
+let prefetchQ = false;
+const idle = window.requestIdleCallback || (fn => setTimeout(() => fn({ timeRemaining: () => 8 }), 50));
+function schedulePrefetch() {
+  if (prefetchQ) return; prefetchQ = true;
+  idle(dl => {
+    prefetchQ = false;
+    if (!S.note || gesture || action || S.view.z !== S.level) return;
+    const L = S.level, r = tileRange(L), ring = [];
+    for (let j = r.j0 - 1; j <= r.j1 + 1; j++) for (let i = r.i0 - 1; i <= r.i1 + 1; i++) if (!tiles.has(tkey(L, i, j))) ring.push([i, j]);
+    let done = 0;
+    while (ring.length && done < 4 && dl.timeRemaining() > 4) { const [i, j] = ring.shift(); renderTile(L, i, j); done++; }
+    if (ring.length) schedulePrefetch();
+  }, { timeout: 1000 });
+}
+function liveClear() { ctxLive.setTransform(1, 0, 0, 1, 0, 0); ctxLive.clearRect(0, 0, cvLive.width, cvLive.height); }
+function liveStyle(a) {
+  cvLive.style.opacity = a && a.hl ? hlAlpha() : '';
+  cvLive.style.mixBlendMode = a && a.hl && !S.dark ? 'multiply' : '';
+}
+function liveWorld() { const { tx, ty, z } = S.view; ctxLive.setTransform(DPR * z, 0, 0, DPR * z, DPR * tx, DPR * ty); }
+function drawLive() {
+  liveQ = false;
+  if (action && action.kind === 'draw') return;   // der Strich wird direkt gezeichnet
+  liveClear(); liveWorld();
+  const ctx = ctxLive, z = S.view.z, blue = S.dark ? '#8fb0ff' : '#2f6fed';
+  if (action && action.kind === 'shape') liveShape(action);
+  if (action && action.kind === 'lasso' && action.pts.length > 2) {
+    ctx.beginPath(); ctx.moveTo(action.pts[0], action.pts[1]);
+    for (let i = 2; i < action.pts.length; i += 2) ctx.lineTo(action.pts[i], action.pts[i + 1]);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(80,130,255,.08)'; ctx.fill();
+    ctx.setLineDash([6 / z, 5 / z]); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = blue; ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (action && action.kind === 'erase' && action.at) {
+    ctx.beginPath(); ctx.arc(action.at[0], action.at[1], ERASE_R / z, 0, 6.2832);
+    ctx.lineWidth = 1 / z; ctx.strokeStyle = S.dark ? '#aaa' : '#777'; ctx.stroke();
+  }
+  if (S.sel) {
+    let [a0, b0, a1, b1] = S.sel.bb;
+    const mv = action && (action.kind === 'move' || action.kind === 'scale');
+    if (mv) {
+      const a = action;
+      if (a.bmp) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        if (a.kind === 'move') ctx.drawImage(a.bmp.c, (a.bmp.sx + a.dx * z) * DPR, (a.bmp.sy + a.dy * z) * DPR);
+        else { const [ax, ay] = toScreen(...a.anchor); ctx.drawImage(a.bmp.c, (ax + (a.bmp.sx - ax) * a.s) * DPR, (ay + (a.bmp.sy - ay) * a.s) * DPR, a.bmp.c.width * a.s, a.bmp.c.height * a.s); }
+        liveWorld();
+      } else {
+        ctx.save();
+        if (a.kind === 'move') ctx.translate(a.dx, a.dy);
+        else { const [ax, ay] = a.anchor; ctx.translate(ax, ay); ctx.scale(a.s, a.s); ctx.translate(-ax, -ay); }
+        for (const it of S.items) if (S.sel.ids.has(it.id)) drawItem(ctx, it, DPR * z * (a.s || 1));
+        ctx.restore();
+      }
+      if (a.kind === 'move') { a0 += a.dx; a1 += a.dx; b0 += a.dy; b1 += a.dy; }
+      else { const [ax, ay] = a.anchor; a1 = ax + (a1 - ax) * a.s; b1 = ay + (b1 - ay) * a.s; }
+    }
+    ctx.setLineDash([6 / z, 5 / z]); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = blue;
+    ctx.strokeRect(a0, b0, a1 - a0, b1 - b0); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(a1, b1, 9 / z, 0, 6.2832); ctx.fillStyle = blue; ctx.fill();
+    ctx.lineWidth = 2 / z; ctx.strokeStyle = '#fff'; ctx.stroke();
+  }
+}
+function resize() {
+  const oldDPR = DPR;
+  DPR = window.devicePixelRatio || 1;
+  const r = $('#stage').getBoundingClientRect(); VW = r.width; VH = r.height;
+  const w = Math.round(VW * DPR), h = Math.round(VH * DPR);
+  if (cvMain.width !== w || cvMain.height !== h) {
+    for (const c of [cvMain, cvLive]) { c.width = w; c.height = h; }
+    if (action && action.kind === 'draw') { action.noComposite = true; endAction(false); }
+  }
+  if (oldDPR !== DPR) { clearTiles(); patCache.clear(); }
+  closeMenus();
+  if (S.note) { S.view.tx = snap(S.view.tx); S.view.ty = snap(S.view.ty); draw(); drawLive(); }
+}
+new ResizeObserver(resize).observe($('#stage'));
+(function watchDPR() {
+  const mq = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  mq.addEventListener('change', () => { resize(); watchDPR(); }, { once: true });
+})();
+
+const toWorld = (sx, sy) => [(sx - S.view.tx) / S.view.z, (sy - S.view.ty) / S.view.z];
+const toScreen = (wx, wy) => [wx * S.view.z + S.view.tx, wy * S.view.z + S.view.ty];
+const snap = v => Math.round(v * DPR) / DPR;
+
+// Hintergrund als Pfad, für Export und Vorschaubild
+function drawBg(ctx, bg, view, W, H, scale) {
+  if (bg === 'blank') return;
+  const { tx, ty, z } = view;
+  let sp = (bg === 'lines' ? 34 : 28) * z;
+  while (sp < 14) sp *= 2;
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  const ox = ((tx % sp) + sp) % sp - sp, oy = ((ty % sp) + sp) % sp - sp;
+  ctx.fillStyle = ctx.strokeStyle = patternColor();
+  if (bg === 'dots') {
+    const r = clamp(1.25 * Math.sqrt(z), 0.8, 2.2);
+    ctx.beginPath();
+    for (let x = ox; x < W + sp; x += sp) for (let y = oy; y < H + sp; y += sp) { ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, 6.2832); }
+    ctx.fill();
+  } else {
+    ctx.lineWidth = Math.max(1, scale * 0.8) / scale; ctx.beginPath();
+    if (bg === 'grid') for (let x = ox; x < W + sp; x += sp) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = oy; y < H + sp; y += sp) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.globalAlpha = 0.75; ctx.stroke(); ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------- Ansicht ---------- */
+let wheelT = null;
+function setView(tx, ty, z, settle) {
+  S.view.tx = snap(tx); S.view.ty = snap(ty); S.view.z = z;
+  if (action && action.kind === 'draw') {   // Ansicht ändert sich während des Schreibens: Strich neu zeichnen
+    action.noComposite = true; liveClear(); liveWorld(); ctxLive.fillStyle = colorOf(action.c); action.drawn = 0; livePiece(action);
+  }
+  if (settle) settleZoom();
+  else if (z / S.level < 0.6 || z / S.level > 1.8) { fallbackL = S.level; S.level = z; }
+  requestDraw(); if (S.sel || (action && action.kind !== 'draw')) requestLive();
+  viewChanged();
+}
+function settleZoom() {
+  if (S.level !== S.view.z) { fallbackL = S.level; S.level = S.view.z; requestDraw(); }
+}
+function zoomAt(sx, sy, nz, settle = true) {
+  nz = clamp(nz, 0.1, 8);
+  const [wx, wy] = toWorld(sx, sy);
+  setView(sx - wx * nz, sy - wy * nz, nz, settle);
+}
+function contentBox(items = S.items) {
+  if (!items.length) return null;
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const it of items) { const q = itemBox(it); if (q[0] < b[0]) b[0] = q[0]; if (q[1] < b[1]) b[1] = q[1]; if (q[2] > b[2]) b[2] = q[2]; if (q[3] > b[3]) b[3] = q[3]; }
+  return b;
+}
+function barBottom() { return $('#bar').getBoundingClientRect().bottom; }
+function fitAll() {
+  const b = contentBox(); if (!b) { setView(0, 0, 1, true); return; }
+  const top = barBottom() + 20;
+  const w = b[2] - b[0], h = b[3] - b[1];
+  const z = clamp(Math.min((VW - 80) / w, (VH - top - 40) / h), 0.1, 2);
+  setView(VW / 2 - (b[0] + w / 2) * z, top + (VH - top) / 2 - (b[1] + h / 2) * z, z, true);
+}
+
+/* ---------- Änderungen & Verlauf ---------- */
+// Neue Liste übernehmen; geänderte Bereiche der Kacheln werden neu gezeichnet
+function setItems(next, inval = true) {
+  if (inval) {
+    const oldSet = new Set(S.items), newSet = new Set(next);
+    for (const it of next) if (!oldSet.has(it)) invalidateBox(itemBox(it));
+    for (const it of S.items) if (!newSet.has(it)) invalidateBox(itemBox(it));
+  }
+  S.items = next;
+}
+function commit(next, inval = true) {
+  S.undo.push(S.items); if (S.undo.length > 150) S.undo.shift();
+  S.redo = []; setItems(next, inval); markDirty(); requestDraw(); updateUndo(); prunePaths();
+}
+function undo() { cancelAction(); if (!S.undo.length) return; S.redo.push(S.items); setItems(S.undo.pop()); clearSel(); markDirty(); requestDraw(); updateUndo(); }
+function redo() { cancelAction(); if (!S.redo.length) return; S.undo.push(S.items); setItems(S.redo.pop()); clearSel(); markDirty(); requestDraw(); updateUndo(); }
+function updateUndo() { $('#bUndo').disabled = !S.undo.length; $('#bRedo').disabled = !S.redo.length; }
+// Reihenfolge: neue Striche ans Ende, Bilder direkt über die vorhandenen Bilder (also unter die Schrift)
+function appendItems(list, added) {
+  const base = list.length ? list[list.length - 1].o : 0;
+  added.forEach((it, k) => it.o = base + k + 1);
+  return [...list, ...added];
+}
+function withImages(list, added) {
+  let k = 0; list.forEach((it, i) => { if (it.t === 'i') k = i + 1; });
+  const lo = k > 0 ? list[k - 1].o : (list.length ? list[0].o - added.length - 1 : 0);
+  const hi = k < list.length ? list[k].o : lo + added.length + 1;
+  added.forEach((it, m) => it.o = lo + (hi - lo) * (m + 1) / (added.length + 1));
+  return [...list.slice(0, k), ...added, ...list.slice(k)];
+}
+
+/* ---------- Auswahl ---------- */
+// Striche eines Graphen gehören zusammen: wird einer gewählt, kommt die ganze Gruppe mit
+function withGroups(ids) {
+  const gs = new Set();
+  for (const it of S.items) if (it.g && ids.has(it.id)) gs.add(it.g);
+  if (gs.size) for (const it of S.items) if (it.g && gs.has(it.g)) ids.add(it.id);
+  return ids;
+}
+// Ausdehnung ohne Strichbreite (Punkte der Striche, Bildränder) – daran richtet sich das Raster aus
+function geoBox(items) {
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const it of items) {
+    if (it.t === 'i') { b[0] = Math.min(b[0], it.x); b[1] = Math.min(b[1], it.y); b[2] = Math.max(b[2], it.x + it.w); b[3] = Math.max(b[3], it.y + it.h); continue; }
+    const p = it.pts;
+    for (let i = 0; i < p.length; i += 3) { const x = p[i], y = p[i + 1]; if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; }
+  }
+  return b;
+}
+function selGeoBox(a) { return a.gb || (a.gb = geoBox(S.items.filter(it => S.sel.ids.has(it.id)))); }
+function setSel(ids) {
+  if (!ids.size) return clearSel();
+  const items = S.items.filter(it => ids.has(it.id));
+  if (!items.length) return clearSel();
+  S.sel = { ids: new Set(items.map(i => i.id)), bb: contentBox(items) }; requestLive(); placeSelbar();
+}
+function clearSel() {
+  if (action && (action.kind === 'move' || action.kind === 'scale')) cancelAction();
+  S.sel = null; $('#selbar').classList.add('hidden'); requestLive();
+}
+function refreshSel() { if (S.sel) setSel(S.sel.ids); }
+function placeSelbar() {
+  const bar = $('#selbar');
+  if (!S.sel || !S.note || (action && (action.kind === 'move' || action.kind === 'scale'))) { bar.classList.add('hidden'); return; }
+  const strokes = S.items.some(it => S.sel.ids.has(it.id) && it.t === 's');
+  for (const id of ['#sColor', '#sSize', '#sSave']) $(id).classList.toggle('hidden', !strokes);
+  bar.classList.remove('hidden');
+  const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]);
+  const top = barBottom() + 8, h = bar.offsetHeight, hw = bar.offsetWidth / 2 + 8;
+  let y = y0 - 12 - h;                       // über der Auswahl
+  if (y < top) y = y1 + 16;                  // sonst darunter
+  if (y + h > VH - 8) y = Math.max(top, Math.min(VH - h - 8, y0 + 12));  // sonst innen oben
+  bar.style.left = clamp((x0 + x1) / 2, hw, VW - hw) + 'px';
+  bar.style.top = y + 'px';
+}
+function transformItem(it, s, ox, oy, dx, dy) {
+  const f = (x, o) => o + (x - o) * s;
+  if (it.t === 's') {
+    const pts = new Float32Array(it.pts);
+    for (let i = 0; i < pts.length; i += 3) { pts[i] = f(pts[i], ox) + dx; pts[i + 1] = f(pts[i + 1], oy) + dy; }
+    return { ...it, pts, w: it.w * s, bb: bboxOf(pts, it.w * s) };
+  }
+  return { ...it, x: f(it.x, ox) + dx, y: f(it.y, oy) + dy, w: it.w * s, h: it.h * s };
+}
+function pointInPoly(x, y, P) {
+  let inside = false;
+  for (let i = 0, j = P.length - 2; i < P.length; j = i, i += 2) {
+    const xi = P[i], yi = P[i + 1], xj = P[j], yj = P[j + 1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function lassoSelect(P) {
+  const ids = new Set();
+  let len = 0; for (let i = 2; i < P.length; i += 2) len += Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]);
+  if (len * S.view.z < 12) { // Antippen: oberstes Objekt unter dem Stift
+    const x = P[0], y = P[1];
+    for (let k = S.items.length - 1; k >= 0; k--) {
+      const it = S.items[k];
+      if (it.t === 'i' ? (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) : hitStroke(it, x, y, 8 / S.view.z)) { ids.add(it.id); break; }
+    }
+    return withGroups(ids);
+  }
+  const lb = [Infinity, Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < P.length; i += 2) { lb[0] = Math.min(lb[0], P[i]); lb[1] = Math.min(lb[1], P[i + 1]); lb[2] = Math.max(lb[2], P[i]); lb[3] = Math.max(lb[3], P[i + 1]); }
+  for (const it of S.items) {
+    const b = itemBox(it); if (!boxHit(b, lb)) continue;
+    if (it.t === 'i') { if (pointInPoly(it.x + it.w / 2, it.y + it.h / 2, P)) ids.add(it.id); continue; }
+    const n = it.pts.length / 3, step = Math.max(1, Math.floor(n / 40));
+    let inside = 0, tested = 0;
+    for (let i = 0; i < n; i += step) { tested++; if (pointInPoly(it.pts[i * 3], it.pts[i * 3 + 1], P)) inside++; }
+    if (inside / tested >= 0.5) ids.add(it.id);
+  }
+  return withGroups(ids);
+}
+function selBitmap() {
+  const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]);
+  const sx0 = Math.max(x0, -VW), sy0 = Math.max(y0, -VH), sx1 = Math.min(x1, 2 * VW), sy1 = Math.min(y1, 2 * VH);
+  const w = Math.ceil((sx1 - sx0) * DPR), h = Math.ceil((sy1 - sy0) * DPR);
+  if (w <= 0 || h <= 0 || w * h > 40e6) return null;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'), z = S.view.z;
+  g.setTransform(DPR * z, 0, 0, DPR * z, DPR * (S.view.tx - sx0), DPR * (S.view.ty - sy0));
+  for (const it of S.items) if (S.sel.ids.has(it.id)) drawItem(g, it, DPR * z);
+  return { c, sx: sx0, sy: sy0 };
+}
+
+/* ---------- Radierer ---------- */
+const ERASE_R = 12;
+function distSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+  let t = L ? ((px - ax) * dx + (py - ay) * dy) / L : 0; t = clamp(t, 0, 1);
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+function hitStroke(s, x, y, r) {
+  const b = s.bb; if (x < b[0] - r || x > b[2] + r || y < b[1] - r || y > b[3] + r) return false;
+  const p = s.pts, lim = r + s.w / 2;
+  if (p.length === 3) return Math.hypot(x - p[0], y - p[1]) < lim;
+  for (let i = 3; i < p.length; i += 3) if (distSeg(x, y, p[i - 3], p[i - 2], p[i], p[i + 1]) < lim) return true;
+  return false;
+}
+function eraseAt(x, y) {
+  const r = ERASE_R / S.view.z;
+  for (const it of S.items) if (it.t === 's' && !action.removed.has(it.id) && hitStroke(it, x, y, r)) { action.removed.add(it.id); invalidateBox(it.bb); }
+}
+
+/* ---------- Formen, Koordinatensysteme, Raster ----------
+   Formen sind gewöhnliche Striche (Druck 0,5 = genau die Stiftbreite). Damit funktionieren Auswahl,
+   Radierer, Farbe, Dicke, Rückgängig, Speichern und Export ohne Sonderfälle. */
+const SHAPE_KINDS = ['line', 'arrow', 'arrow2', 'rect', 'ellipse', 'tri', 'rtri', 'diamond', 'axes2', 'axes2p', 'axes3'];
+const LINE_SHAPES = new Set(['line', 'arrow', 'arrow2']), GRAPHS = new Set(['axes2', 'axes2p', 'axes3']);
+const SQUARE_MAGNET = new Set(['rect', 'ellipse', 'diamond']);
+const isCustom = k => typeof k === 'string' && k.startsWith('custom:');   // eigene Form: 'custom:<id>'
+let CUSTOM = [], customReady = false;   // Bibliothek der eigenen Formen (nach Erstellung sortiert), geladen?
+const customOf = k => (isCustom(k) && CUSTOM.find(r => 'custom:' + r.id === k)) || null;
+S.shape = SHAPE_KINDS.includes(store.get('shape')) || isCustom(store.get('shape')) ? store.get('shape') : 'rect';
+// Rasterabstand wie das sichtbare Muster (Ursprung bei 0,0)
+function gridSize() { return S.note && S.note.bg === 'lines' ? 34 : 28; }
+function snapG(v) { const G = gridSize(); return Math.round(v / G) * G; }
+const ARROW_C = Math.cos(27 * Math.PI / 180), ARROW_S = Math.sin(27 * Math.PI / 180);
+const headLen = (len, w, f) => Math.min(len * f, 12 + w * 2.5);
+// Flügel einer offenen Pfeilspitze bei (tx, ty), u = Richtung zur Spitze
+function wings(tx, ty, ux, uy, h) {
+  return [tx - h * (ux * ARROW_C - uy * ARROW_S), ty - h * (ux * ARROW_S + uy * ARROW_C), tx - h * (ux * ARROW_C + uy * ARROW_S), ty - h * (-ux * ARROW_S + uy * ARROW_C)];
+}
+// Pfeil als ein Linienzug: Ende, Spitze, Flügel, Spitze, Flügel
+function arrowPts(ax, ay, bx, by, h) {
+  const L = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / L, uy = (by - ay) / L, [w1x, w1y, w2x, w2y] = wings(bx, by, ux, uy, h);
+  return [ax, ay, bx, by, w1x, w1y, bx, by, w2x, w2y];
+}
+// Buchstaben für die Achsen, Einheitsbox mit Höhe 1 (y nach unten)
+const GLYPHS = { x: [[0, 0, 0.8, 1], [0.8, 0, 0, 1]], y: [[0, 0, 0.56, 0.77], [0.9, 0, 0.3, 1.35]], z: [[0, 0, 0.8, 0, 0, 1, 0.8, 1]] };
+function glyph(out, ch, x, y, h) { for (const g of GLYPHS[ch]) out.push(g.map((v, i) => (i % 2 ? y : x) + v * h)); }
+// Endpunkte nach Raster, Umschalt (gerade/quadratisch) und sanftem Magnet
+function shapeEnds(a) {
+  const k = a.shape, snapOn = S.snap, G = gridSize();
+  let [ax, ay] = a.a0, [bx, by] = a.b;
+  if (snapOn) { ax = snapG(ax); ay = snapG(ay); }
+  const unit = q => { let ux = Math.cos(q), uy = Math.sin(q); if (Math.abs(ux) < 1e-9) ux = 0; if (Math.abs(uy) < 1e-9) uy = 0; return [ux, uy]; };
+  if (LINE_SHAPES.has(k)) {
+    const dx = bx - ax, dy = by - ay, ang = Math.atan2(dy, dx);
+    if (a.shift) {   // 15°-Schritte
+      const q = Math.round(ang / (Math.PI / 12)) * (Math.PI / 12), [ux, uy] = unit(q);
+      const k45 = Math.round(q / (Math.PI / 4)), on45 = Math.abs(q - k45 * Math.PI / 4) < 1e-9;
+      let L = Math.max(0, dx * ux + dy * uy);
+      if (snapOn) { const st = on45 && k45 % 2 ? G * Math.SQRT2 : G; L = Math.round(L / st) * st; }
+      bx = ax + L * ux; by = ay + L * uy;
+      if (snapOn && on45) { bx = snapG(bx); by = snapG(by); }
+    } else if (snapOn) { bx = snapG(bx); by = snapG(by); }
+    else {           // fast waagrecht, senkrecht oder diagonal: genau ausrichten
+      const q = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
+      if (Math.abs(ang - q) < 4 * Math.PI / 180) { const L = Math.hypot(dx, dy), [ux, uy] = unit(q); bx = ax + L * ux; by = ay + L * uy; }
+    }
+    return [ax, ay, bx, by];
+  }
+  if (snapOn) { bx = snapG(bx); by = snapG(by); }
+  let dx = bx - ax, dy = by - ay;
+  const sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1, adx = Math.abs(dx), ady = Math.abs(dy);
+  if (a.shift && k === 'tri') {   // gleichseitig
+    let s = Math.max(adx, ady * 2 / Math.sqrt(3)); if (snapOn) s = Math.max(G, Math.round(s / G) * G);
+    dx = sx * s; dy = sy * s * Math.sqrt(3) / 2;
+  } else if (a.shift || (SQUARE_MAGNET.has(k) && adx && ady && Math.abs(adx - ady) <= 0.08 * Math.max(adx, ady))) {
+    const s = Math.max(adx, ady); dx = sx * s; dy = sy * s;
+  }
+  return [ax, ay, ax + dx, ay + dy];
+}
+// Linienzüge (flach: x, y, x, y, …) einer Form in Weltkoordinaten
+function shapeLines(k, ax, ay, bx, by, w) {
+  const len = Math.hypot(bx - ax, by - ay);
+  if (len < 1e-6) return [];
+  if (k === 'line') return [[ax, ay, bx, by]];
+  if (k === 'arrow') return [arrowPts(ax, ay, bx, by, headLen(len, w, 0.35))];
+  if (k === 'arrow2') {
+    const h = headLen(len, w, 0.3), ux = (bx - ax) / len, uy = (by - ay) / len;
+    const [a1x, a1y, a2x, a2y] = wings(ax, ay, -ux, -uy, h), [b1x, b1y, b2x, b2y] = wings(bx, by, ux, uy, h);
+    return [[a1x, a1y, ax, ay, a2x, a2y, ax, ay, bx, by, b1x, b1y, bx, by, b2x, b2y]];
+  }
+  const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), y0 = Math.min(ay, by), y1 = Math.max(ay, by), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  if (k === 'rect') return [[ax, ay, bx, ay, bx, by, ax, by, ax, ay]];
+  if (k === 'tri') return [[cx, y0, x1, y1, x0, y1, cx, y0]];
+  if (k === 'rtri') return [[ax, ay, ax, by, bx, by, ax, ay]];
+  if (k === 'diamond') return [[cx, y0, x1, cy, cx, y1, x0, cy, cx, y0]];
+  if (k === 'ellipse') {
+    const rx = (x1 - x0) / 2, ry = (y1 - y0) / 2;
+    const per = Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
+    const n = clamp(Math.round(per / 16) * 4, 36, 240), P = [];   // durch 4 teilbar: berührt alle vier Seiten der Box
+    for (let i = 0; i < n; i++) { const t = i / n * Math.PI * 2; P.push(cx + rx * Math.cos(t), cy + ry * Math.sin(t)); }
+    P.push(P[0], P[1]);
+    return [P];
+  }
+  return graphLines(k, x0, y0, x1, y1, w);
+}
+// Koordinatensysteme: Achsen mit Pfeilspitzen, Teilstriche im Rasterabstand, Achsenbuchstaben
+function graphLines(k, x0, y0, x1, y1, w) {
+  const G = gridSize(), out = [], th = Math.max(4, w * 1.5), LH = 13 + Math.max(0, w - 2) * 2.5, m = 3;
+  const sn = v => S.snap ? snapG(v) : v, half = h => Math.max(th, h * ARROW_S);
+  const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5) return -1; const h = headLen(L, w, 0.35); out.push(arrowPts(fx, fy, tx, ty, h)); return h; };
+  if (k === 'axes3') {
+    // Schrägbild: z nach oben, y nach rechts, x nach vorne (45° nach links unten, halbe Einheiten)
+    const ox = sn(x0 + 0.4 * (x1 - x0)), oy = sn(y0 + 0.6 * (y1 - y0)), d = Math.max(0, Math.min(ox - x0, y1 - oy)), r = Math.SQRT1_2;
+    const hz = axis(ox, oy, ox, y0), hy = axis(ox, oy, x1, oy), hx = axis(ox, oy, ox - d, oy + d);
+    if (hy >= 0) { for (let i = 1; i <= Math.floor((x1 - ox - hy - m) / G); i++) out.push([ox + i * G, oy - th, ox + i * G, oy + th]); glyph(out, 'y', x1 - 0.9 * LH, oy + half(hy) + 7 + w, LH); }
+    if (hz >= 0) { for (let i = 1; i <= Math.floor((oy - y0 - hz - m) / G); i++) out.push([ox - th, oy - i * G, ox + th, oy - i * G]); glyph(out, 'z', ox - half(hz) - 8 - w - 0.8 * LH, y0, LH); }
+    if (hx >= 0) {
+      for (let i = 1; i <= Math.floor((d * Math.SQRT2 - hx - m) / (G * r)); i++) { const px = ox - i * G / 2, py = oy + i * G / 2; out.push([px - th * r, py - th * r, px + th * r, py + th * r]); }
+      glyph(out, 'x', ox - d - 0.8 * LH - 8 - w, oy + d - LH / 2, LH);
+    }
+    return out;
+  }
+  const pos = k === 'axes2p', ox = pos ? x0 : sn((x0 + x1) / 2), oy = pos ? y1 : sn((y0 + y1) / 2);
+  const hx = axis(x0, oy, x1, oy), hy = axis(ox, y1, ox, y0);
+  let nx = Math.floor((x1 - ox - hx - m) / G), ny = Math.floor((oy - y0 - hy - m) / G);
+  if (!pos) { nx = Math.min(nx, Math.floor((ox - x0 - hx - m) / G)); ny = Math.min(ny, Math.floor((y1 - oy - hy - m) / G)); }
+  if (hx >= 0) {
+    for (let i = pos ? 1 : -nx; i <= nx; i++) if (i) out.push([ox + i * G, oy - th, ox + i * G, oy + th]);
+    glyph(out, 'x', x1 - 0.8 * LH, oy + half(hx) + 7 + w, LH);
+  }
+  if (hy >= 0) {
+    for (let i = pos ? 1 : -ny; i <= ny; i++) if (i) out.push([ox - th, oy - i * G, ox + th, oy - i * G]);
+    glyph(out, 'y', ox - half(hy) - 8 - w - 0.9 * LH, y0, LH);
+  }
+  return out;
+}
+function shapeStroke(xy, c, w, k, g) {
+  const n = xy.length / 2, p = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { p[i * 3] = xy[i * 2]; p[i * 3 + 1] = xy[i * 2 + 1]; p[i * 3 + 2] = 0.5; }
+  const s = { t: 's', id: uid(), c, w, hl: false, pts: p, bb: bboxOf(p, w), k };
+  if (g) s.g = g;
+  return s;
+}
+// Striche + Pfade der Vorschau; neu berechnet nur, wenn sich etwas geändert hat
+function shapeGeo(a) {
+  if (a.custom) return stampGeo(a);
+  const small = Math.hypot(a.b[0] - a.a0[0], a.b[1] - a.a0[1]) * S.view.z < 6;
+  const key = small ? 'small' : a.b[0] + ',' + a.b[1] + ',' + a.shift + ',' + S.snap + ',' + gridSize();
+  if (a.geo && a.geo.key === key) return a.geo;
+  const strokes = [];
+  if (!small) {
+    const [ax, ay, bx, by] = shapeEnds(a);
+    for (const xy of shapeLines(a.shape, ax, ay, bx, by, a.w)) strokes.push(shapeStroke(xy, a.c, a.w, a.shape, a.g));
+  }
+  return a.geo = { key, strokes, paths: strokes.map(s => buildPath(s.pts, s.w, false)) };
+}
+/* Eigene Formen platzieren: Antippen = gespeicherte Größe, mittig auf dem Punkt; Ziehen = gleichmäßig in das
+   aufgezogene Rechteck eingepasst, an seiner oberen linken Ecke (nie gespiegelt). Mit Raster liegt die geometrische
+   obere linke Ecke der Form auf dem Raster. Strichbreiten wachsen mit, Farben bleiben wie gespeichert. */
+const STAMP_BIG = 4000;              // ab so vielen Punkten wird die Vorschau beim Ziehen nur skaliert (flüssig)
+const stampInfo = new WeakMap();     // Form -> { n: Punkte, paths, bbs }, einmal berechnet
+function stampData(r) {
+  let d = stampInfo.get(r);
+  if (!d) { d = { n: r.strokes.reduce((m, st) => m + st.pts.length / 3, 0), paths: null, bbs: null }; stampInfo.set(r, d); }
+  return d;
+}
+// Maßstab und obere linke Ecke der platzierten Form
+function stampPlace(a, tap) {
+  const r = a.custom, G = gridSize();
+  if (tap) {
+    let x = a.a0[0] - r.w / 2, y = a.a0[1] - r.h / 2;
+    if (S.snap) { x = snapG(x); y = snapG(y); }
+    return [1, x, y];
+  }
+  let [ax, ay] = a.a0, [bx, by] = a.b;
+  if (S.snap) { ax = snapG(ax); ay = snapG(ay); bx = snapG(bx); by = snapG(by); }
+  let dx = Math.abs(bx - ax), dy = Math.abs(by - ay);
+  if (S.snap) { dx = Math.max(dx, G); dy = Math.max(dy, G); }   // mindestens ein Kästchen
+  const m = Math.max(r.w, r.h);
+  let s = 1;
+  if (m > 0.5) {   // ein einzelner Punkt behält seine Größe
+    s = Math.min(r.w > 0.01 ? dx / r.w : Infinity, r.h > 0.01 ? dy / r.h : Infinity);
+    s = clamp(s, Math.min(1, Math.max(0.05, 12 / S.view.z / m)), 50);   // nie kleiner als ~12 px am Bildschirm
+  }
+  return [s, Math.min(ax, bx), Math.min(ay, by)];
+}
+// Striche der platzierten Form: Maßstab s, obere linke Ecke (x, y), gemeinsame Gruppe g
+function stampStrokes(r, s, x, y, g) {
+  return r.strokes.map(st => {
+    const q = st.pts, p = new Float32Array(q.length), w = st.w * s;
+    for (let i = 0; i < q.length; i += 3) { p[i] = x + q[i] * s; p[i + 1] = y + q[i + 1] * s; p[i + 2] = q[i + 2]; }
+    return { t: 's', id: uid(), c: st.c, w, hl: st.hl, pts: p, bb: bboxOf(p, w), k: 'custom', g };
+  });
+}
+function stampGeo(a) {
+  const r = a.custom, tap = Math.hypot(a.b[0] - a.a0[0], a.b[1] - a.a0[1]) * S.view.z < 6;
+  const key = (tap ? 'tap' : a.b[0] + ',' + a.b[1] + ',' + S.view.z) + ',' + S.snap + ',' + gridSize();
+  if (a.geo && a.geo.key === key) return a.geo;
+  const [s, x, y] = stampPlace(a, tap);
+  if (!tap && stampData(r).n > STAMP_BIG) {   // große Form: ihre fertigen Pfade nur verschieben und skalieren
+    const d = stampData(r);
+    if (!d.paths) { d.paths = r.strokes.map(st => buildPath(st.pts, st.w, st.hl)); d.bbs = r.strokes.map(st => bboxOf(st.pts, st.w)); }
+    const strokes = r.strokes.map((st, i) => { const b = d.bbs[i]; return { t: 's', c: st.c, hl: st.hl, bb: [x + b[0] * s, y + b[1] * s, x + b[2] * s, y + b[3] * s] }; });
+    return a.geo = { key, strokes, paths: d.paths, xf: [s, x, y], box: true };
+  }
+  const strokes = stampStrokes(r, s, x, y, a.g);
+  return a.geo = { key, strokes, paths: strokes.map(k => buildPath(k.pts, k.w, k.hl)), box: true };
+}
+// Vorschau kachelweise, wie renderTile: unter der Form die Kachelpixel (deckend), darauf die Striche mit der Kachel
+// als Clip. Skia glättet Kanten abhängig vom Clip; so entstehen genau die Pixel, die später in der Kachel stehen,
+// und deckende Pixel zeigt der Browser über der Hauptebene unverändert.
+// Kleine Rechtecke (Gerätepixel bei Stufe s) entlang der Linienzüge: nur dort ändert die Form Pixel
+function shapeRects(g, s) {
+  if (g.rects && g.rects.s === s) return g.rects;
+  const out = [], CH = 64;
+  out.s = s;
+  for (const k of g.strokes) {
+    const p = k.pts, m = k.w * s / 2 + 3;   // Radius + Kantenglättung
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const flush = () => { if (x0 <= x1) out.push([Math.floor(x0 - m), Math.floor(y0 - m), Math.ceil(x1 + m), Math.ceil(y1 + m)]); x0 = y0 = Infinity; x1 = y1 = -Infinity; };
+    for (let i = 3; i < p.length; i += 3) {
+      const ax = p[i - 3] * s, ay = p[i - 2] * s, bx = p[i] * s, by = p[i + 1] * s, n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / CH));
+      for (let q = 0; q < n; q++) {
+        const ux = ax + (bx - ax) * q / n, uy = ay + (by - ay) * q / n, vx = ax + (bx - ax) * (q + 1) / n, vy = ay + (by - ay) * (q + 1) / n;
+        if (Math.max(x1, ux, vx) - Math.min(x0, ux, vx) > CH || Math.max(y1, uy, vy) - Math.min(y0, uy, vy) > CH) flush();
+        x0 = Math.min(x0, ux, vx); y0 = Math.min(y0, uy, vy); x1 = Math.max(x1, ux, vx); y1 = Math.max(y1, uy, vy);
+      }
+    }
+    flush();
+  }
+  return g.rects = out;
+}
+// Große eigene Form beim Ziehen: einmal als Bild zeichnen und nur skaliert zeigen (flüssig).
+// Genau gerechnet wird beim Absetzen (Kacheln werden neu gezeichnet).
+function liveStampBitmap(a, xf) {
+  const r = a.custom, d = stampData(r), s = xf[0], k = DPR * S.view.z * s;
+  const m = r.strokes.reduce((v, st) => Math.max(v, st.w), 1), [sx, sy] = toScreen(xf[1] - m * s, xf[2] - m * s);
+  const ox = sx * DPR, oy = sy * DPR, fx = ox - Math.floor(ox), fy = oy - Math.floor(oy);
+  // In genauer Größe und auf ganze Gerätepixel ausgerichtet nachzeichnen, damit die Vorschau scharf bleibt;
+  // bei sehr großen Formen nicht öfter, als es ihre Zeichendauer erlaubt
+  const now = performance.now(), b0 = d.bmp, wait = b0 ? Math.max(40, b0.cost * 3) : 0;
+  const off = b0 && (Math.abs(k / b0.k - 1) > 0.005 || Math.abs(fx - b0.fx) > 0.02 || Math.abs(fy - b0.fy) > 0.02);
+  if (off && !b0.pend) { b0.pend = true; setTimeout(() => { if (d.bmp) d.bmp.pend = false; requestLive(); }, wait); }
+  if (!b0 || b0.dark !== S.dark || k / b0.k > 1.5 || k / b0.k < 0.6 || (off && now - b0.t > wait)) {
+    const kk = Math.min(k, Math.sqrt(4e6 / ((r.w + 2 * m) * (r.h + 2 * m))));   // höchstens ~4 Mio. Pixel
+    const c = b0 ? b0.c : document.createElement('canvas');
+    c.width = Math.max(1, Math.ceil((r.w + 2 * m) * kk) + 1); c.height = Math.max(1, Math.ceil((r.h + 2 * m) * kk) + 1);
+    const cx = c.getContext('2d'); cx.setTransform(kk, 0, 0, kk, m * kk + fx, m * kk + fy);
+    r.strokes.forEach((st, i) => fillStroke(cx, st, d.paths[i]));
+    d.bmp = { c, k: kk, fx, fy, dark: S.dark, t: performance.now(), cost: performance.now() - now, pend: false };
+  }
+  const b = d.bmp, q = k / b.k;
+  ctxLive.setTransform(1, 0, 0, 1, 0, 0);
+  ctxLive.drawImage(b.c, ox - b.fx * q, oy - b.fy * q, b.c.width * q, b.c.height * q);
+  liveWorld();
+}
+// Ruht der Stift, zeigt die Vorschau einer großen Form die genaue Geometrie (wie später in den Kacheln)
+function stampRest(a) {
+  a.restT = null;
+  if (action !== a) return;
+  const t = performance.now() - (a.mt || 0);
+  if (t >= 180) { a.rest = true; requestLive(); } else a.restT = setTimeout(() => stampRest(a), 190 - t);
+}
+function exactStamp(a, g) {
+  if (!a.exact || a.exact.key !== g.key) { const st = stampStrokes(a.custom, ...g.xf, a.g); a.exact = { key: g.key, strokes: st, paths: st.map(k => buildPath(k.pts, k.w, k.hl)), box: true }; }
+  return a.exact;
+}
+function liveShape(a) {
+  let g = shapeGeo(a); if (!g.strokes.length) return;
+  let xf = g.xf;
+  if (xf) {
+    if (!a.rest) { liveStampBitmap(a, xf); if (!a.restT) a.restT = setTimeout(() => stampRest(a), 190); return; }
+    g = exactStamp(a, g); xf = null;
+  }
+  const ctx = ctxLive;
+  if (S.view.z !== S.level) {   // mitten im Zoomen
+    if (xf) ctx.transform(xf[0], 0, 0, xf[0], xf[1], xf[2]);
+    g.strokes.forEach((k, n) => fillStroke(ctx, k, g.paths[n]));
+    liveWorld(); return;
+  }
+  const L = S.level, s = L * DPR, r = tileRange(L), bb = contentBox(g.strokes);
+  // eigene Formen sind kompakt: ein Rechteck um die ganze Form statt Stücken entlang der Linien
+  const rects = g.box ? [[Math.floor(bb[0] * s - 3), Math.floor(bb[1] * s - 3), Math.ceil(bb[2] * s + 3), Math.ceil(bb[3] * s + 3)]] : shapeRects(g, s);
+  const i0 = Math.max(r.i0, Math.floor(bb[0] * s / T)), i1 = Math.min(r.i1, Math.floor(bb[2] * s / T));
+  const j0 = Math.max(r.j0, Math.floor(bb[1] * s / T)), j1 = Math.min(r.j1, Math.floor(bb[3] * s / T));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const ox = i * T, oy = j * T, sx = ox + r.txD, sy = oy + r.tyD, wb = [ox / s, oy / s, (ox + T) / s, (oy + T) / s];
+    let t = null;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (const q of rects) {
+      const x0 = Math.max(q[0] - ox, 0), y0 = Math.max(q[1] - oy, 0), x1 = Math.min(q[2] - ox, T), y1 = Math.min(q[3] - oy, T);
+      if (x1 <= x0 || y1 <= y0) continue;
+      if (!t) t = tiles.get(tkey(L, i, j)) || renderTile(L, i, j);
+      ctx.drawImage(t.c, x0, y0, x1 - x0, y1 - y0, sx + x0, sy + y0, x1 - x0, y1 - y0);
+    }
+    if (!t) continue;
+    ctx.save(); ctx.beginPath(); ctx.rect(sx, sy, T, T); ctx.clip();
+    ctx.setTransform(s, 0, 0, s, r.txD, r.tyD);
+    if (xf) ctx.transform(xf[0], 0, 0, xf[0], xf[1], xf[2]);
+    g.strokes.forEach((k, n) => { if (boxHit(k.bb, wb)) fillStroke(ctx, k, g.paths[n]); });   // einzeln, genau wie renderTile
+    ctx.restore();
+  }
+  liveWorld();
+}
+function finishShape(a) {
+  const g = shapeGeo(a);
+  liveClear();
+  if (!g.strokes.length) { requestLive(); return; }
+  liveWorld(); liveShape(a);   // Live-Ebene zeigt jetzt genau die endgültige Form
+  // große eigene Form: genaue Striche, die Kacheln werden sofort neu gezeichnet (die Vorschau war nur ein Bild)
+  const ex = g.xf && exactStamp(a, g), list = ex ? ex.strokes : g.strokes;
+  list.forEach((s, i) => pathCache.set(s, (ex || g).paths[i]));
+  // Textmarker in einer eigenen Form: Kacheln neu zeichnen statt Pixel übernehmen
+  if (g.xf) { const d = stampData(a.custom); if (d.bmp) { d.bmp.c.width = 0; d.bmp = null; } }   // Vorschaubild freigeben
+  commitLive(list, list.some(s => s.hl) || !!g.xf, !!a.custom);
+}
+// Auswahl beim Skalieren: geometrischer rechter (bei hohen Auswahlen unterer) Rand aufs Raster
+function snapScale(a) {
+  const b = selGeoBox(a), [ax, ay] = a.anchor, G = gridSize(), ex = b[2] - ax, ey = b[3] - ay;
+  const e = Math.max(ex, ey), o = ex >= ey ? ax : ay;
+  if (!(e >= G / 2)) return a.s;
+  let t = Math.round((o + e * a.s) / G) * G;
+  while (t <= o + 1e-6) t += G;
+  return clamp((t - o) / e, 0.05, 50);
+}
+function toggleSnap() {
+  S.snap = !S.snap; store.set('snap', S.snap); $('#bSnap').classList.toggle('on', S.snap);
+  toast('Am Raster ausrichten: ' + (S.snap ? 'an' : 'aus'), 1400);
+  if (action && action.kind === 'shape') requestLive();
+}
+
+/* ---------- Eingabe: Stift, Maus, Finger ---------- */
+let action = null;           // aktuelle Stift-/Maus-Aktion
+const touches = new Map();   // aktive Finger
+let gesture = null, penActiveUntil = 0, spaceDown = false;
+
+function capture(e) { try { cvLive.setPointerCapture(e.pointerId); } catch (err) {} }
+function localXY(e) { const r = cvLive.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function pressureOf(e) { return e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : 0.5; }
+
+// Eingabefilter: glättet die Stiftposition schon beim Schreiben.
+// Gespeichert wird genau das, was auf dem Bildschirm zu sehen ist, nichts ändert sich nach dem Absetzen.
+function strokeInput(a, sx, sy, p) {
+  const [wx, wy] = toWorld(sx, sy);
+  const f = a.f;
+  f.x += (wx - f.x) * 0.55; f.y += (wy - f.y) * 0.55; f.p += (p - f.p) * 0.35;
+  const n = a.pts.length;
+  if (Math.hypot(f.x - a.pts[n - 3], f.y - a.pts[n - 2]) * S.view.z < 0.8) return;
+  a.pts.push(f.x, f.y, f.p);
+  livePiece(a);
+}
+function livePiece(a) {
+  const P = new Path2D(), n = a.pts.length / 3;
+  for (let i = a.drawn; i < n; i++) addPiece(P, a.pts, i, a.w, a.hl);
+  a.drawn = n;
+  ctxLive.fill(P);
+}
+
+function startAction(e) {
+  const [sx, sy] = localXY(e), [wx, wy] = toWorld(sx, sy);
+  let tool = S.tool;
+  if (e.pointerType === 'pen' && (e.button === 5 || (e.buttons & 32) || e.button === 2)) tool = 'eraser';
+  if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || spaceDown)) tool = 'hand';
+  if (tool === 'hand') { action = { kind: 'pan', id: e.pointerId, sx, sy, tx: S.view.tx, ty: S.view.ty, touch: e.pointerType === 'touch' }; return; }
+  if (tool !== 'lasso' && S.sel) clearSel();
+  if (tool === 'pen' || tool === 'hl') {
+    const hl = tool === 'hl', p = pressureOf(e);
+    action = { kind: 'draw', id: e.pointerId, hl, c: S.color[tool], w: S.size[tool], pts: [wx, wy, p], f: { x: wx, y: wy, p }, drawn: 0 };
+    liveClear(); liveStyle(action); liveWorld(); ctxLive.fillStyle = colorOf(action.c);
+    livePiece(action);
+  } else if (tool === 'shape') {
+    let cs = null;
+    if (isCustom(S.shape)) { cs = customOf(S.shape); if (!cs) { if (!customReady) return; setShape('rect'); } }   // Bibliothek lädt noch / Form fehlt
+    // eigene Form und Graph: alle Striche bekommen eine gemeinsame Gruppe (Antippen mit dem Lasso wählt alles)
+    action = { kind: 'shape', id: e.pointerId, shape: S.shape, custom: cs, c: S.color.pen, w: S.size.pen, a0: [wx, wy], b: [wx, wy], shift: e.shiftKey, g: GRAPHS.has(S.shape) || cs ? uid() : null, geo: null };
+    liveClear(); liveStyle(null); requestLive();
+  } else if (tool === 'eraser') {
+    action = { kind: 'erase', id: e.pointerId, removed: new Set(), at: [wx, wy] }; eraseAt(wx, wy); requestLive();
+  } else if (tool === 'lasso') {
+    if (S.sel) {
+      const b = S.sel.bb, [hx, hy] = toScreen(b[2], b[3]);
+      if (Math.hypot(sx - hx, sy - hy) < 22) { const gb = S.snap ? geoBox(S.items.filter(it => S.sel.ids.has(it.id))) : b;   // mit Raster: an der geometrischen Ecke, die bleibt auf dem Raster
+        beginTransform({ kind: 'scale', id: e.pointerId, anchor: [gb[0], gb[1]], s: 1, p0: [wx, wy] }); return; }
+      const m = 6 / S.view.z;
+      if (wx >= b[0] - m && wx <= b[2] + m && wy >= b[1] - m && wy <= b[3] + m) { beginTransform({ kind: 'move', id: e.pointerId, wx, wy, sx, sy, dx: 0, dy: 0, moved: false }); return; }
+      clearSel();
+    }
+    action = { kind: 'lasso', id: e.pointerId, pts: [wx, wy], last: [sx, sy] };
+  }
+  if (action) action.touch = e.pointerType === 'touch';
+}
+function beginTransform(a) {
+  action = a;
+  a.bmp = selBitmap();
+  invalidateBox(S.sel.bb);         // Kacheln ohne die Auswahl neu zeichnen
+  placeSelbar(); requestLive();
+}
+function moveAction(e) {
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  const list = evs.length ? evs : [e];
+  const a = action;
+  for (const ev of list) {
+    const [sx, sy] = localXY(ev);
+    if (a.kind === 'draw') { strokeInput(a, sx, sy, pressureOf(ev)); continue; }
+    const [wx, wy] = toWorld(sx, sy);
+    if (a.kind === 'pan') setView(a.tx + sx - a.sx, a.ty + sy - a.sy, S.view.z);
+    else if (a.kind === 'erase') { a.at = [wx, wy]; eraseAt(wx, wy); }
+    else if (a.kind === 'lasso') { if (Math.hypot(sx - a.last[0], sy - a.last[1]) >= 3) { a.pts.push(wx, wy); a.last = [sx, sy]; } }
+    else if (a.kind === 'shape') { a.b[0] = wx; a.b[1] = wy; a.shift = ev.shiftKey; a.mt = performance.now(); a.rest = false; }
+    else if (a.kind === 'move') {
+      a.dx = wx - a.wx; a.dy = wy - a.wy;
+      if (S.snap) {   // springt von Kästchen zu Kästchen
+        // Koordinatensysteme liegen mit ihren Achsen auf dem Raster, nicht mit der linken Kante der Buchstaben: ganze Kästchen verschieben
+        if (a.graph === undefined) a.graph = S.items.some(it => S.sel.ids.has(it.id) && GRAPHS.has(it.k));
+        if (a.graph) { a.dx = snapG(a.dx); a.dy = snapG(a.dy); }
+        else { const b = selGeoBox(a); a.dx = snapG(b[0] + a.dx) - b[0]; a.dy = snapG(b[1] + a.dy) - b[1]; }
+      }
+      if (Math.hypot(sx - a.sx, sy - a.sy) > 3) a.moved = true;
+    }
+    else if (a.kind === 'scale') {
+      const [ax, ay] = a.anchor;
+      const d0 = Math.hypot(a.p0[0] - ax, a.p0[1] - ay), d1 = Math.hypot(wx - ax, wy - ay);
+      a.s = d0 > 0 ? clamp(d1 / d0, 0.05, 50) : 1;
+      if (S.snap) a.s = snapScale(a);
+    }
+  }
+  if (a.kind !== 'draw') requestLive();
+}
+function deferLiveClear() {
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (!action || action.kind !== 'draw') { if (!action) liveStyle(null); liveClear(); drawLive(); } }));
+}
+function finishStroke(a) { commitLive([makeStroke(a.pts, a.c, a.w, a.hl)], a.noComposite); }
+// Fertige Striche übernehmen, die gerade auf der Live-Ebene zu sehen sind (Strich oder Form).
+// Liegen sie ganz im Bild, werden die Pixel von der Live-Ebene übernommen,
+// damit sie beim Absetzen exakt gleich aussehen.
+// sync: werden die Kacheln neu gezeichnet, dann die sichtbaren unter den Strichen sofort (sonst flackert die Umgebung)
+function commitLive(list, noComposite, sync) {
+  const bb = contentBox(list), hl = list[0].hl;
+  const [vx0, vy0] = toWorld(0, 0), [vx1, vy1] = toWorld(VW, VH);
+  const inView = !noComposite && bb[0] > vx0 && bb[1] > vy0 && bb[2] < vx1 && bb[3] < vy1 && S.view.z === S.level;
+  commit(appendItems(S.items, list), !inView);
+  if (!inView && sync && S.view.z === S.level) {
+    const L = S.level, s = L * DPR, r = tileRange(L);
+    for (let j = Math.max(r.j0, Math.floor(bb[1] * s / T)); j <= Math.min(r.j1, Math.floor(bb[3] * s / T)); j++)
+      for (let i = Math.max(r.i0, Math.floor(bb[0] * s / T)); i <= Math.min(r.i1, Math.floor(bb[2] * s / T)); i++) if (!tiles.has(tkey(L, i, j))) renderTile(L, i, j);
+  }
+  if (inView) {
+    const txD = Math.round(S.view.tx * DPR), tyD = Math.round(S.view.ty * DPR);
+    for (const [k, t] of tiles) {
+      if (!boxHit(t.wb, bb)) continue;
+      if (t.L !== S.level) { tiles.delete(k); tilePool.push(t); continue; }
+      const i = Math.round(t.wb[0] * S.level * DPR / T), j = Math.round(t.wb[1] * S.level * DPR / T);
+      const g = t.ctx; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+      if (hl) { g.globalAlpha = hlAlpha(); if (!S.dark) g.globalCompositeOperation = 'multiply'; }
+      g.drawImage(cvLive, i * T + txD, j * T + tyD, T, T, 0, 0, T, T);
+      g.restore();
+    }
+  }
+  draw();
+  deferLiveClear();
+}
+function endAction(cancel) {
+  const a = action; action = null;
+  if (!a) return;
+  if (a.kind === 'draw') {
+    if (cancel) { liveClear(); liveStyle(null); return; }
+    finishStroke(a); return;
+  }
+  if (a.kind === 'shape') {
+    if (cancel) { liveClear(); requestLive(); return; }
+    finishShape(a); return;
+  }
+  if (a.kind === 'pan') { viewChanged(); requestLive(); return; }
+  if (cancel) {
+    if (a.kind === 'erase') for (const id of a.removed) { const it = S.items.find(i => i.id === id); if (it) invalidateBox(it.bb); }
+    if ((a.kind === 'move' || a.kind === 'scale') && S.sel) invalidateBox(S.sel.bb);
+    requestDraw(); requestLive(); placeSelbar(); return;
+  }
+  if (a.kind === 'erase') { if (a.removed.size) commit(S.items.filter(it => !a.removed.has(it.id)), false); }
+  else if (a.kind === 'lasso') { setSel(lassoSelect(a.pts)); }
+  else if (a.kind === 'move' || a.kind === 'scale') {
+    const moved = a.kind === 'move' ? a.moved && (a.dx || a.dy) : Math.abs(a.s - 1) > 0.005;
+    if (moved) {
+      const [ox, oy] = a.kind === 'scale' ? a.anchor : [0, 0], s = a.kind === 'scale' ? a.s : 1;
+      commit(S.items.map(it => S.sel.ids.has(it.id) ? transformItem(it, s, ox, oy, a.dx || 0, a.dy || 0) : it));
+      refreshSel();
+    } else invalidateBox(S.sel.bb);
+  }
+  requestDraw(); requestLive(); placeSelbar();
+}
+function cancelAction() { if (action) endAction(true); }
+
+/* Finger-Gesten: ein Finger verschiebt, zwei Finger zoomen, Zwei-Finger-Tipp = Rückgängig */
+function gestureStart() {
+  const pts = [...touches.values()];
+  if (!pts.length) { gesture = null; return; }
+  const c = pts.length >= 2 ? [(pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2] : [pts[0].x, pts[0].y];
+  const d = pts.length >= 2 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
+  const prev = gesture;
+  gesture = { c0: c, d0: d, tx: S.view.tx, ty: S.view.ty, z: S.view.z, n: pts.length,
+    t0: prev ? prev.t0 : performance.now(), view0: prev ? prev.view0 : { ...S.view },
+    maxN: Math.max(prev ? prev.maxN : 0, pts.length), moved: prev ? prev.moved : false, cancelled: prev ? prev.cancelled : false };
+}
+function gestureMove() {
+  const g = gesture, pts = [...touches.values()];
+  if (!g || !pts.length) return;
+  const c = pts.length >= 2 ? [(pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2] : [pts[0].x, pts[0].y];
+  if (Math.hypot(c[0] - g.c0[0], c[1] - g.c0[1]) > 10) g.moved = true;
+  if (pts.length >= 2 && g.d0 > 0) {
+    const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    if (Math.abs(d - g.d0) > 12) g.moved = true;
+    const z = clamp(g.z * d / g.d0, 0.1, 8);
+    const wx = (g.c0[0] - g.tx) / g.z, wy = (g.c0[1] - g.ty) / g.z;
+    setView(c[0] - wx * z, c[1] - wy * z, z);
+  } else {
+    setView(g.tx + c[0] - g.c0[0], g.ty + c[1] - g.c0[1], S.view.z);
+  }
+}
+// Der Stift ist da: laufende Finger-Geste (meist der Handballen) abbrechen
+function penArrived() {
+  if (gesture) {
+    if (performance.now() - gesture.t0 < 500) setView(gesture.view0.tx, gesture.view0.ty, gesture.view0.z, true);
+    gesture = null; touches.clear(); settleZoom();
+  }
+  if (action && action.touch) endAction(true);
+}
+
+cvLive.addEventListener('pointerdown', e => {
+  const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
+  if (!$$('.menu').every(m => m.classList.contains('hidden'))) { closeMenus(); return; }
+  if (e.pointerType === 'touch') {
+    if (performance.now() < penActiveUntil) return;           // Handballen ignorieren
+    if (action && !action.touch) return;                      // Stift/Maus ist schon aktiv
+    capture(e);
+    const [x, y] = localXY(e);
+    touches.set(e.pointerId, { x, y });
+    if (S.fingerDraw && touches.size === 1 && S.tool !== 'hand' && !gesture) { startAction(e); return; }
+    if (action && action.touch) endAction(action.kind !== 'pan');  // zweiter Finger: Strich verwerfen, Geste starten
+    gestureStart();
+    return;
+  }
+  if (e.pointerType === 'pen') { penActiveUntil = performance.now() + 600; penArrived(); }
+  if (action) {
+    if (action.id === e.pointerId) return;
+    endAction(false);                                         // verlorenes pointerup nachholen
+  }
+  if (e.pointerType === 'mouse' && e.button > 2) return;
+  capture(e);
+  startAction(e);
+  e.preventDefault();
+});
+cvLive.addEventListener('pointermove', e => {
+  if (e.pointerType === 'pen') {
+    penActiveUntil = Math.max(penActiveUntil, performance.now() + (action ? 600 : 300));
+    if (gesture && !action) penArrived();
+  }
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)) { const [x, y] = localXY(e); touches.set(e.pointerId, { x, y }); }   // für eine zweite Hand: aktuelle Position
+  if (action && action.id === e.pointerId) {
+    if (e.pointerType !== 'touch' && e.buttons === 0) { endAction(false); return; }   // Taste wurde unbemerkt losgelassen
+    moveAction(e); return;
+  }
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+    const [x, y] = localXY(e); touches.set(e.pointerId, { x, y }); gestureMove();
+  }
+});
+function pointerEnd(e) {
+  const cancelled = e.type === 'pointercancel';
+  if (action && action.id === e.pointerId) {
+    if (e.pointerType === 'pen') penActiveUntil = performance.now() + 500;
+    touches.delete(e.pointerId);
+    endAction(cancelled && (action.touch || action.kind === 'shape' || (action.kind === 'draw' && action.pts.length < 6)));
+    return;
+  }
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+    touches.delete(e.pointerId);
+    if (cancelled && gesture) gesture.cancelled = true;
+    if (touches.size === 0) {
+      const g = gesture; gesture = null;
+      if (g && !g.cancelled && g.maxN === 2 && !g.moved && performance.now() - g.t0 < 350) { undo(); toast('Rückgängig', 900); }
+      settleZoom(); viewChanged();
+    } else gestureStart();
+  }
+}
+cvLive.addEventListener('pointerup', pointerEnd);
+cvLive.addEventListener('pointercancel', pointerEnd);
+cvLive.addEventListener('lostpointercapture', e => { if (action && action.id === e.pointerId) endAction(false); });
+cvLive.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('blur', () => {
+  if (action) endAction(action.kind === 'draw' && action.pts.length < 6);
+  touches.clear(); gesture = null; settleZoom();
+  if (spaceDown) { spaceDown = false; setTool(S.tool); }
+});
+cvLive.addEventListener('wheel', e => {
+  e.preventDefault();
+  const [sx, sy] = localXY(e), unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? VH : 1;
+  if (e.ctrlKey) {
+    zoomAt(sx, sy, S.view.z * Math.exp(-clamp(e.deltaY * unit, -60, 60) * 0.0045), false);
+    clearTimeout(wheelT); wheelT = setTimeout(() => { wheelT = null; settleZoom(); }, 180);
+  } else setView(S.view.tx - e.deltaX * unit, S.view.ty - e.deltaY * unit, S.view.z);
+}, { passive: false });
+// Browser-Zoom der ganzen Seite verhindern (Strg+Mausrad, Pinch auf der Leiste)
+document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+
+/* ---------- Werkzeugleiste ---------- */
+function setTool(t) {
+  if (action && t !== S.tool) cancelAction();
+  S.tool = t;
+  $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  if (t !== 'lasso') clearSel();
+  $('#sizeMenu').classList.add('hidden'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
+  cvLive.style.cursor = t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : 'crosshair';
+  renderColors(); renderSizes();
+}
+// Farbe und Dicke gelten für Stift, Textmarker, Lasso (übernehmen) und Formen – nicht für eigene Formen,
+// die behalten ihre gespeicherten Farben (Antippen wechselt dann zum Stift, wie beim Radierer)
+const penLike = () => S.tool === 'pen' || S.tool === 'hl' || S.tool === 'lasso' || (S.tool === 'shape' && !isCustom(S.shape));
+function renderColors() {
+  const box = $('#colors'); box.innerHTML = '';
+  const k = S.tool === 'hl' ? 'hl' : 'pen';
+  const show = penLike();
+  box.style.opacity = show ? 1 : 0.35;
+  const pick = () => { store.set('color', S.color); if (!show) setTool('pen'); else renderColors(); };
+  for (const c of PALETTE) {
+    const b = document.createElement('button'); b.className = 'sw' + (S.color[k] === c ? ' on' : '');
+    b.style.background = colorOf(c); b.title = c === 'ink' ? 'Schwarz / Weiß' : c;
+    b.onclick = () => { S.color[k] = c; pick(); };
+    box.appendChild(b);
+  }
+  const custom = !PALETTE.includes(S.color[k]);
+  const cb = document.createElement('label'); cb.className = 'sw custom' + (custom ? ' on' : ''); cb.title = 'Eigene Farbe';
+  if (custom) cb.style.background = S.color[k];
+  const inp = document.createElement('input'); inp.type = 'color'; inp.value = custom ? S.color[k] : '#3366ff';
+  inp.oninput = () => { S.color[k] = inp.value; cb.style.background = inp.value; };
+  inp.onchange = pick;
+  cb.appendChild(inp); box.appendChild(cb);
+}
+const fmtSize = v => String(v).replace('.', ',');
+const dotPx = (k, v) => k === 'hl' ? clamp(2 + v * 0.55, 4, 26) : clamp(1.5 + v * 1.65, 3, 24);
+function setSize(k, i) { S.sizeIdx[k] = i; S.size[k] = S.presets[k][i]; store.set('sizeIdx', S.sizeIdx); }
+function renderSizes() {
+  const box = $('#sizes'); box.innerHTML = '';
+  const k = S.tool === 'hl' ? 'hl' : 'pen';
+  const show = penLike();
+  box.style.opacity = show ? 1 : 0.35;
+  S.presets[k].forEach((v, i) => {
+    const on = S.sizeIdx[k] === i;
+    const b = document.createElement('button'); b.className = 'sz' + (on ? ' on' : '');
+    b.title = 'Strichstärke ' + fmtSize(v) + (on ? ' (nochmal tippen zum Anpassen)' : '');
+    const d = document.createElement('span'); d.style.width = d.style.height = dotPx(k, v) + 'px';
+    b.appendChild(d);
+    b.onclick = () => {
+      if (on && show) { openSizeMenu(k, b); return; }
+      $('#sizeMenu').classList.add('hidden'); setSize(k, i);
+      if (!show) setTool(k); else renderSizes();
+    };
+    box.appendChild(b);
+  });
+}
+// Schieberegler für die gewählte Voreinstellung, logarithmisch (feine Schritte bei dünnen Stiften)
+let sizeKind = 'pen';
+const sizeToT = (k, v) => { const [lo, hi] = SIZE_RANGE[k]; return Math.round(Math.log(v / lo) / Math.log(hi / lo) * 1000); };
+const tToSize = (k, t) => { const [lo, hi] = SIZE_RANGE[k], v = lo * Math.pow(hi / lo, t / 1000); return v < 10 ? Math.round(v * 10) / 10 : Math.round(v * 2) / 2; };
+function showSize() {
+  const k = sizeKind, v = S.size[k], dot = $('#szDot');
+  $('#szLabel').textContent = k === 'hl' ? 'Textmarker' : 'Stift';
+  $('#szVal').textContent = fmtSize(v);
+  dot.style.height = clamp(v * S.view.z, 1, 80) + 'px';   // so dick, wie der Strich beim jetzigen Zoom aussieht
+  dot.style.background = colorOf(S.color[k]); dot.style.opacity = k === 'hl' ? hlAlpha() : 1;
+}
+function openSizeMenu(k, btn) {
+  const m = $('#sizeMenu');
+  const was = !m.classList.contains('hidden'); closeMenus(); if (was) return;
+  sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); showSize();
+  m.classList.remove('hidden');
+  const r = btn.getBoundingClientRect();
+  m.style.top = (r.bottom + 8) + 'px';
+  m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
+}
+$('#szRange').oninput = () => {
+  const k = sizeKind, v = tToSize(k, +$('#szRange').value);
+  S.presets[k][S.sizeIdx[k]] = v; S.size[k] = v;
+  store.set('presets', S.presets); showSize(); renderSizes();
+};
+$$('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+// Formen: Antippen wählt das Werkzeug und öffnet die Auswahl, nochmal Antippen schließt sie
+function openShapeMenu() {
+  const m = $('#shapeMenu'), r = $('#bShape').getBoundingClientRect();
+  closeMenus();
+  renderCustomGrid(); markShapeMenu();
+  m.classList.remove('hidden');
+  const top = Math.max(r.bottom, barBottom()) + 8;   // unter der ganzen Leiste (Hochformat: zwei Zeilen)
+  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
+  m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
+}
+function markShapeMenu() {
+  $$('#shapeMenu [data-shape]').forEach(b => b.classList.toggle('on', b.dataset.shape === S.shape));
+  $('#shapeMenu .mhint').textContent = isCustom(S.shape) ? 'Tippen: in Originalgröße platzieren · Ziehen: Größe wählen' : 'Ziehen zum Zeichnen · Umschalt: gerade/quadratisch';
+}
+function shapeTitle() {
+  const cs = customOf(S.shape), b = !isCustom(S.shape) && $(`#shapeMenu [data-shape="${S.shape}"]`);
+  $('#bShape').title = 'Formen (F)' + (cs ? ' – ' + cs.name : b ? ' – ' + b.textContent.trim() : '');
+}
+function setShape(k) { S.shape = k; store.set('shape', k); shapeTitle(); renderColors(); renderSizes(); }
+function pickShape(k) { setShape(k); closeMenus(); if (S.tool !== 'shape') setTool('shape'); }
+$('#bShape').onclick = () => {
+  const open = !$('#shapeMenu').classList.contains('hidden');
+  if (S.tool !== 'shape') setTool('shape');
+  if (open) closeMenus(); else openShapeMenu();
+};
+$$('#shapeMenu [data-shape]').forEach(b => b.onclick = () => pickShape(b.dataset.shape));
+shapeTitle();
+
+/* ---------- Eigene Formen: Bibliothek ----------
+   Gespeichert werden die Striche einer Auswahl (Bilder nicht), Punkte relativ zur geometrischen oberen linken Ecke
+   (Punkte ohne Strichbreite), w/h = diese Box. Die Bibliothek gilt für alle Bücher und Seiten. */
+const CUSTOM_MAX_PTS = 60000;
+const shapesWord = n => n === 1 ? '1 eigene Form' : n + ' eigene Formen';
+async function loadCustomShapes() {
+  try { CUSTOM = (await dbShapesAll()).sort(byCreated); } catch (e) { CUSTOM = []; }
+  customReady = true;
+  if (isCustom(S.shape) && !customOf(S.shape)) setShape('rect');   // Form gibt es nicht mehr
+  shapeTitle(); renderColors(); renderSizes();
+  if (!$('#shapeMenu').classList.contains('hidden')) { renderCustomGrid(); markShapeMenu(); }
+}
+async function saveCustomShape() {
+  if (!S.sel) return;
+  const strokes = S.items.filter(it => S.sel.ids.has(it.id) && it.t === 's');
+  if (!strokes.length) return;
+  const n = strokes.reduce((m, s) => m + s.pts.length / 3, 0);
+  if (n > CUSTOM_MAX_PTS) { toast(`Die Auswahl ist zu groß für eine Form (${n.toLocaleString('de-DE')} Punkte, höchstens ${CUSTOM_MAX_PTS.toLocaleString('de-DE')})`, 4500); return; }
+  let k = CUSTOM.length + 1; while (CUSTOM.some(r => r.name === 'Form ' + k)) k++;
+  const name = await ask('Name der Form:', 'Form ' + k, true, { ok: 'Speichern' });
+  if (name == null) return;
+  const [x0, y0] = geoBox(strokes);
+  const list = strokes.map(s => {
+    const p = new Float32Array(s.pts);
+    for (let i = 0; i < p.length; i += 3) { p[i] -= x0; p[i + 1] -= y0; }
+    return { c: s.c, w: s.w, hl: !!s.hl, pts: p };
+  });
+  const b = geoBox(list), rec = { id: uid(), name: name.trim() || 'Form ' + k, created: Date.now(), w: b[2], h: b[3], strokes: list };
+  try { await dbShapePut(rec); } catch (e) { toast('Speichern nicht möglich: ' + e.message, 5000); return; }
+  CUSTOM.push(rec);
+  toast('Gespeichert – zu finden unter Formen › Eigene Formen', 3200);
+}
+async function deleteCustomShape(r) {
+  if (!await askYes(`Form „${r.name}“ löschen?`, { ok: 'Löschen', danger: true })) return;
+  try { await dbShapeDelete(r.id); } catch (e) { toast('Löschen fehlgeschlagen: ' + e.message, 5000); return; }
+  CUSTOM = CUSTOM.filter(x => x.id !== r.id);   // schon platzierte Formen bleiben (gewöhnliche Striche)
+  for (const k of [...thumbCache.keys()]) if (k.startsWith(r.id + '|')) thumbCache.delete(k);
+  if (S.shape === 'custom:' + r.id) setShape('rect');
+  if (!$('#shapeMenu').classList.contains('hidden')) { renderCustomGrid(); markShapeMenu(); }
+}
+// Vorschaubild einer eigenen Form (56 px), mit den echten Pfaden; dünne Striche bleiben sichtbar
+const thumbCache = new Map();   // id|dunkel|DPR -> Canvas
+function customThumb(r) {
+  const key = r.id + '|' + S.dark + '|' + DPR;
+  let c = thumbCache.get(key); if (c) return c;
+  const SZ = 56, room = SZ - 10, mw = r.strokes.reduce((m, st) => Math.max(m, st.w), 0) * 0.8;   // Rand für die Strichbreite
+  const k = Math.min(room / (r.w + 2 * mw), room / (r.h + 2 * mw), 6);
+  c = document.createElement('canvas'); c.width = c.height = Math.round(SZ * DPR);
+  const g = c.getContext('2d'), f = c.width / SZ;
+  g.setTransform(f * k, 0, 0, f * k, f * (SZ / 2 - r.w / 2 * k), f * (SZ / 2 - r.h / 2 * k));
+  for (const st of r.strokes) fillStroke(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl));
+  thumbCache.set(key, c);
+  return c;
+}
+function renderCustomGrid() {
+  const box = $('#customGrid'); box.innerHTML = '';
+  if (!CUSTOM.length) {
+    box.innerHTML = '<div class="cempty"><span class="ci"><svg class="i"><use href="#ic-lasso"/></svg></span><span>Etwas zeichnen, mit dem Lasso markieren und „<b>Als Form speichern</b>“ tippen.</span></div>';
+    return;
+  }
+  for (const r of CUSTOM) {
+    const t = document.createElement('div'); t.className = 'ct';
+    t.innerHTML = '<button class="cpick"><span class="cth"></span><span class="cn"></span></button><button class="cdel" title="Form löschen"><svg class="i"><use href="#ic-x"/></svg></button>';
+    const b = t.firstChild; b.dataset.shape = 'custom:' + r.id; b.title = r.name;
+    b.firstChild.appendChild(customThumb(r)); b.lastChild.textContent = r.name;
+    b.onclick = () => pickShape(b.dataset.shape);
+    t.lastChild.onclick = () => deleteCustomShape(r);
+    box.appendChild(t);
+  }
+}
+$('#bSnap').onclick = toggleSnap; $('#bSnap').classList.toggle('on', S.snap);
+$('#bUndo').onclick = undo; $('#bRedo').onclick = redo;
+$('#zoom').onclick = () => zoomAt(VW / 2, VH / 2, 1);
+// Knöpfe nach dem Klick nicht fokussiert lassen (sonst löst die Leertaste sie erneut aus)
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); });
+
+function applyDark() {
+  document.documentElement.classList.toggle('dark', S.dark);
+  $('#hDark span').textContent = S.dark ? 'Hellmodus' : 'Darkmode';
+  patCache.clear(); clearTiles(); renderColors();
+  if (S.note) { draw(); drawLive(); }
+}
+function toggleDark() { S.dark = !S.dark; store.set('dark', S.dark); applyDark(); }
+$('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
+
+function closeMenus() { $$('.menu').forEach(m => m.classList.add('hidden')); $$('.mbtn.on').forEach(b => b.classList.remove('on')); }
+function openMenu(menu, btn) {
+  const was = !menu.classList.contains('hidden'); closeMenus(); if (was) return;
+  menu.classList.remove('hidden');
+  const r = btn.getBoundingClientRect();
+  menu.style.top = (r.bottom + 8) + 'px';
+  menu.style.left = clamp(r.right - menu.offsetWidth, 8, innerWidth - menu.offsetWidth - 8) + 'px';
+}
+// Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bShape,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
+$('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
+$$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
+$('#bMore').onclick = () => { $('#mFinger').textContent = 'Mit dem Finger zeichnen: ' + (S.fingerDraw ? 'an' : 'aus'); openMenu($('#moreMenu'), $('#bMore')); };
+$('#mFinger').onclick = () => { S.fingerDraw = !S.fingerDraw; store.set('fingerDraw', S.fingerDraw); closeMenus(); toast(S.fingerDraw ? 'Ein Finger zeichnet jetzt, zwei Finger verschieben und zoomen' : 'Finger verschieben und zoomen nur noch', 2600); };
+$('#mFit').onclick = () => { closeMenus(); fitAll(); };
+$('#mPng').onclick = () => { closeMenus(); exportPNG(); };
+$('#mClear').onclick = async () => { closeMenus(); if (S.items.length && await askYes('Alles auf dieser Seite löschen? (Rückgängig ist möglich)')) { clearSel(); commit([]); } };
+
+$('#sDel').onclick = () => { if (!S.sel) return; const ids = S.sel.ids; clearSel(); commit(S.items.filter(it => !ids.has(it.id))); };
+$('#sDup').onclick = () => {
+  if (!S.sel) return;
+  const off = S.snap ? gridSize() : 24 / S.view.z, ids = new Set(), groups = new Map();
+  const copies = S.items.filter(it => S.sel.ids.has(it.id)).map(it => {
+    const c = transformItem(it, 1, 0, 0, off, off); c.id = uid(); ids.add(c.id);
+    if (c.g) { if (!groups.has(c.g)) groups.set(c.g, uid()); c.g = groups.get(c.g); }   // Kopie = eigene Gruppe
+    return c;
+  });
+  commit(appendItems(withImages(S.items, copies.filter(c => c.t === 'i')), copies.filter(c => c.t === 's')));
+  setSel(ids);
+};
+$('#sSave').onclick = saveCustomShape;
+$('#sColor').onclick = () => {
+  if (!S.sel) return;
+  commit(S.items.map(it => S.sel.ids.has(it.id) && it.t === 's' ? { ...it, c: it.hl ? S.color.hl : S.color.pen } : it)); refreshSel();
+};
+$('#sSize').onclick = () => {
+  if (!S.sel) return;
+  commit(S.items.map(it => {
+    if (!S.sel.ids.has(it.id) || it.t !== 's') return it;
+    const w = it.hl ? S.size.hl : S.size.pen;
+    return { ...it, w, bb: bboxOf(it.pts, w) };
+  })); refreshSel();
+};
+
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+  if (mod && (k === '+' || k === '=' || k === '-' || k === '0')) e.preventDefault();   // kein Browser-Zoom
+  if (!$('#dlg').classList.contains('hidden')) {
+    if (k === 'escape') $('#dlgNo').click();
+    else if (k === 'enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') { e.preventDefault(); $('#dlgBox').requestSubmit(); }
+    return;
+  }
+  if ($('#editor').classList.contains('hidden') && k === 'escape') {   // Startseite: Menü schließen, sonst zurück zum Regal
+    if ($$('.menu').some(m => !m.classList.contains('hidden'))) closeMenus(); else if (homeBook) showShelf();
+    return;
+  }
+  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
+  if (k === ' ') { e.preventDefault(); if (!spaceDown && !action) { spaceDown = true; cvLive.style.cursor = 'grab'; } return; }
+  if (action) {
+    if (k === 'escape') cancelAction();
+    else if (k === 'shift' && action.kind === 'shape') { action.shift = true; requestLive(); }
+    return;
+  }
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if (mod && k === 'y') { e.preventDefault(); redo(); }
+  else if (mod && k === '0') zoomAt(VW / 2, VH / 2, 1);
+  else if (mod && (k === '+' || k === '=')) zoomAt(VW / 2, VH / 2, S.view.z * 1.25);
+  else if (mod && k === '-') zoomAt(VW / 2, VH / 2, S.view.z / 1.25);
+  else if ((k === 'delete' || k === 'backspace') && S.sel) { e.preventDefault(); $('#sDel').click(); }
+  else if (k === 'escape') { clearSel(); closeMenus(); }
+  else if (!mod && !e.altKey && k === 'g') toggleSnap();
+  else if (!mod && !e.altKey) { const t = { p: 'pen', m: 'hl', f: 'shape', e: 'eraser', l: 'lasso', h: 'hand' }[k]; if (t) setTool(t); }
+});
+document.addEventListener('keyup', e => {
+  if (e.key === ' ' && spaceDown) { e.preventDefault(); spaceDown = false; setTool(S.tool); }
+  if (e.key === 'Shift' && action && action.kind === 'shape') { action.shift = false; requestLive(); }
+});
+
+/* ---------- Bilder & PDF ---------- */
+let importChain = Promise.resolve();
+function queueImport(fn) {
+  S.busy++;
+  const run = importChain.then(fn).catch(err => { console.error(err); toast('Import fehlgeschlagen: ' + (err.message || err), 5000); })
+    .finally(() => { S.busy--; });
+  importChain = run;
+  return run;
+}
+function viewCenterWorld() { const top = barBottom(); return toWorld(VW / 2, top + (VH - top) / 2); }
+// nicht exakt über einen vorherigen Import legen (mit Raster: obere linke Ecke auf einen Rasterpunkt)
+function freeSpot(x, y, w) {
+  const G = gridSize();
+  if (S.snap) x = snapG(x);
+  for (let k = 0; k < 50; k++) {
+    if (!S.items.some(it => it.t === 'i' && Math.abs(it.x - x) < 1 && Math.abs(it.y - y) < 1)) return x;
+    x += w + 40 / S.view.z; if (S.snap) x = Math.ceil(x / G) * G;
+  }
+  return x;
+}
+async function prepareImage(file) {
+  const bmp = await decodeBlob(file);
+  const w0 = bmp.width, h0 = bmp.height;
+  const s = Math.min(1, Math.sqrt(16e6 / (w0 * h0)), 8192 / Math.max(w0, h0));
+  let blob = file, w = w0, h = h0;
+  const keep = /^image\/(jpeg|png|webp)$/.test(file.type) && s === 1;
+  if (!keep) {
+    w = Math.max(1, Math.round(w0 * s)); h = Math.max(1, Math.round(h0 * s));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, w, h);
+    blob = await canvasToBlob(c, file.type === 'image/jpeg' ? 'image/jpeg' : 'image/webp', 0.92);
+    c.width = c.height = 0;
+  }
+  const low = await makeLow(bmp, blob.type); bmp.close();
+  return { blob, low, w, h };
+}
+function insertImages(files) {
+  const list = [...files].filter(f => f.type.startsWith('image/'));
+  if (!list.length || !S.note) return;
+  const note = S.note;
+  return queueImport(async () => {
+    toast('Bild wird eingefügt …', 0);
+    const [cx, cy] = viewCenterWorld(), added = [];
+    let off = 0;
+    for (const f of list) {
+      try {
+        const { blob, low, w, h } = await prepareImage(f);
+        const imgId = uid();
+        await dbImagePut({ id: imgId, n: note.id, blob, low, w, h });
+        const sw = Math.min(w / DPR, VW * 0.5, (VH * 0.6) * w / h), ww = sw / S.view.z, hh = ww * h / w;
+        const y = S.snap ? snapG(cy - hh / 2 + off) : cy - hh / 2 + off, x = freeSpot(cx - ww / 2 + off, y, ww);
+        added.push({ t: 'i', id: uid(), img: imgId, x, y, w: ww, h: hh });
+        off += 30 / S.view.z;
+      } catch (e) { toast('„' + f.name + '“ kann nicht geöffnet werden (Format nicht unterstützt?)', 4500); await new Promise(r => setTimeout(r, 1200)); }
+    }
+    if (added.length && S.note === note) {
+      commit(withImages(S.items, added)); setTool('lasso'); setSel(new Set(added.map(a => a.id)));
+      toast('Eingefügt. Zum Verschieben ziehen, über den blauen Punkt skalieren.', 3000);
+    }
+  });
+}
+let pdfWorker = null;
+function getPdfWorker() {
+  if (pdfWorker) return pdfWorker;
+  const url = URL.createObjectURL(new Blob([$('#pdfWorkerSrc').textContent], { type: 'text/javascript' }));
+  pdfjsLib.GlobalWorkerOptions.workerSrc = url;
+  try { pdfWorker = new pdfjsLib.PDFWorker({ port: new Worker(url) }); } catch (e) { pdfWorker = null; }
+  return pdfWorker;
+}
+function insertPdf(file) {
+  if (!S.note) return;
+  const note = S.note;
+  return queueImport(async () => {
+    toast('PDF wird geladen …', 0);
+    const worker = getPdfWorker();
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), ...(worker ? { worker } : {}) }).promise;
+    const added = [], failed = [];
+    try {
+      const [cx] = viewCenterWorld(), [, y0] = toWorld(0, barBottom() + 30);
+      let y = S.snap ? snapG(y0) : y0, x = null;
+      for (let i = 1; i <= pdf.numPages; i++) {
+        toast(`PDF-Seite ${i} von ${pdf.numPages} …`, 0);
+        try {
+          const page = await pdf.getPage(i), vp1 = page.getViewport({ scale: 1 });
+          const w = vp1.width * 1.3, h = vp1.height * 1.3;
+          // etwa doppelte Bildschirmauflösung bei 100 %, höchstens ~10 Mio. Pixel
+          let scale = clamp(w * 2.2 / vp1.width, 0.5, 4);
+          scale = Math.min(scale, Math.sqrt(10e6 / (vp1.width * vp1.height)));
+          const vp = page.getViewport({ scale });
+          const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+          const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+          await page.render({ canvasContext: g, viewport: vp }).promise;
+          const blob = await canvasToBlob(c, 'image/jpeg', 0.9);
+          const low = await makeLow(c, 'image/jpeg');
+          const pw = c.width, ph = c.height; c.width = c.height = 0;
+          const imgId = uid();
+          await dbImagePut({ id: imgId, n: note.id, blob, low, w: pw, h: ph });
+          if (x === null) x = freeSpot(cx - w / 2, y, w);
+          added.push({ t: 'i', id: uid(), img: imgId, x, y, w, h, pdf: file.name, page: i });
+          y += h + 30; if (S.snap) y = Math.ceil(y / gridSize()) * gridSize();
+          page.cleanup();
+        } catch (err) { console.error(err); failed.push(i); }
+        await nextFrame();
+      }
+    } finally { pdf.destroy(); }
+    if (added.length && S.note === note) commit(withImages(S.items, added));
+    toast(`${added.length} Seite${added.length === 1 ? '' : 'n'} eingefügt` + (failed.length ? `, Seite ${failed.join(', ')} fehlerhaft` : ''), 3500);
+  });
+}
+$('#bImg').onclick = () => $('#fImg').click();
+$('#bPdf').onclick = () => $('#fPdf').click();
+$('#fImg').onchange = e => { insertImages(e.target.files); e.target.value = ''; };
+$('#fPdf').onchange = e => { if (e.target.files[0]) insertPdf(e.target.files[0]); e.target.value = ''; };
+document.addEventListener('paste', e => {
+  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
+  const files = [...(e.clipboardData?.files || [])]; if (files.length) { e.preventDefault(); insertImages(files); }
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+$('#stage').addEventListener('drop', e => {
+  e.preventDefault(); const files = [...e.dataTransfer.files];
+  files.filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name)).forEach(insertPdf);
+  insertImages(files);
+});
+
+/* ---------- Export ---------- */
+async function renderTo(items, box, scale, bg, cheap) {
+  const [x0, y0, x1, y1] = box, W = Math.max(1, Math.ceil((x1 - x0) * scale)), H = Math.max(1, Math.ceil((y1 - y0) * scale));
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = paperColor(); ctx.fillRect(0, 0, W, H);
+  drawBg(ctx, bg, { tx: -x0 * scale, ty: -y0 * scale, z: scale }, W / 1, H / 1, 1);
+  ctx.setTransform(scale, 0, 0, scale, -x0 * scale, -y0 * scale);
+  for (const it of items) {
+    if (it.t === 'i') {
+      const e = imgEntry(it.img); await e.ready;
+      // Export: jedes Bild einzeln in voller Auflösung dekodieren und gleich wieder freigeben
+      const bmp = !cheap && e.rec ? await decodeBlob(e.rec.blob).catch(() => null) : null;
+      const use = bmp || e.low;
+      if (use) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(use, it.x, it.y, it.w, it.h); }
+      if (bmp) bmp.close();
+    } else if (cheap) {
+      // Vorschaubild: Striche als einfache Linien (schnell)
+      ctx.strokeStyle = colorOf(it.c); ctx.lineWidth = it.w; ctx.lineCap = ctx.lineJoin = 'round';
+      if (it.hl) { ctx.globalAlpha = hlAlpha(); if (!S.dark) ctx.globalCompositeOperation = 'multiply'; }
+      ctx.beginPath(); ctx.moveTo(it.pts[0], it.pts[1]);
+      const step = Math.max(3, Math.floor(it.pts.length / 3 / 20) * 3);
+      for (let i = step; i < it.pts.length; i += step) ctx.lineTo(it.pts[i], it.pts[i + 1]);
+      ctx.lineTo(it.pts[it.pts.length - 3], it.pts[it.pts.length - 2]); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    } else drawItem(ctx, it, scale);
+  }
+  return c;
+}
+async function exportPNG() {
+  const b = contentBox(); if (!b) { toast('Die Seite ist noch leer'); return; }
+  const pad = 40, box = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
+  const bw = box[2] - box[0], bh = box[3] - box[1];
+  const scale = Math.min(2, 16000 / Math.max(bw, bh), Math.sqrt(120e6 / (bw * bh)));
+  toast('Bild wird erstellt …', 0);
+  try {
+    const c = await renderTo(S.items, box, scale, S.note.bg || 'dots');
+    const blob = await canvasToBlob(c, 'image/png'); c.width = c.height = 0;
+    download(blob, (S.note.name || 'Notiz') + '.png'); toast('Bild gespeichert');
+  } catch (e) { toast('Export fehlgeschlagen: ' + e.message, 5000); }
+}
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name.replace(/[\\/:*?"<>|]/g, '_');
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+async function makeThumb() {
+  const b = contentBox(); if (!b) return null;
+  const pad = 20, x0 = b[0] - pad, y0 = b[1] - pad;
+  let w = b[2] + pad - x0, h = b[3] + pad - y0;
+  // Ausschnitt im Format 4:3, oben links beginnend (erste Seite / Anfang der Notiz)
+  if (w / h > 4 / 3) h = w * 3 / 4; else w = Math.min(w, h * 4 / 3), h = w * 3 / 4;
+  const box = [x0, y0, x0 + w, y0 + h];
+  const c = await renderTo(S.items.filter(it => boxHit(itemBox(it), box)), box, 320 / w, S.note.bg || 'dots', true);
+  const url = c.toDataURL('image/jpeg', 0.8); c.width = c.height = 0;
+  return url;
+}
+
+/* ---------- Dialog ---------- */
+// Eigener Dialog, weil prompt/confirm in Electron nicht gehen.
+// o: { value, input (false = nur Ja/Nein), ok (Beschriftung), danger, color (Buch-Dialog mit Farbwahl und Vorschau) }
+function dialog(msg, o = {}) {
+  return new Promise(res => {
+    const d = $('#dlg'), box = $('#dlgBox'), inp = $('#dlgIn'), ok = $('#dlgOk'), sw = $('#dlgSw'), prev = $('#dlgPrev');
+    const withInput = o.input !== false, bk = !!o.color;
+    let color = o.color;
+    const ae = document.activeElement; if (ae && ae.blur) ae.blur();
+    $('#dlgMsg').textContent = msg; inp.classList.toggle('hidden', !withInput); inp.value = o.value || '';
+    inp.placeholder = o.placeholder || '';
+    ok.textContent = o.ok || 'OK'; ok.classList.toggle('danger', !!o.danger);
+    box.classList.toggle('bk', bk); sw.classList.toggle('hidden', !bk); prev.classList.toggle('hidden', !bk);
+    sw.innerHTML = ''; inp.oninput = null;
+    if (bk) {
+      const upd = () => { coverVars(prev, color); coverLabel(prev.querySelector('.lbl'), inp.value.trim() || o.placeholder || '', 5.3); };
+      for (const [k, [label]] of Object.entries(BOOK_COLORS)) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'bsw' + (k === color ? ' on' : ''); b.title = label; b.dataset.c = k;
+        coverVars(b, k);
+        b.onclick = () => { color = k; sw.querySelectorAll('.bsw').forEach(x => x.classList.toggle('on', x === b)); upd(); };
+        sw.appendChild(b);
+      }
+      inp.oninput = upd; upd();
+    }
+    d.classList.remove('hidden');
+    if (withInput) { inp.focus(); inp.select(); } else ok.focus();
+    const done = v => { d.classList.add('hidden'); box.onsubmit = $('#dlgNo').onclick = d.onpointerdown = inp.oninput = null; res(v); };
+    box.onsubmit = e => { e.preventDefault(); done(!withInput ? true : bk ? { name: inp.value, color } : inp.value); };
+    $('#dlgNo').onclick = () => done(null);
+    d.onpointerdown = e => { if (e.target === d) done(null); };
+  });
+}
+function ask(msg, value, withInput = true, o = {}) { return dialog(msg, { ...o, value, input: withInput }); }
+const askYes = (msg, o) => dialog(msg, { ...o, input: false }).then(v => v === true);
+// Buch anlegen/bearbeiten: liefert { name, color } oder null
+function askBook(title, name, color, ok) {
+  return dialog(title, { value: name, color: BOOK_COLORS[color] ? color : 'blue', ok, placeholder: 'Neues Buch' })
+    .then(v => v && { name: v.name.trim() || name || 'Neues Buch', color: v.color });
+}
+
+/* ---------- Startseite: Regal mit Büchern, im Buch die Seiten ---------- */
+const fmtDate = t => new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmtDay = t => new Date(t).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+let homeToken = 0;
+let homeBook = null;                     // geöffnetes Buch (id) oder null = Regal
+let homeData = { books: [], notes: [] }; // Stand der letzten Anzeige
+let homeKey = null, homeScroll = null;   // für Animation und Scrollposition beim Zurückkommen
+// Beschriftung auf dem Einband: die Schrift wächst mit dem Einband (cqw); lange Wörter werden kleiner gesetzt,
+// damit sie nicht mitten im Wort umbrechen. avail = nutzbare Breite des Schildes in em.
+let measureCtx = null;
+function coverLabel(lbl, name, avail = 6.7) {
+  lbl.firstChild.textContent = name;
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  measureCtx.font = '650 100px ' + getComputedStyle(document.body).fontFamily;
+  const em = t => measureCtx.measureText(t).width / 100;
+  const longest = Math.max(0, ...name.split(/\s+/).map(em)), total = em(name);
+  avail *= 0.93;   // Reserve: Kerning und Schriftersatz messen nicht exakt
+  let k = longest > avail ? avail / longest : 1;
+  if (total > 2.2 * avail) k = Math.min(k, 0.82);   // lange Namen: lieber kleiner als abgeschnitten
+  lbl.style.setProperty('--k', Math.max(0.55, k).toFixed(3));
+}
+async function renderHome() {
+  const token = ++homeToken;
+  let data = { books: [], notes: [] };
+  try { data = await ensureBooks(); } catch (e) { toast('Speicher nicht verfügbar: ' + e.message, 6000); }
+  if (token !== homeToken) return;   // eine neuere Anzeige läuft schon
+  homeData = data;
+  const grid = $('#grid'), book = homeBook && data.books.find(b => b.id === homeBook);
+  if (!book) homeBook = null;
+  const key = homeBook || '', back = homeScroll && homeScroll.key === key;
+  const top = back ? homeScroll.top : key === homeKey ? grid.scrollTop : 0;
+  if (!$('#homeMenu').classList.contains('hidden')) closeMenus();
+  grid.innerHTML = '';
+  if (book) renderBook(grid, book, data.notes); else renderShelf(grid, data.books, data.notes);
+  grid.classList.toggle('enter', key !== homeKey || !!back);
+  homeKey = key; homeScroll = null;
+  grid.scrollTop = top;
+}
+function setHomeMode(book) {
+  const home = $('#home'), grid = $('#grid');
+  $('#hShelfHead').classList.toggle('hidden', !!book); $('#hBookHead').classList.toggle('hidden', !book);
+  $('#hNewBook').classList.toggle('hidden', !!book); $('#hNew').classList.toggle('hidden', !book);
+  grid.classList.toggle('shelf', !book); grid.classList.toggle('pages', !!book);
+  home.classList.toggle('inbook', !!book);
+  if (book) coverVars(home, book.color); else { home.style.removeProperty('--c1'); home.style.removeProperty('--c2'); }
+}
+function renderShelf(grid, books, notes) {
+  setHomeMode(null);
+  const cnt = new Map(), last = new Map();
+  for (const n of notes) { cnt.set(n.book, (cnt.get(n.book) || 0) + 1); last.set(n.book, Math.max(last.get(n.book) || 0, n.updated || 0)); }
+  $('#hShelfSub').textContent = books.length ? booksWord(books.length) + ' · ' + pagesWord(notes.length) : '';
+  if (!books.length) { grid.appendChild(emptyState(false)); return; }
+  books.sort(byCreated).forEach((b, k) => {
+    const n = cnt.get(b.id) || 0, el = document.createElement('div');
+    el.className = 'book'; el.dataset.id = b.id; coverVars(el, b.color); el.style.setProperty('--i', Math.min(k, 10));
+    el.innerHTML = `<button class="cv"><span class="pgs"></span><span class="cover"><span class="gl"></span><span class="lbl"><span class="t"></span></span></span></button>
+      <div class="cap"><div class="grow"><div class="nm"></div><div class="dt"></div></div>
+      <button class="mbtn" title="Buch bearbeiten"><svg class="i"><use href="#ic-more"/></svg></button></div>`;
+    coverLabel(el.querySelector('.lbl'), b.name);
+    el.querySelector('.nm').textContent = el.firstChild.title = b.name;
+    el.querySelector('.dt').textContent = (n ? pagesWord(n) : 'Leer') + ' · ' + fmtDay(last.get(b.id) || b.created || Date.now());
+    el.firstChild.onclick = () => openBook(b.id);
+    const mb = el.querySelector('.mbtn'); mb.onclick = () => bookMenu(b, mb);
+    grid.appendChild(el);
+  });
+  grid.appendChild(addTile('bk', 'Neues Buch', newBook, books.length));
+}
+function renderBook(grid, book, notes) {
+  setHomeMode(book);
+  const pages = notes.filter(n => n.book === book.id).sort(byCreated);
+  $('#hBookName').textContent = $('#hBookName').title = book.name;
+  const sub = $('#hBookSub'); sub.textContent = pages.length ? pagesWord(pages.length) : 'Noch keine Seiten';
+  if (pages.length) { const o = document.createElement('span'); o.className = 'opt'; o.textContent = ' · zuletzt bearbeitet ' + fmtDay(Math.max(...pages.map(n => n.updated || 0))); sub.appendChild(o); }
+  if (!pages.length) { grid.appendChild(emptyState(true)); return; }
+  pages.forEach((n, k) => {
+    const card = document.createElement('div'); card.className = 'card'; card.dataset.id = n.id; card.style.setProperty('--i', Math.min(k, 10));
+    card.innerHTML = `<div class="th"><span class="pno"></span></div>
+      <div class="meta"><div class="grow"><div class="nm"></div><div class="dt"></div></div>
+      <button class="mbtn" title="Seite bearbeiten"><svg class="i"><use href="#ic-more"/></svg></button></div>`;
+    if (n.thumb) { const im = new Image(); im.alt = ''; im.src = n.thumb; card.firstChild.prepend(im); }
+    else card.firstChild.classList.add('bg-' + (n.bg || 'dots'));   // leere Seite: ihr Hintergrund
+    card.querySelector('.pno').textContent = k + 1;
+    card.querySelector('.nm').textContent = n.name;
+    card.querySelector('.dt').textContent = fmtDate(n.updated);
+    const mb = card.querySelector('.mbtn');
+    card.onclick = e => { if (e.target.closest('.mbtn')) pageMenu(n, book, mb); else openNote(n); };
+    grid.appendChild(card);
+  });
+  grid.appendChild(addTile('pg', 'Neue Seite', newPage, pages.length));
+}
+function addTile(kind, label, fn, k) {
+  const b = document.createElement('button'); b.className = 'addtile ' + kind; b.style.setProperty('--i', Math.min(k, 10));
+  b.innerHTML = '<span class="plus"><svg class="i"><use href="#ic-plus"/></svg></span><span></span>';
+  b.lastChild.textContent = label; b.onclick = fn;
+  return b;
+}
+function emptyState(inBook) {
+  const el = document.createElement('div'); el.className = 'empty';
+  el.innerHTML = inBook
+    ? `<div class="ill"><span class="sheet back"></span><span class="sheet"><i style="top:36px"></i><i style="top:54px;right:58px"></i></span></div>
+      <h2>Dieses Buch ist noch leer</h2><p>Lege die erste Seite an und schreib los.</p>
+      <button class="btn primary"><svg class="i"><use href="#ic-plus"/></svg>Erste Seite anlegen</button>`
+    : `<div class="ill"><span class="mini"></span><span class="mini"></span><span class="mini"></span></div>
+      <h2>Dein Regal ist noch leer</h2><p>Lege ein Buch an – zum Beispiel „Mathe“ – und sammle darin deine Seiten.</p>
+      <button class="btn primary"><svg class="i"><use href="#ic-plus"/></svg>Erstes Buch anlegen</button>`;
+  if (!inBook) el.querySelectorAll('.mini').forEach((m, i) => coverVars(m, ['teal', 'blue', 'mustard'][i]));
+  el.querySelector('button').onclick = inBook ? newPage : newBook;
+  return el;
+}
+function openBook(id) { if (navBusy || S.note) return; homeBook = id; renderHome(); }
+function showShelf() { homeBook = null; renderHome(); }
+
+/* Menüs der Startseite (⋯ an Büchern und Seiten) */
+let homeMenuKey = null, homeMenuBtn = null;
+function homeMenu(btn, key, items) {
+  const open = !$('#homeMenu').classList.contains('hidden') && homeMenuKey === key;
+  closeMenus(); if (open) return;
+  homeMenuKey = key; homeMenuBtn = btn; btn.classList.add('on'); fillMenu(items);
+}
+function fillMenu(items) {
+  const m = $('#homeMenu'); m.innerHTML = '';
+  for (const it of items) {
+    if (it === '-') { m.appendChild(document.createElement('hr')); continue; }
+    const b = document.createElement('button'); if (it.cls) b.className = it.cls;
+    if (it.icon) b.innerHTML = `<svg class="i"><use href="#${it.icon}"/></svg>`;
+    if (it.chip) { const c = document.createElement('span'); c.className = 'chip'; coverVars(c, it.chip); b.appendChild(c); }
+    const l = document.createElement('span'); l.className = 'lbl'; l.textContent = it.label; b.appendChild(l);
+    if (it.sub) { const t = document.createElement('span'); t.className = 'sub'; t.textContent = it.sub; b.appendChild(t); }
+    if (it.more) b.insertAdjacentHTML('beforeend', '<svg class="i"><use href="#ic-chev"/></svg>');
+    b.onclick = it.keep ? it.run : () => { closeMenus(); it.run(); };
+    m.appendChild(b);
+  }
+  m.classList.remove('hidden');
+  const r = homeMenuBtn.getBoundingClientRect(), h = m.offsetHeight, w = m.offsetWidth;
+  let top = r.bottom + 6; if (top + h > innerHeight - 8) top = Math.max(8, r.top - 6 - h);
+  m.style.top = top + 'px'; m.style.left = clamp(r.right - w, 8, innerWidth - w - 8) + 'px';
+}
+function bookMenu(b, btn) {
+  homeMenu(btn, 'b:' + b.id, [
+    { icon: 'ic-edit', label: 'Umbenennen / Farbe', run: () => editBook(b) },
+    '-',
+    { icon: 'ic-trash', label: 'Löschen', cls: 'del', run: () => deleteBook(b) },
+  ]);
+}
+function pageMenu(n, book, btn) {
+  const main = [
+    { icon: 'ic-edit', label: 'Umbenennen', run: () => renamePage(n) },
+    { icon: 'ic-move', label: 'In anderes Buch verschieben', more: true, keep: true, run: () => fillMenu(moveTo()) },
+    '-',
+    { icon: 'ic-trash', label: 'Löschen', cls: 'del', run: () => deletePage(n) },
+  ];
+  const moveTo = () => {
+    const cnt = new Map(); for (const x of homeData.notes) cnt.set(x.book, (cnt.get(x.book) || 0) + 1);
+    const others = homeData.books.filter(b => b.id !== book.id).sort(byCreated);
+    return [
+      { icon: 'ic-back', label: 'Verschieben nach …', cls: 'head', keep: true, run: () => fillMenu(main) },
+      ...others.map(b => ({ chip: b.color, label: b.name, sub: pagesWord(cnt.get(b.id) || 0), run: () => movePage(n, b) })),
+      '-',
+      { icon: 'ic-plus', label: 'Neues Buch …', run: () => movePageToNew(n) },
+    ];
+  };
+  homeMenu(btn, 'p:' + n.id, main);
+}
+// Neue Bücher bekommen eine Farbe, die es im Regal noch nicht gibt
+function freeColor() {
+  const used = new Set(homeData.books.map(b => b.color)), keys = Object.keys(BOOK_COLORS);
+  return keys.find(k => !used.has(k)) || keys[homeData.books.length % keys.length];
+}
+async function createBook() {
+  const r = await askBook('Neues Buch', 'Neues Buch', freeColor(), 'Anlegen'); if (!r) return null;
+  const b = { id: uid(), name: r.name, color: r.color, created: Date.now() };
+  try { await dbBookPut(b); } catch (e) { toast('Speichern nicht möglich: ' + e.message, 5000); return null; }
+  return b;
+}
+async function newBook() {
+  if (navBusy || S.note) return;
+  const b = await createBook(); if (!b) return;
+  homeBook = b.id; renderHome();   // das neue Buch gleich öffnen
+}
+async function editBook(b) {
+  const r = await askBook('Buch bearbeiten', b.name, b.color, 'Speichern'); if (!r) return;
+  try { await dbBookPut({ ...b, name: r.name, color: r.color }); } catch (e) { toast('Speichern nicht möglich: ' + e.message, 5000); }
+  renderHome();
+}
+async function deleteBook(b) {
+  let pages = [];
+  try { pages = (await dbIndexAll()).filter(n => n.book === b.id); } catch (e) { toast('Speicher nicht verfügbar: ' + e.message, 5000); return; }
+  const msg = pages.length ? `Buch „${b.name}“ mit ${pagesWord(pages.length)} löschen? Das kann nicht rückgängig gemacht werden.` : `Buch „${b.name}“ löschen?`;
+  if (!await askYes(msg, { ok: 'Löschen', danger: true })) return;
+  if (navBusy) return;
+  navBusy = true;   // solange keine Seite öffnen
+  try {
+    const all = (await dbIndexAll()).filter(n => n.book === b.id);   // auch Seiten, die seit der Rückfrage dazukamen
+    await dbDeleteNotes(all.map(n => n.id), b.id);
+  } catch (e) { toast('Löschen fehlgeschlagen: ' + e.message, 5000); }
+  navBusy = false;
+  if (homeBook === b.id) homeBook = null;
+  renderHome();
+}
+async function renamePage(n) {
+  if (navBusy) return;
+  const nm = await ask('Seite umbenennen', n.name, true, { ok: 'Umbenennen' });
+  if (!nm || !nm.trim()) return;
+  try { await dbIndexPut({ ...n, name: nm.trim() }); } catch (e) { toast('Speichern nicht möglich: ' + e.message, 5000); }
+  renderHome();
+}
+async function deletePage(n) {
+  if (navBusy) return;
+  if (!await askYes(`„${n.name}“ wirklich löschen? Das kann nicht rückgängig gemacht werden.`, { ok: 'Löschen', danger: true })) return;
+  try { await dbDeleteNote(n.id); } catch (e) { toast('Löschen fehlgeschlagen: ' + e.message, 5000); }
+  renderHome();
+}
+async function movePage(n, b) {
+  if (navBusy) return;
+  try { await dbIndexPut({ ...n, book: b.id }); } catch (e) { toast('Verschieben fehlgeschlagen: ' + e.message, 5000); return; }
+  toast(`„${n.name}“ ist jetzt im Buch „${b.name}“`); renderHome();
+}
+async function movePageToNew(n) { const b = await createBook(); if (b) movePage(n, b); }
+async function newPage() {
+  if (navBusy || S.note) return;
+  navBusy = true;
+  let n;
+  try {
+    const { books, notes } = await ensureBooks();
+    let book = books.find(b => b.id === homeBook) || books.sort(byCreated)[0];
+    if (!book) { book = { id: uid(), name: DEFAULT_BOOK, color: 'blue', created: Date.now() }; await dbBookPut(book); }
+    const pages = notes.filter(x => x.book === book.id).sort(byCreated), prev = pages[pages.length - 1], now = Date.now();
+    // neue Seite immer ans Ende, mit dem Hintergrund der letzten Seite (z. B. kariert in Mathe)
+    n = { id: uid(), name: 'Seite ' + (pages.length + 1), created: Math.max(now, prev ? (prev.created || 0) + 1 : 0), updated: now,
+      thumb: null, bg: (prev && prev.bg) || 'dots', view: { tx: 0, ty: 0, z: 1 }, book: book.id };
+    await dbIndexPut(n); homeBook = book.id;
+  } catch (e) { toast('Speichern nicht möglich: ' + e.message, 5000); navBusy = false; return; }
+  navBusy = false;
+  openNote(n);
+}
+$('#hNewBook').onclick = newBook;
+$('#hNew').onclick = newPage;
+$('#hShelf').onclick = showShelf;
+$('#hBookMenu').onclick = () => { const b = homeData.books.find(x => x.id === homeBook); if (b) bookMenu(b, $('#hBookMenu')); };
+$('#grid').addEventListener('scroll', () => { if (!$('#homeMenu').classList.contains('hidden')) closeMenus(); }, { passive: true });
+// Ist ein Menü offen, schließt der erste Tipp daneben nur das Menü (öffnet nicht versehentlich ein Buch)
+let homeSwallow = false;
+window.addEventListener('pointerdown', e => {
+  homeSwallow = !$('#home').classList.contains('hidden') && !$('#homeMenu').classList.contains('hidden') && !e.target.closest('.menu,.mbtn,#dlg');
+}, true);
+$('#home').addEventListener('click', e => { if (homeSwallow) { homeSwallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
+let navBusy = false;
+async function openNote(meta) {
+  if (navBusy || S.note) return; navBusy = true;
+  try {
+    // aktueller Stand aus dem Speicher (die Karte kann älter sein: verschoben, umbenannt, gelöscht)
+    const fresh = await dbIndexGet(meta.id);
+    if (!fresh) { navBusy = false; toast('Diese Seite gibt es nicht mehr'); renderHome(); return; }
+    Object.assign(meta, fresh);
+    let items = await dbItems(meta.id);
+    items.sort((a, b) => a.o - b.o);
+    let renumber = false;
+    for (let i = 1; i < items.length; i++) if (!(items[i].o - items[i - 1].o > 1e-7)) { renumber = true; break; }
+    S.note = meta; S.items = items; S.saved = new Map(items.map(i => [i.id, i]));
+    if (renumber) { items.forEach((it, i) => it.o = i); S.saved = new Map(); }
+    S.view = meta.view ? { ...meta.view } : { tx: 0, ty: 0, z: 1 }; S.level = S.view.z;
+    S.undo = []; S.redo = []; S.sel = null; action = null; S.thumbDirty = false;
+    clearTiles(); pathCache.clear();
+    $('#title').value = meta.name;
+    if (!$('#home').classList.contains('hidden')) homeScroll = { key: homeKey, top: $('#grid').scrollTop };
+    closeMenus(); $('#home').classList.add('hidden'); $('#editor').classList.remove('hidden');
+    updateUndo(); setTool(S.tool === 'hand' ? 'pen' : S.tool); resize();
+    if (renumber) markDirty();
+  } catch (e) { toast('Notiz konnte nicht geöffnet werden: ' + e.message, 6000); S.note = null; }
+  navBusy = false;
+}
+async function flushNote() {
+  if (!S.note) return;
+  if (action) endAction(action.kind === 'draw' && action.pts.length < 6);
+  await saveNow();   // zuerst die Striche (Electron wartet beim Schließen nicht beliebig lange), dann das Vorschaubild
+  if (S.thumbDirty && S.note) { try { S.note.thumb = await makeThumb(); S.thumbDirty = false; } catch (e) {} await saveNow(); }
+}
+async function closeNote() {
+  if (!S.note || navBusy) return;
+  if (S.busy) { toast('Bitte warten, bis der Import fertig ist'); return; }
+  navBusy = true;
+  clearSel();
+  await flushNote();
+  if (S.saveError) { navBusy = false; toast('Die Notiz konnte nicht gespeichert werden und bleibt offen: ' + S.saveError.message, 7000); return; }
+  // Bilder, die in der Notiz nicht mehr vorkommen, aus dem Speicher entfernen
+  const note = S.note, used = new Set(S.items.filter(i => i.t === 'i').map(i => i.img));
+  S.note = null; S.items = []; S.saved = new Map(); S.undo = []; S.redo = [];
+  clearTiles(); pathCache.clear(); releaseImages();
+  $('#editor').classList.add('hidden'); $('#home').classList.remove('hidden');
+  navBusy = false;
+  homeBook = note.book || null;   // zurück in das Buch dieser Seite (ohne gültiges Buch: Regal)
+  renderHome();
+  try {
+    const tx = db.transaction('images', 'readwrite'), st = tx.objectStore('images');
+    st.index('n').openKeyCursor(IDBKeyRange.only(note.id)).onsuccess = ev => { const c = ev.target.result; if (c) { if (!used.has(c.primaryKey)) st.delete(c.primaryKey); c.continue(); } };
+  } catch (e) {}
+}
+window.__flush = () => flushNote().catch(() => {});
+$('#bBack').onclick = closeNote;
+$('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } });
+$('#title').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); });
+/* Sicherung: eine Textdatei mit einer Zeile pro Buch, Notiz, Stricheliste und Bild.
+   So entsteht nie ein einzelner riesiger Text, auch bei vielen PDFs.
+   Format 3: Kopfzeile, dann {k:'book'} je Buch, {k:'shape'} je eigene Form, dann je Notiz {k:'note'} (mit book),
+   {k:'items'}, {k:'img'}. */
+function blobToDataURL(blob) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); }); }
+$('#hBackup').onclick = async () => {
+  if (navBusy) return;
+  try {
+    const { books, notes: metas } = await ensureBooks(), shapes = (await dbShapesAll()).sort(byCreated);
+    if (!metas.length && !books.length && !shapes.length) { toast('Es gibt noch nichts zu sichern'); return; }
+    toast('Sicherung wird erstellt …', 0);
+    const parts = [JSON.stringify({ app: 'notizen', format: 3, saved: Date.now() }) + '\n'];
+    for (const b of books.sort(byCreated)) parts.push(JSON.stringify({ k: 'book', ...b }) + '\n');
+    for (const r of shapes) parts.push(JSON.stringify({ k: 'shape', ...r, strokes: r.strokes.map(st => ({ ...st, pts: Array.from(st.pts, v => Math.round(v * 100) / 100) })) }) + '\n');
+    for (const m of metas) {
+      parts.push(JSON.stringify({ k: 'note', ...m }) + '\n');
+      const items = (await dbItems(m.id)).map(it => it.t === 's' ? { ...it, pts: Array.from(it.pts, v => Math.round(v * 100) / 100) } : it);
+      parts.push(JSON.stringify({ k: 'items', n: m.id, items }) + '\n');
+      const imgs = await reqP(db.transaction('images').objectStore('images').index('n').getAll(m.id));
+      for (const im of imgs) parts.push(JSON.stringify({ k: 'img', id: im.id, n: im.n, w: im.w, h: im.h, data: await blobToDataURL(im.blob) }) + '\n');
+    }
+    download(new Blob(parts, { type: 'application/x-ndjson' }), 'Notizen-Sicherung-' + new Date().toISOString().slice(0, 10) + '.notizen');
+    const what = [metas.length || books.length ? booksWord(books.length) + ' mit ' + pagesWord(metas.length) : '', shapes.length ? shapesWord(shapes.length) : ''];
+    toast(what.filter(Boolean).join(' und ') + ' gesichert');
+  } catch (e) { toast('Sicherung fehlgeschlagen: ' + e.message, 6000); }
+};
+async function* fileLines(file) {
+  const reader = file.stream().pipeThrough(new TextDecoderStream()).getReader();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += value; let i;
+    while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); if (line.trim()) yield line; }
+  }
+  if (buf.trim()) yield buf;
+}
+// Eigene Form aus einer Sicherung prüfen und in die gespeicherte Form bringen (Punkte als Float32Array)
+function shapeFromBackup(r) {
+  if (typeof r.id !== 'string' || !r.id || !Array.isArray(r.strokes)) return null;
+  const strokes = r.strokes.filter(st => st && Array.isArray(st.pts) && st.pts.length >= 3 && st.pts.length % 3 === 0 && st.pts.every(Number.isFinite))
+    .map(st => ({ c: typeof st.c === 'string' ? st.c : 'ink', w: st.w > 0 ? +st.w : 2, hl: !!st.hl, pts: Float32Array.from(st.pts) }));
+  if (!strokes.length) return null;
+  const [x0, y0] = geoBox(strokes);
+  if (x0 || y0) for (const st of strokes) for (let i = 0; i < st.pts.length; i += 3) { st.pts[i] -= x0; st.pts[i + 1] -= y0; }
+  const b = geoBox(strokes);
+  return { id: r.id, name: String(r.name || 'Form').slice(0, 80), created: +r.created || Date.now(), w: b[2], h: b[3], strokes };
+}
+async function writeRecords(meta, items, images, replace) {
+  const tx = db.transaction(['index', 'items', 'images'], 'readwrite');
+  const its = tx.objectStore('items');
+  if (replace) its.delete(IDBKeyRange.bound([meta.id], [meta.id, []]));   // vor dem Schreiben, in derselben Transaktion
+  if (meta) tx.objectStore('index').put(meta);
+  for (const it of items || []) its.put(it);
+  for (const im of images || []) tx.objectStore('images').put(im);
+  return txDone(tx);
+}
+$('#hRestore').onclick = () => $('#fRestore').click();
+$('#fRestore').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || navBusy) return;
+  navBusy = true; toast('Sicherung wird geladen …', 0);
+  let count = 0, same = 0, books = 0, shapes = 0;
+  try {
+    const noteMap = new Map(), imgMap = new Map();
+    const mapImg = (n, id) => { if (!noteMap.get(n)?.copy) return id; if (!imgMap.has(id)) imgMap.set(id, uid()); return imgMap.get(id); };
+    let first = true;
+    for await (const line of fileLines(f)) {
+      const r = JSON.parse(line);
+      if (first) {
+        first = false;
+        if (Array.isArray(r.notes)) {          // alte Sicherung (Version 1)
+          for (const n of r.notes) { const { meta, items, images } = legacyToRecords(n); const ex = await dbIndexGet(meta.id); if (ex && ex.updated > meta.updated) { meta.id = uid(); meta.name += ' (Sicherung)'; items.forEach(i => i.n = meta.id); images.forEach(i => i.n = meta.id); } await writeRecords(meta, items, images, true); count++; }
+          break;
+        }
+        if (r.app !== 'notizen') throw new Error('keine Notizen-Sicherung');
+        continue;
+      }
+      if (r.k === 'book') {
+        const { k, ...bk } = r;
+        if (typeof bk.id === 'string' && bk.id && !(await dbBookGet(bk.id))) {
+          await dbBookPut({ ...bk, name: String(bk.name || 'Buch'), color: BOOK_COLORS[bk.color] ? bk.color : 'blue', created: +bk.created || Date.now() });
+          books++;
+        }
+      } else if (r.k === 'shape') {   // eigene Form: nur neue (unbekannte id) dazunehmen
+        const rec = shapeFromBackup(r);
+        if (rec && !(await dbShapeGet(rec.id))) { await dbShapePut(rec); shapes++; }
+      } else if (r.k === 'note') {
+        // Geschrieben wird erst mit der Stricheliste, in einer Transaktion: bricht die Datei ab, bleibt die Seite unverändert
+        const { k, ...meta } = r, ex = await dbIndexGet(meta.id);
+        if (ex && ex.updated === meta.updated) { noteMap.set(meta.id, { skip: true }); same++; continue; }   // unverändert: Name und Buch hier behalten
+        const copy = !!(ex && ex.updated > meta.updated), newId = copy ? uid() : meta.id;
+        if (copy) meta.name += ' (Sicherung)';
+        if (ex && !copy && !('book' in meta)) meta.book = ex.book;   // ältere Sicherung: die Seite bleibt in ihrem Buch
+        meta.id = newId;
+        noteMap.set(r.id, { id: newId, copy, meta, replace: !copy, done: false });
+      } else if (r.k === 'items') {
+        const m = noteMap.get(r.n); if (!m || m.skip || m.done) continue;
+        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts) } : { img: mapImg(r.n, it.img) }) }));
+        await writeRecords(m.meta, items, [], m.replace); m.done = true; count++;
+      } else if (r.k === 'img') {
+        const m = noteMap.get(r.n); if (!m || m.skip) continue;
+        await writeRecords(null, [], [{ id: mapImg(r.n, r.id), n: m.id, blob: dataURLToBlob(r.data), low: null, w: r.w || 0, h: r.h || 0 }], false);
+      }
+    }
+    for (const m of noteMap.values()) if (!m.skip && !m.done && !(await dbIndexGet(m.id))) { await writeRecords(m.meta, [], [], false); count++; }   // Seite ohne Striche
+    const extra = [books ? (books === 1 ? '1 neues Buch' : books + ' neue Bücher') : '', shapes ? shapesWord(shapes) : ''].filter(Boolean).join(', ');
+    toast((count || !same ? pagesWord(count) + ' wiederhergestellt' : 'Alles war schon da') + (extra ? ' (' + extra + ')' : '') + (same && count ? ', ' + pagesWord(same) + ' unverändert' : ''));
+  } catch (err) { toast('Datei konnte nicht geladen werden: ' + err.message, 6000); }
+  if (shapes) await loadCustomShapes();
+  navBusy = false;
+  if (books) homeBook = null;   // neue Bücher stehen im Regal
+  renderHome();   // ordnet Seiten ohne Buch (ältere Sicherungen) dem Buch „Meine Notizen“ zu
+};
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.note) flushNote(); });
+window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
+
+/* ---------- Start ---------- */
+applyDark();
+openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome(); })
+  .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
