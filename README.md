@@ -1,6 +1,6 @@
 # Notizen
 
-Handschrift-App im Stil von GoodNotes für das Surface Pro 11 (Windows ARM64, Surface Pen). Version 1.4.0.
+Handschrift-App im Stil von GoodNotes für das Surface Pro 11 (Windows ARM64, Surface Pen). Version 1.4.1.
 
 ![Vorschau](docs/vorschau.png)
 
