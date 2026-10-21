@@ -121,6 +121,7 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 #editor{position:fixed;inset:0;touch-action:none}
 #stage{position:absolute;inset:0;overflow:hidden;background:var(--paper)}
 #stage canvas{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none}
+#penDot{position:absolute;left:0;top:0;display:none;border-radius:50%;opacity:.5;pointer-events:none}
 #bar{position:absolute;left:10px;right:10px;top:10px;display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);z-index:5;flex-wrap:wrap}
 .tb{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--text)}
 .tb:hover{background:var(--hover)}
@@ -235,7 +236,7 @@ html.dark #toast{background:#eee;color:#111}
 
 <!-- Editor -->
 <div id="editor" class="hidden">
-  <div id="stage"><canvas id="cvMain"></canvas><canvas id="cvLive"></canvas></div>
+  <div id="stage"><canvas id="cvMain"></canvas><canvas id="cvLive"></canvas><div id="penDot"></div></div>
   <div id="bar">
     <button class="tb" id="bBack" title="Zurück zur Übersicht"><svg class="i"><use href="#ic-back"/></svg></button>
     <input id="title" spellcheck="false">
@@ -744,7 +745,7 @@ function drawItem(ctx, it, devScale) {
 /* ---------- Canvas & Kacheln ----------
    cvMain zeigt Hintergrund + zwischengespeicherte Kacheln (512 px), cvLive den Strich,
    der gerade geschrieben wird, sowie Lasso und Auswahl. */
-const cvMain = $('#cvMain'), cvLive = $('#cvLive');
+const cvMain = $('#cvMain'), cvLive = $('#cvLive'), penDot = $('#penDot');
 const ctxMain = cvMain.getContext('2d', { alpha: false });
 const ctxLive = cvLive.getContext('2d', { desynchronized: true });
 let VW = 0, VH = 0, DPR = 1;
@@ -1648,8 +1649,25 @@ function penArrived() {
   }
   if (action && action.touch) endAction(true);
 }
+// Stift schwebt über der Fläche: statt Fadenkreuz ein durchsichtiger Punkt in Farbe und Dicke des Strichs
+// (Dicke bei mittlerem Druck, mindestens 3 px). Beim Schreiben selbst ist er aus.
+function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : 'crosshair'; }
+function hoverDot(e) {
+  const k = S.tool;
+  const on = !!e && e.pointerType === 'pen' && !action && !spaceDown && !(e.buttons & 34) && (k === 'pen' || k === 'hl');
+  if (on) {
+    const d = Math.max(3, S.size[k] * S.view.z), [sx, sy] = localXY(e), st = penDot.style;
+    st.width = st.height = d + 'px'; st.background = colorOf(S.color[k]);
+    st.transform = `translate(${sx - d / 2}px,${sy - d / 2}px)`;
+  }
+  const disp = on ? 'block' : '';
+  if (penDot.style.display !== disp) penDot.style.display = disp;
+  const cur = on ? 'none' : toolCursor(k);
+  if (!action && !spaceDown && cvLive.style.cursor !== cur) cvLive.style.cursor = cur;
+}
 
 cvLive.addEventListener('pointerdown', e => {
+  penDot.style.display = '';
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
   if (!$$('.menu').every(m => m.classList.contains('hidden'))) { closeMenus(); return; }
   if (e.pointerType === 'touch') {
@@ -1679,6 +1697,7 @@ cvLive.addEventListener('pointermove', e => {
     if (gesture && !action) penArrived();
   }
   if (e.pointerType === 'touch' && touches.has(e.pointerId)) { const [x, y] = localXY(e); touches.set(e.pointerId, { x, y }); }   // für eine zweite Hand: aktuelle Position
+  if (!action && e.pointerType !== 'touch') hoverDot(e);
   if (action && action.id === e.pointerId) {
     if (e.pointerType !== 'touch' && e.buttons === 0) { endAction(false); return; }   // Taste wurde unbemerkt losgelassen
     moveAction(e); return;
@@ -1707,6 +1726,7 @@ function pointerEnd(e) {
 }
 cvLive.addEventListener('pointerup', pointerEnd);
 cvLive.addEventListener('pointercancel', pointerEnd);
+cvLive.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') hoverDot(null); });
 cvLive.addEventListener('lostpointercapture', e => { if (action && action.id === e.pointerId) endAction(false); });
 cvLive.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('blur', () => {
@@ -1732,7 +1752,7 @@ function setTool(t) {
   $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   if (t !== 'lasso') clearSel();
   $('#sizeMenu').classList.add('hidden'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
-  cvLive.style.cursor = t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : 'crosshair';
+  cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes();
 }
 // Farbe und Dicke gelten für Stift, Textmarker, Lasso (übernehmen) und Formen – nicht für eigene Formen,

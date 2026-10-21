@@ -382,7 +382,7 @@ function drawItem(ctx, it, devScale) {
 /* ---------- Canvas & Kacheln ----------
    cvMain zeigt Hintergrund + zwischengespeicherte Kacheln (512 px), cvLive den Strich,
    der gerade geschrieben wird, sowie Lasso und Auswahl. */
-const cvMain = $('#cvMain'), cvLive = $('#cvLive');
+const cvMain = $('#cvMain'), cvLive = $('#cvLive'), penDot = $('#penDot');
 const ctxMain = cvMain.getContext('2d', { alpha: false });
 const ctxLive = cvLive.getContext('2d', { desynchronized: true });
 let VW = 0, VH = 0, DPR = 1;
@@ -1286,8 +1286,25 @@ function penArrived() {
   }
   if (action && action.touch) endAction(true);
 }
+// Stift schwebt über der Fläche: statt Fadenkreuz ein durchsichtiger Punkt in Farbe und Dicke des Strichs
+// (Dicke bei mittlerem Druck, mindestens 3 px). Beim Schreiben selbst ist er aus.
+function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : 'crosshair'; }
+function hoverDot(e) {
+  const k = S.tool;
+  const on = !!e && e.pointerType === 'pen' && !action && !spaceDown && !(e.buttons & 34) && (k === 'pen' || k === 'hl');
+  if (on) {
+    const d = Math.max(3, S.size[k] * S.view.z), [sx, sy] = localXY(e), st = penDot.style;
+    st.width = st.height = d + 'px'; st.background = colorOf(S.color[k]);
+    st.transform = `translate(${sx - d / 2}px,${sy - d / 2}px)`;
+  }
+  const disp = on ? 'block' : '';
+  if (penDot.style.display !== disp) penDot.style.display = disp;
+  const cur = on ? 'none' : toolCursor(k);
+  if (!action && !spaceDown && cvLive.style.cursor !== cur) cvLive.style.cursor = cur;
+}
 
 cvLive.addEventListener('pointerdown', e => {
+  penDot.style.display = '';
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
   if (!$$('.menu').every(m => m.classList.contains('hidden'))) { closeMenus(); return; }
   if (e.pointerType === 'touch') {
@@ -1317,6 +1334,7 @@ cvLive.addEventListener('pointermove', e => {
     if (gesture && !action) penArrived();
   }
   if (e.pointerType === 'touch' && touches.has(e.pointerId)) { const [x, y] = localXY(e); touches.set(e.pointerId, { x, y }); }   // für eine zweite Hand: aktuelle Position
+  if (!action && e.pointerType !== 'touch') hoverDot(e);
   if (action && action.id === e.pointerId) {
     if (e.pointerType !== 'touch' && e.buttons === 0) { endAction(false); return; }   // Taste wurde unbemerkt losgelassen
     moveAction(e); return;
@@ -1345,6 +1363,7 @@ function pointerEnd(e) {
 }
 cvLive.addEventListener('pointerup', pointerEnd);
 cvLive.addEventListener('pointercancel', pointerEnd);
+cvLive.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') hoverDot(null); });
 cvLive.addEventListener('lostpointercapture', e => { if (action && action.id === e.pointerId) endAction(false); });
 cvLive.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('blur', () => {
@@ -1370,7 +1389,7 @@ function setTool(t) {
   $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   if (t !== 'lasso') clearSel();
   $('#sizeMenu').classList.add('hidden'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
-  cvLive.style.cursor = t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : 'crosshair';
+  cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes();
 }
 // Farbe und Dicke gelten für Stift, Textmarker, Lasso (übernehmen) und Formen – nicht für eigene Formen,
