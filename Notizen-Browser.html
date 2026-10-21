@@ -1693,10 +1693,15 @@ function penArrived() {
 }
 // Stift schwebt über der Fläche: statt Fadenkreuz ein durchsichtiger Punkt in Farbe und Dicke des Strichs
 // (Dicke bei mittlerem Druck, mindestens 3 px). Beim Schreiben selbst ist er aus.
-function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : 'crosshair'; }
+// Das Fadenkreuz kommt erst zurück, wenn wirklich die Maus benutzt wird: Windows meldet beim Aufsetzen
+// und Abheben des Stifts auch Mausbewegungen, und beim Verlassen der Fläche ist der Cursor ohnehin nicht zu sehen.
+let penLast = false;   // zuletzt war der Stift auf oder über der Fläche, nicht die Maus
+function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : penLast && (t === 'pen' || t === 'hl') ? 'none' : 'crosshair'; }
 function hoverDot(e) {
+  if (e.pointerType === 'mouse' && performance.now() < penActiveUntil) return;   // vom Stift ausgelöste Mausbewegung
+  penLast = e.pointerType === 'pen';
   const k = S.tool;
-  const on = !!e && e.pointerType === 'pen' && !action && !spaceDown && !(e.buttons & 34) && (k === 'pen' || k === 'hl');
+  const on = penLast && !action && !spaceDown && !(e.buttons & 34) && (k === 'pen' || k === 'hl');
   if (on) {
     const d = Math.max(3, S.size[k] * S.view.z), [sx, sy] = localXY(e), st = penDot.style;
     st.width = st.height = d + 'px'; st.background = colorOf(S.color[k]);
@@ -1704,12 +1709,13 @@ function hoverDot(e) {
   }
   const disp = on ? 'block' : '';
   if (penDot.style.display !== disp) penDot.style.display = disp;
-  const cur = on ? 'none' : toolCursor(k);
+  const cur = on ? 'none' : penLast && (e.buttons & 34) ? 'crosshair' : toolCursor(k);   // Stifttaste gedrückt: radiert
   if (!action && !spaceDown && cvLive.style.cursor !== cur) cvLive.style.cursor = cur;
 }
 
 cvLive.addEventListener('pointerdown', e => {
   penDot.style.display = '';
+  if (e.pointerType === 'pen') { penLast = true; if (!spaceDown) cvLive.style.cursor = toolCursor(S.tool); }
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
   if (!$$('.menu').every(m => m.classList.contains('hidden'))) { closeMenus(); return; }
   if (e.pointerType === 'touch') {
@@ -1768,7 +1774,7 @@ function pointerEnd(e) {
 }
 cvLive.addEventListener('pointerup', pointerEnd);
 cvLive.addEventListener('pointercancel', pointerEnd);
-cvLive.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') hoverDot(null); });
+cvLive.addEventListener('pointerleave', () => { penDot.style.display = ''; });
 cvLive.addEventListener('lostpointercapture', e => { if (action && action.id === e.pointerId) endAction(false); });
 cvLive.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('blur', () => {
