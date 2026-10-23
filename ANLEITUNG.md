@@ -1,5 +1,11 @@
 # Notizen für das Surface Pro 11 (Version 1.4.2)
 
+## Neu: Seitenformate und PDF-Export (zuerst in der Browser-Version)
+- **Seitenformat:** Bei „Neue Seite“ fragt die App, ob die Seite eine unendliche Fläche oder ein Dokument aus Blättern DIN A4 bzw. DIN A3 sein soll, und bei DIN hoch oder quer. Vorausgewählt ist das Format der letzten Seite im Buch. Die Blätter liegen untereinander auf einem grauen Tisch; Punkte, Kästchen und Linien passen genau ins Blatt (mit gleichmäßigem Rand, bei A3 quer jede Hälfte für sich). Was über den Rand geschrieben wird, bleibt sichtbar, kommt aber nicht in den Export.
+- **Blatt hinzufügen:** Knopf mit Blatt und Plus in der Leiste (nur bei DIN-Seiten), daneben z. B. „3 / 12“ für das Blatt in der Mitte des Bildschirms. Das neue Blatt kommt hinter das aktuelle; Rückgängig nimmt es wieder weg.
+- **PDF auf DIN-Seiten:** Jede PDF-Seite kommt auf ein eigenes Blatt im selben Dokument, ein PDF mit 12 Seiten ergibt 12 Blätter. Die erste PDF-Seite landet auf dem aktuellen Blatt (liegt dort schon ein PDF, auf einem neuen dahinter), die weiteren auf neuen Blättern direkt dahinter. Bei **DIN A3 quer** kommt jede PDF-Seite auf die linke Hälfte, rechts bleibt eine A4-Seite frei für Notizen.
+- **Als PDF exportieren** (unter „⋯“): DIN-Seiten ergeben ein PDF mit einer Seite pro Blatt, genau A4/A3; unendliche Seiten eine Seite so groß wie der beschriebene Bereich. Das PDF ist immer hell, auch im Darkmode. „Als Bild exportieren“ speichert bei DIN-Seiten das aktuelle Blatt.
+
 ## Neu in 1.4.2
 - Beim Aufsetzen und Abheben des Stifts blitzt kein Fadenkreuz mehr auf.
 
@@ -53,7 +59,10 @@
 | Rückgängig | Mit zwei Fingern kurz tippen, oder Strg+Z |
 | Auswählen | Lasso-Werkzeug: Kreis um Schrift oder Bilder ziehen, dann verschieben, über den blauen Punkt skalieren, löschen, duplizieren, umfärben, Dicke angleichen oder als eigene Form speichern |
 | Bild einfügen | Bild-Knopf, Strg+V oder Datei ins Fenster ziehen |
-| PDF einfügen | PDF-Knopf oder PDF ins Fenster ziehen, jede Seite wird zum Beschriften eingefügt |
+| PDF einfügen | PDF-Knopf oder PDF ins Fenster ziehen, jede Seite wird zum Beschriften eingefügt (auf DIN-Seiten: eine PDF-Seite pro Blatt, bei A3 quer links) |
+| Seitenformat | Beim Anlegen einer Seite: Unendlich, DIN A4 oder DIN A3, hoch oder quer |
+| Blatt hinzufügen | DIN-Seiten: Knopf mit Blatt und Plus, neues Blatt hinter dem aktuellen |
+| Exportieren | „⋯“: Als PDF exportieren oder Als Bild exportieren (PNG) |
 | Hintergrund | Punkte-Knopf: Punkte, Kariert, Liniert, Leer |
 | Darkmode | Mond-Knopf |
 | Vollbild | F11 |

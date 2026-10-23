@@ -53,7 +53,7 @@ const check = (name, ok, detail) => { res.checks++; res[name] = detail === undef
   await p.fill('#dlgIn', 'Mathe'); await p.click('.bsw[data-c=teal]'); await p.press('#dlgIn', 'Enter'); await idle();
   const book = await p.evaluate(() => homeData.books.find(b => b.id === homeBook));
   check('bookCreated', book && book.name === 'Mathe' && book.color === 'teal' && await vis('#hBookHead'), book);
-  await p.click('#hNew'); await p.waitForFunction(() => S.note && !$('#editor').classList.contains('hidden')); await p.waitForTimeout(300);
+  await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */ await p.waitForFunction(() => S.note && !$('#editor').classList.contains('hidden')); await p.waitForTimeout(300);
   check('pageInBook', await p.evaluate(id => [S.note.book === id, S.note.name, $('#title').value], book.id), await p.evaluate(id => [S.note.book === id, S.note.name, $('#title').value], book.id));
 
   // ---------- 2. Stift, Formen, Graph, Raster in dieser Seite ----------
@@ -118,7 +118,7 @@ const check = (name, ok, detail) => { res.checks++; res[name] = detail === undef
   await p.click('#bBg'); await p.click('#bgMenu [data-bg=lines]'); await frames();
   await p.click('#bBack'); await idle(); await p.waitForTimeout(200);
   check('backToBook2', await vis('#hBookHead') && (await p.$$('#grid .card')).length === 1);
-  await p.click('#hNew'); await p.waitForFunction(() => S.note && S.note.name === 'Seite 2'); await p.waitForTimeout(200);
+  await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */ await p.waitForFunction(() => S.note && S.note.name === 'Seite 2'); await p.waitForTimeout(200);
   await p.evaluate(() => { if (!S.snap) toggleSnap(); });
   await pickShape('rect'); await drag(205, 300, 410, 470);
   const r34 = (await items()).at(-1);

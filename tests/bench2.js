@@ -4,7 +4,7 @@ const { chromium } = require('playwright'); const path = require('path'), DIR = 
   const ctx = await b.newContext({ viewport: { width: 1440, height: 960 }, deviceScaleFactor: 2 });
   const p = await ctx.newPage(); await p.goto('file://' + DIR + '/Notizen.html'); await p.waitForTimeout(500);
   await p.evaluate(async () => { for (const m of await dbIndexAll()) await dbDeleteNote(m.id); });
-  await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew');   /* ab 1.4: Seiten liegen in Büchern */ await p.waitForTimeout(300);
+  await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */   /* ab 1.4: Seiten liegen in Büchern */ await p.waitForTimeout(300);
   console.log(JSON.stringify(await p.evaluate(() => {
     const add = [];
     for (let k = 0; k < 2500; k++) { const pts = []; const x0 = (k % 50) * 28, y0 = Math.floor(k / 50) * 34; for (let i = 0; i < 80; i++) pts.push(x0 + i * 0.3 + Math.cos(i / 3) * 4, y0 + Math.sin(i / 2.5) * 8, 0.3 + 0.5 * Math.abs(Math.sin(i / 7))); add.push(makeStroke(pts, 'ink', 1.5 + (k % 3), false)); }

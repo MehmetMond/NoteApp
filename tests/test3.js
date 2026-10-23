@@ -28,7 +28,7 @@ const res = {};
   await p.screenshot({ path: path.join(__dirname, 'migrated.png') });
   await p.click('#bBack'); await p.waitForTimeout(500);
   // ---- 3. neue Notiz, Live vs. fertig (Pixelvergleich)
-  await p.click('#hNew'); await p.waitForTimeout(400);
+  await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */ await p.waitForTimeout(400);
   const cdp = await ctx.newCDPSession(p);
   async function penStroke(pts, finish = true) {
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pts[0][0], y: pts[0][1], pointerType: 'pen' });

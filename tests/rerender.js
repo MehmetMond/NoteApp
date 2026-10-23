@@ -4,7 +4,7 @@ const { chromium } = require('playwright'); const path = require('path'), DIR = 
   const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 1440, height: 960 }, deviceScaleFactor: 2 });
   const p = await ctx.newPage(); await p.goto('file://' + DIR + '/Notizen.html'); await p.waitForTimeout(500);
   await p.evaluate(async () => { for (const m of await dbIndexAll()) await dbDeleteNote(m.id); });
-  await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew');   /* ab 1.4: Seiten liegen in Büchern */ await p.waitForTimeout(300);
+  await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */   /* ab 1.4: Seiten liegen in Büchern */ await p.waitForTimeout(300);
   const cdp = await ctx.newCDPSession(p);
   const send = (type, x, y, f = .6) => cdp.send('Input.dispatchMouseEvent', { type, x, y, pointerType: 'pen', button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, force: f });
   // Handschrift-artig: Schleifen

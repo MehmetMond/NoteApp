@@ -7,7 +7,7 @@ const file = process.argv[2];
     const ctx = await b.newContext({ viewport: { width: W, height: 900 }, deviceScaleFactor: 1 });
     const p = await ctx.newPage();
     await p.goto('file://' + file); await p.waitForTimeout(400);
-    await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew');   /* ab 1.4: Seiten liegen in Büchern */ await p.waitForTimeout(400);
+    await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */   /* ab 1.4: Seiten liegen in Büchern */ await p.waitForTimeout(400);
     await p.fill('#title', 'Notiz vom 20.10.2026'); await p.keyboard.press('Enter');   // üblicher Titel wie in 1.3 (statt „Seite 1“)
     out[W] = await p.evaluate(() => {
       const bar = document.querySelector('#bar'); const kids = [...bar.children].filter(e => getComputedStyle(e).display !== 'none');

@@ -50,10 +50,30 @@ Object.assign(S.color, store.get('color', {}));
 // iPad/iPhone (iPadOS meldet sich als Mac mit Touch)
 const IOS = /iP(ad|hone|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-function colorOf(c) { return c === 'ink' ? (S.dark ? '#f1f1f1' : '#1b1b1d') : c; }
-function paperColor() { return S.dark ? '#1c1d20' : '#fcfcfa'; }
-function patternColor() { return S.dark ? '#43464c' : '#c9c9c4'; }
-function hlAlpha() { return S.dark ? HL_ALPHA.dark : HL_ALPHA.light; }
+// Der PDF-Export zeichnet immer hell (Papier zum Drucken), auch im Darkmode
+let lightOnly = false;
+const isDark = () => S.dark && !lightOnly;
+function colorOf(c) { return c === 'ink' ? (isDark() ? '#f1f1f1' : '#1b1b1d') : c; }
+function paperColor() { return isDark() ? '#1c1d20' : '#fcfcfa'; }
+function patternColor() { return isDark() ? '#43464c' : '#c9c9c4'; }
+function hlAlpha() { return isDark() ? HL_ALPHA.dark : HL_ALPHA.light; }
+function deskColor() { return isDark() ? '#111214' : '#dcddd8'; }
+
+/* Seitenformat: ohne paper ist die Fläche unendlich. Sonst ist die Seite ein Dokument aus Blättern DIN A4/A3,
+   hoch (p) oder quer (l), untereinander mit Abstand GAP; paper.n = Zahl der Blätter (mindestens 1).
+   Weltkoordinaten sind CSS-Pixel bei 96 dpi; das erste Blatt liegt mit der linken oberen Ecke bei (0, 0). */
+const PAPER = { a4: [210, 297], a3: [297, 420] };
+const MM = 96 / 25.4, GAP = 40;
+function paperSize(n = S.note) {
+  const p = n && n.paper, mm = p && PAPER[p.f]; if (!mm) return null;
+  return (p.o === 'l' ? [mm[1], mm[0]] : mm).map(v => v * MM);
+}
+const sheetCount = (n = S.note) => Math.max(1, (n && n.paper && n.paper.n) | 0);
+function sheetRect(k, n = S.note) { const [w, h] = paperSize(n), y = k * (h + GAP); return [0, y, w, y + h]; }
+// Blatt bei der Höhe y (zwischen zwei Blättern gilt die Mitte des Abstands)
+function sheetAt(y, n = S.note) { const h = paperSize(n)[1]; return clamp(Math.floor((y + GAP / 2) / (h + GAP)), 0, sheetCount(n) - 1); }
+const paperName = p => p && PAPER[p.f] ? 'DIN ' + p.f.toUpperCase() + (p.o === 'l' ? ' quer' : ' hoch') : 'Unendlich';
+const sheetsWord = k => k === 1 ? '1 Blatt' : k + ' Blätter';
 
 /* ---------- Hinweis ---------- */
 let toastT;
@@ -373,7 +393,7 @@ function makeStroke(pts, c, w, hl) { const p = Float32Array.from(pts); return { 
 // Ein Strich mit seinem Pfad: Kacheln, Formvorschau und Vorschaubilder zeichnen alle genau so
 function fillStroke(ctx, s, P) {
   ctx.fillStyle = colorOf(s.c);
-  if (s.hl) { ctx.globalAlpha = hlAlpha(); if (!S.dark) ctx.globalCompositeOperation = 'multiply'; }
+  if (s.hl) { ctx.globalAlpha = hlAlpha(); if (!isDark()) ctx.globalCompositeOperation = 'multiply'; }
   ctx.fill(P);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
@@ -439,10 +459,32 @@ function drawLevel(ctx, L, touch) {
   }
 }
 const patCache = new Map();
-// Papier + Muster; Punkte liegen bei offX + k * Abstand (Gerätepixel)
+// Papier + Muster; Punkte liegen bei offX + k * Abstand (Gerätepixel).
+// Mit Seitenformat: Tisch, darauf die Blätter mit leichtem Schatten, das Muster passend in jedem Feld.
 function fillBg(ctx, z, offX, offY, W, H) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = paperColor(); ctx.fillRect(0, 0, W, H);
+  const ps = paperSize();
+  if (!ps) { ctx.fillStyle = paperColor(); ctx.fillRect(0, 0, W, H); fillPattern(ctx, z, offX, offY, W, H); return; }
+  const s = z * DPR, m = 40 * DPR, step = (ps[1] + GAP) * s, n = sheetCount();
+  ctx.fillStyle = deskColor(); ctx.fillRect(0, 0, W, H);
+  if (offX > W + m || offX + ps[0] * s < -m) return;
+  const k0 = clamp(Math.floor((-offY - m) / step), 0, n - 1), k1 = clamp(Math.floor((H - offY + m) / step), 0, n - 1);
+  for (let k = k0; k <= k1; k++) {
+    const r = sheetRect(k), x = offX + r[0] * s, y = offY + r[1] * s, w = (r[2] - r[0]) * s, h = (r[3] - r[1]) * s;
+    if (y > H + m || y + h < -m) continue;
+    ctx.save();
+    ctx.shadowColor = S.dark ? 'rgba(0,0,0,.55)' : 'rgba(0,0,0,.16)'; ctx.shadowBlur = 16 * DPR; ctx.shadowOffsetY = 3 * DPR;
+    ctx.fillStyle = paperColor(); ctx.fillRect(x, y, w, h);
+    ctx.restore();
+    const pad = 3 * DPR;   // Punkte und Linien am Rand des Felds ganz zeigen
+    for (const f of fieldsOf(k)) {
+      ctx.save(); ctx.beginPath(); ctx.rect(offX + f[0] * s - pad, offY + f[1] * s - pad, (f[2] - f[0]) * s + 2 * pad, (f[3] - f[1]) * s + 2 * pad); ctx.clip();
+      fillPattern(ctx, z, offX + f[0] * s, offY + f[1] * s, W, H);
+      ctx.restore();
+    }
+  }
+}
+function fillPattern(ctx, z, offX, offY, W, H) {
   const bg = S.note.bg || 'dots'; if (bg === 'blank') return;
   let sp = (bg === 'lines' ? 34 : 28) * z; while (sp < 14) sp *= 2;
   const spD = sp * DPR, C = Math.max(4, Math.round(spD)), f = C / spD;
@@ -489,6 +531,7 @@ function draw() {
   for (const [k, t] of tiles) { if (tiles.size <= MAX_TILES) break; tiles.delete(k); tilePool.push(t); }
   if (tilePool.length > 40) tilePool.length = 40;
   $('#zoom').textContent = Math.round(S.view.z * 100) + ' %';
+  if (paperSize()) { const t = (currentSheet() + 1) + ' / ' + sheetCount(), el = $('#sheetNo'); if (el.textContent !== t) el.textContent = t; }
   placeSelbar();
   if (action && action.kind === 'shape') requestLive();   // Formvorschau enthält Kachelpixel: mitziehen
 }
@@ -628,8 +671,12 @@ function contentBox(items = S.items) {
   return b;
 }
 function barBottom() { return $('#bar').getBoundingClientRect().bottom; }
-function fitAll() {
-  const b = contentBox(); if (!b) { setView(0, 0, 1, true); return; }
+// Blatt in der Mitte des Bildschirms
+function currentSheet() { return sheetAt(viewCenterWorld()[1]); }
+// mit Seitenformat: das ganze Blatt in der Mitte (oder Blatt k), sonst alles Beschriebene
+function fitAll(k) {
+  const b = paperSize() ? sheetRect(k === undefined ? currentSheet() : k) : contentBox();
+  if (!b) { setView(0, 0, 1, true); return; }
   const top = barBottom() + 20;
   const w = b[2] - b[0], h = b[3] - b[1];
   const z = clamp(Math.min((VW - 80) / w, (VH - top - 40) / h), 0.1, 2);
@@ -646,12 +693,22 @@ function setItems(next, inval = true) {
   }
   S.items = next;
 }
-function commit(next, inval = true) {
+// Jeder Stand im Verlauf merkt sich die Zahl der Blätter (Blatt anhängen, PDF einfügen: Rückgängig nimmt die Blätter mit)
+function commit(next, inval = true, sheets) {
+  if (S.items.sheets === undefined) S.items.sheets = sheetCount();
+  next.sheets = sheets || S.items.sheets;
   S.undo.push(S.items); if (S.undo.length > 150) S.undo.shift();
-  S.redo = []; setItems(next, inval); markDirty(); requestDraw(); updateUndo(); prunePaths();
+  S.redo = []; setItems(next, inval); setSheets(next.sheets); markDirty(); requestDraw(); updateUndo(); prunePaths();
 }
-function undo() { cancelAction(); if (!S.undo.length) return; S.redo.push(S.items); setItems(S.undo.pop()); clearSel(); markDirty(); requestDraw(); updateUndo(); }
-function redo() { cancelAction(); if (!S.redo.length) return; S.undo.push(S.items); setItems(S.redo.pop()); clearSel(); markDirty(); requestDraw(); updateUndo(); }
+function setSheets(n) { if (!S.note || !S.note.paper || !n || sheetCount() === n) return; S.note.paper.n = n; clearTiles(); }
+function stepHistory(from, to) {
+  cancelAction(); if (!from.length) return;
+  if (S.items.sheets === undefined) S.items.sheets = sheetCount();
+  to.push(S.items); const it = from.pop(); setItems(it); setSheets(it.sheets);
+  clearSel(); markDirty(); requestDraw(); updateUndo();
+}
+function undo() { stepHistory(S.undo, S.redo); }
+function redo() { stepHistory(S.redo, S.undo); }
 function updateUndo() { $('#bUndo').disabled = !S.undo.length; $('#bRedo').disabled = !S.redo.length; }
 // Reihenfolge: neue Striche ans Ende, Bilder direkt über die vorhandenen Bilder (also unter die Schrift)
 function appendItems(list, added) {
@@ -793,8 +850,25 @@ let CUSTOM = [], customReady = false;   // Bibliothek der eigenen Formen (nach E
 const customOf = k => (isCustom(k) && CUSTOM.find(r => 'custom:' + r.id === k)) || null;
 S.shape = SHAPE_KINDS.includes(store.get('shape')) || isCustom(store.get('shape')) ? store.get('shape') : 'rect';
 // Rasterabstand wie das sichtbare Muster (Ursprung bei 0,0)
-function gridSize() { return S.note && S.note.bg === 'lines' ? 34 : 28; }
-function snapG(v) { const G = gridSize(); return Math.round(v / G) * G; }
+function gridSize(n = S.note) { return n && n.bg === 'lines' ? 34 : 28; }
+function snapG(v) { const G = gridSize(); return Math.round(v / G) * G; }   // Abstände: ganze Kästchen
+// Auf Blättern liegt das Muster passend im Blatt: ganze Kästchen, mittig mit gleichem Rand (A3 quer: jede Hälfte
+// für sich, wie zwei A4-Blätter nebeneinander). Liefert die inneren Rechtecke [x0, y0, x1, y1] der Felder von Blatt k;
+// ihre linke obere Ecke ist der Ursprung des Rasters.
+function fieldsOf(k, n = S.note) {
+  const [w, h] = paperSize(n), G = gridSize(n), y = k * (h + GAP);
+  const edge = len => (len - Math.max(1, Math.floor((len - 1.2 * G) / G)) * G) / 2;   // Rand zwischen 0,6 und 1,1 Kästchen
+  const my = edge(h), xs = n.paper.f === 'a3' && n.paper.o === 'l' ? [[0, w / 2], [w / 2, w]] : [[0, w]];
+  return xs.map(([a, b]) => { const mx = edge(b - a); return [a + mx, y + my, b - mx, y + h - my]; });
+}
+// Ursprung des Rasters in Achse ax (0 = x, 1 = y) beim Wert v: unendliche Fläche 0, sonst Feld bzw. Blatt bei v
+function gridOrigin(ax, v) {
+  if (!paperSize()) return 0;
+  if (ax) return fieldsOf(sheetAt(v))[0][1];
+  const fs = fieldsOf(0); return (fs.length > 1 && v >= fs[1][0] - (fs[1][0] - fs[0][2]) / 2 ? fs[1] : fs[0])[0];
+}
+const snapAx = (ax, v, round = Math.round) => { const o = gridOrigin(ax, v), G = gridSize(); return o + round((v - o) / G) * G; };
+const snapX = v => snapAx(0, v), snapY = v => snapAx(1, v);
 const ARROW_C = Math.cos(27 * Math.PI / 180), ARROW_S = Math.sin(27 * Math.PI / 180);
 const headLen = (len, w, f) => Math.min(len * f, 12 + w * 2.5);
 // Flügel einer offenen Pfeilspitze bei (tx, ty), u = Richtung zur Spitze
@@ -813,7 +887,7 @@ function glyph(out, ch, x, y, h) { for (const g of GLYPHS[ch]) out.push(g.map((v
 function shapeEnds(a) {
   const k = a.shape, snapOn = S.snap, G = gridSize();
   let [ax, ay] = a.a0, [bx, by] = a.b;
-  if (snapOn) { ax = snapG(ax); ay = snapG(ay); }
+  if (snapOn) { ax = snapX(ax); ay = snapY(ay); }
   const unit = q => { let ux = Math.cos(q), uy = Math.sin(q); if (Math.abs(ux) < 1e-9) ux = 0; if (Math.abs(uy) < 1e-9) uy = 0; return [ux, uy]; };
   if (LINE_SHAPES.has(k)) {
     const dx = bx - ax, dy = by - ay, ang = Math.atan2(dy, dx);
@@ -823,15 +897,15 @@ function shapeEnds(a) {
       let L = Math.max(0, dx * ux + dy * uy);
       if (snapOn) { const st = on45 && k45 % 2 ? G * Math.SQRT2 : G; L = Math.round(L / st) * st; }
       bx = ax + L * ux; by = ay + L * uy;
-      if (snapOn && on45) { bx = snapG(bx); by = snapG(by); }
-    } else if (snapOn) { bx = snapG(bx); by = snapG(by); }
+      if (snapOn && on45) { bx = snapX(bx); by = snapY(by); }
+    } else if (snapOn) { bx = snapX(bx); by = snapY(by); }
     else {           // fast waagrecht, senkrecht oder diagonal: genau ausrichten
       const q = Math.round(ang / (Math.PI / 4)) * (Math.PI / 4);
       if (Math.abs(ang - q) < 4 * Math.PI / 180) { const L = Math.hypot(dx, dy), [ux, uy] = unit(q); bx = ax + L * ux; by = ay + L * uy; }
     }
     return [ax, ay, bx, by];
   }
-  if (snapOn) { bx = snapG(bx); by = snapG(by); }
+  if (snapOn) { bx = snapX(bx); by = snapY(by); }
   let dx = bx - ax, dy = by - ay;
   const sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1, adx = Math.abs(dx), ady = Math.abs(dy);
   if (a.shift && k === 'tri') {   // gleichseitig
@@ -871,11 +945,11 @@ function shapeLines(k, ax, ay, bx, by, w) {
 // Koordinatensysteme: Achsen mit Pfeilspitzen, Teilstriche im Rasterabstand, Achsenbuchstaben
 function graphLines(k, x0, y0, x1, y1, w) {
   const G = gridSize(), out = [], th = Math.max(4, w * 1.5), LH = 13 + Math.max(0, w - 2) * 2.5, m = 3;
-  const sn = v => S.snap ? snapG(v) : v, half = h => Math.max(th, h * ARROW_S);
+  const snx = v => S.snap ? snapX(v) : v, sny = v => S.snap ? snapY(v) : v, half = h => Math.max(th, h * ARROW_S);
   const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5) return -1; const h = headLen(L, w, 0.35); out.push(arrowPts(fx, fy, tx, ty, h)); return h; };
   if (k === 'axes3') {
     // Schrägbild: z nach oben, y nach rechts, x nach vorne (45° nach links unten, halbe Einheiten)
-    const ox = sn(x0 + 0.4 * (x1 - x0)), oy = sn(y0 + 0.6 * (y1 - y0)), d = Math.max(0, Math.min(ox - x0, y1 - oy)), r = Math.SQRT1_2;
+    const ox = snx(x0 + 0.4 * (x1 - x0)), oy = sny(y0 + 0.6 * (y1 - y0)), d = Math.max(0, Math.min(ox - x0, y1 - oy)), r = Math.SQRT1_2;
     const hz = axis(ox, oy, ox, y0), hy = axis(ox, oy, x1, oy), hx = axis(ox, oy, ox - d, oy + d);
     if (hy >= 0) { for (let i = 1; i <= Math.floor((x1 - ox - hy - m) / G); i++) out.push([ox + i * G, oy - th, ox + i * G, oy + th]); glyph(out, 'y', x1 - 0.9 * LH, oy + half(hy) + 7 + w, LH); }
     if (hz >= 0) { for (let i = 1; i <= Math.floor((oy - y0 - hz - m) / G); i++) out.push([ox - th, oy - i * G, ox + th, oy - i * G]); glyph(out, 'z', ox - half(hz) - 8 - w - 0.8 * LH, y0, LH); }
@@ -885,7 +959,7 @@ function graphLines(k, x0, y0, x1, y1, w) {
     }
     return out;
   }
-  const pos = k === 'axes2p', ox = pos ? x0 : sn((x0 + x1) / 2), oy = pos ? y1 : sn((y0 + y1) / 2);
+  const pos = k === 'axes2p', ox = pos ? x0 : snx((x0 + x1) / 2), oy = pos ? y1 : sny((y0 + y1) / 2);
   const hx = axis(x0, oy, x1, oy), hy = axis(ox, y1, ox, y0);
   let nx = Math.floor((x1 - ox - hx - m) / G), ny = Math.floor((oy - y0 - hy - m) / G);
   if (!pos) { nx = Math.min(nx, Math.floor((ox - x0 - hx - m) / G)); ny = Math.min(ny, Math.floor((y1 - oy - hy - m) / G)); }
@@ -934,11 +1008,11 @@ function stampPlace(a, tap) {
   const r = a.custom, G = gridSize();
   if (tap) {
     let x = a.a0[0] - r.w / 2, y = a.a0[1] - r.h / 2;
-    if (S.snap) { x = snapG(x); y = snapG(y); }
+    if (S.snap) { x = snapX(x); y = snapY(y); }
     return [1, x, y];
   }
   let [ax, ay] = a.a0, [bx, by] = a.b;
-  if (S.snap) { ax = snapG(ax); ay = snapG(ay); bx = snapG(bx); by = snapG(by); }
+  if (S.snap) { ax = snapX(ax); ay = snapY(ay); bx = snapX(bx); by = snapY(by); }
   let dx = Math.abs(bx - ax), dy = Math.abs(by - ay);
   if (S.snap) { dx = Math.max(dx, G); dy = Math.max(dy, G); }   // mindestens ein Kästchen
   const m = Math.max(r.w, r.h);
@@ -1084,7 +1158,7 @@ function snapScale(a) {
   const b = selGeoBox(a), [ax, ay] = a.anchor, G = gridSize(), ex = b[2] - ax, ey = b[3] - ay;
   const e = Math.max(ex, ey), o = ex >= ey ? ax : ay;
   if (!(e >= G / 2)) return a.s;
-  let t = Math.round((o + e * a.s) / G) * G;
+  let t = snapAx(ex >= ey ? 0 : 1, o + e * a.s);
   while (t <= o + 1e-6) t += G;
   return clamp((t - o) / e, 0.05, 50);
 }
@@ -1178,7 +1252,7 @@ function moveAction(e) {
         // Koordinatensysteme liegen mit ihren Achsen auf dem Raster, nicht mit der linken Kante der Buchstaben: ganze Kästchen verschieben
         if (a.graph === undefined) a.graph = S.items.some(it => S.sel.ids.has(it.id) && GRAPHS.has(it.k));
         if (a.graph) { a.dx = snapG(a.dx); a.dy = snapG(a.dy); }
-        else { const b = selGeoBox(a); a.dx = snapG(b[0] + a.dx) - b[0]; a.dy = snapG(b[1] + a.dy) - b[1]; }
+        else { const b = selGeoBox(a); a.dx = snapX(b[0] + a.dx) - b[0]; a.dy = snapY(b[1] + a.dy) - b[1]; }
       }
       if (Math.hypot(sx - a.sx, sy - a.sy) > 3) a.moved = true;
     }
@@ -1599,10 +1673,12 @@ function openMenu(menu, btn) {
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bShape,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
-$('#bMore').onclick = () => { $('#mFinger').textContent = 'Mit dem Finger zeichnen: ' + (S.fingerDraw ? 'an' : 'aus'); openMenu($('#moreMenu'), $('#bMore')); };
+$('#bSheet').onclick = addSheet;
+$('#bMore').onclick = () => { $('#mFit').textContent = paperSize() ? 'Ganzes Blatt anzeigen' : 'Alles anzeigen'; $('#mFinger').textContent = 'Mit dem Finger zeichnen: ' + (S.fingerDraw ? 'an' : 'aus'); openMenu($('#moreMenu'), $('#bMore')); };
 $('#mFinger').onclick = () => { S.fingerDraw = !S.fingerDraw; store.set('fingerDraw', S.fingerDraw); closeMenus(); toast(S.fingerDraw ? 'Ein Finger zeichnet jetzt, zwei Finger verschieben und zoomen' : 'Finger verschieben und zoomen nur noch', 2600); };
 $('#mFit').onclick = () => { closeMenus(); fitAll(); };
 $('#mPng').onclick = () => { closeMenus(); exportPNG(); };
+$('#mPdf').onclick = () => { closeMenus(); exportPDF(); };
 $('#mClear').onclick = async () => { closeMenus(); if (S.items.length && await askYes('Alles auf dieser Seite löschen? (Rückgängig ist möglich)')) { clearSel(); commit([]); } };
 
 $('#sDel').onclick = () => { if (!S.sel) return; const ids = S.sel.ids; clearSel(); commit(S.items.filter(it => !ids.has(it.id))); };
@@ -1678,10 +1754,10 @@ function viewCenterWorld() { const top = barBottom(); return toWorld(VW / 2, top
 // nicht exakt über einen vorherigen Import legen (mit Raster: obere linke Ecke auf einen Rasterpunkt)
 function freeSpot(x, y, w) {
   const G = gridSize();
-  if (S.snap) x = snapG(x);
+  if (S.snap) x = snapX(x);
   for (let k = 0; k < 50; k++) {
     if (!S.items.some(it => it.t === 'i' && Math.abs(it.x - x) < 1 && Math.abs(it.y - y) < 1)) return x;
-    x += w + 40 / S.view.z; if (S.snap) x = Math.ceil(x / G) * G;
+    x += w + 40 / S.view.z; if (S.snap) x = snapAx(0, x, Math.ceil);
   }
   return x;
 }
@@ -1715,7 +1791,7 @@ function insertImages(files) {
         const imgId = uid();
         await dbImagePut({ id: imgId, n: note.id, blob, low, w, h });
         const sw = Math.min(w / DPR, VW * 0.5, (VH * 0.6) * w / h), ww = sw / S.view.z, hh = ww * h / w;
-        const y = S.snap ? snapG(cy - hh / 2 + off) : cy - hh / 2 + off, x = freeSpot(cx - ww / 2 + off, y, ww);
+        const y = S.snap ? snapY(cy - hh / 2 + off) : cy - hh / 2 + off, x = freeSpot(cx - ww / 2 + off, y, ww);
         added.push({ t: 'i', id: uid(), img: imgId, x, y, w: ww, h: hh });
         off += 30 / S.view.z;
       } catch (e) { toast('„' + f.name + '“ kann nicht geöffnet werden (Format nicht unterstützt?)', 4500); await new Promise(r => setTimeout(r, 1200)); }
@@ -1734,6 +1810,47 @@ function getPdfWorker() {
   try { pdfWorker = new pdfjsLib.PDFWorker({ port: new Worker(url) }); } catch (e) { pdfWorker = null; }
   return pdfWorker;
 }
+// Eine PDF-Seite als Bild in der Datenbank ablegen; w = Breite in Weltkoordinaten
+async function pdfPageImage(page, vp1, w, noteId) {
+  // etwa doppelte Bildschirmauflösung bei 100 %, höchstens ~10 Mio. Pixel
+  let scale = clamp(w * 2.2 / vp1.width, 0.5, 4);
+  scale = Math.min(scale, Math.sqrt(10e6 / (vp1.width * vp1.height)));
+  const vp = page.getViewport({ scale });
+  const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: g, viewport: vp }).promise;
+  const blob = await canvasToBlob(c, 'image/jpeg', 0.9);
+  const low = await makeLow(c, 'image/jpeg');
+  const pw = c.width, ph = c.height; c.width = c.height = 0;
+  const imgId = uid();
+  await dbImagePut({ id: imgId, n: noteId, blob, low, w: pw, h: ph });
+  return imgId;
+}
+// Seitenformat: wohin eine PDF-Seite auf Blatt k kommt (A3 quer: linke Hälfte, sonst das ganze Blatt)
+function pdfSlot(k, n = S.note) {
+  const r = sheetRect(k, n);
+  return n.paper.f === 'a3' && n.paper.o === 'l' ? [r[0], r[1], (r[0] + r[2]) / 2, r[3]] : r;
+}
+// m leere Blätter hinter Blatt k einfügen: was darunter liegt, rutscht nach unten
+function withSheets(items, k, m) {
+  const cut = sheetRect(k)[3] + GAP / 2, dy = m * (paperSize()[1] + GAP);
+  return items.map(it => itemBox(it)[1] >= cut ? transformItem(it, 1, 0, 0, 0, dy) : it);
+}
+// Blatt k oben ins Bild holen (Zoom bleibt)
+function showSheet(k) { const r = sheetRect(k), z = S.view.z; setView(S.view.tx, barBottom() + 16 - r[1] * z, z, true); }
+function addSheet() {
+  if (!S.note || !paperSize()) return;
+  cancelAction(); clearSel();
+  const k = currentSheet();
+  commit(withSheets(S.items, k, 1), true, sheetCount() + 1);
+  showSheet(k + 1);
+  toast(`Blatt ${k + 2} von ${sheetCount()} eingefügt`, 1600);
+}
+// in das Feld einpassen: Seitenverhältnis bleibt, mittig
+function fitInto(slot, w, h) {
+  const sw = slot[2] - slot[0], sh = slot[3] - slot[1], s = Math.min(sw / w, sh / h);
+  return { x: slot[0] + (sw - w * s) / 2, y: slot[1] + (sh - h * s) / 2, w: w * s, h: h * s };
+}
 function insertPdf(file) {
   if (!S.note) return;
   const note = S.note;
@@ -1741,6 +1858,7 @@ function insertPdf(file) {
     toast('PDF wird geladen …', 0);
     const worker = getPdfWorker();
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), ...(worker ? { worker } : {}) }).promise;
+    if (paperSize(note)) return insertPdfPages(pdf, file, note);
     const added = [], failed = [];
     try {
       const [cx] = viewCenterWorld(), [, y0] = toWorld(0, barBottom() + 30);
@@ -1750,18 +1868,7 @@ function insertPdf(file) {
         try {
           const page = await pdf.getPage(i), vp1 = page.getViewport({ scale: 1 });
           const w = vp1.width * 1.3, h = vp1.height * 1.3;
-          // etwa doppelte Bildschirmauflösung bei 100 %, höchstens ~10 Mio. Pixel
-          let scale = clamp(w * 2.2 / vp1.width, 0.5, 4);
-          scale = Math.min(scale, Math.sqrt(10e6 / (vp1.width * vp1.height)));
-          const vp = page.getViewport({ scale });
-          const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-          const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
-          await page.render({ canvasContext: g, viewport: vp }).promise;
-          const blob = await canvasToBlob(c, 'image/jpeg', 0.9);
-          const low = await makeLow(c, 'image/jpeg');
-          const pw = c.width, ph = c.height; c.width = c.height = 0;
-          const imgId = uid();
-          await dbImagePut({ id: imgId, n: note.id, blob, low, w: pw, h: ph });
+          const imgId = await pdfPageImage(page, vp1, w, note.id);
           if (x === null) x = freeSpot(cx - w / 2, y, w);
           added.push({ t: 'i', id: uid(), img: imgId, x, y, w, h, pdf: file.name, page: i });
           y += h + 30; if (S.snap) y = Math.ceil(y / gridSize()) * gridSize();
@@ -1773,6 +1880,33 @@ function insertPdf(file) {
     if (added.length && S.note === note) commit(withImages(S.items, added));
     toast(`${added.length} Seite${added.length === 1 ? '' : 'n'} eingefügt` + (failed.length ? `, Seite ${failed.join(', ')} fehlerhaft` : ''), 3500);
   });
+}
+// Seite mit Format: jede PDF-Seite kommt auf ein eigenes Blatt dieses Dokuments (A3 quer: die linke Hälfte).
+// Die erste auf das Blatt in der Mitte des Bildschirms, wenn dort noch kein Bild liegt (sonst auf ein neues dahinter),
+// die weiteren auf neue Blätter direkt dahinter; was danach kommt, rutscht nach unten. Rückgängig ist ein Schritt.
+async function insertPdfPages(pdf, file, note) {
+  const N = pdf.numPages, cur = currentSheet(), added = [], failed = [];
+  const free = !S.items.some(it => it.t === 'i' && boxHit(itemBox(it), pdfSlot(cur, note)));
+  try {
+    for (let i = 1; i <= N; i++) {
+      toast(`PDF-Seite ${i} von ${N} …`, 0);
+      try {
+        const page = await pdf.getPage(i), vp1 = page.getViewport({ scale: 1 }), box = fitInto(pdfSlot(0, note), vp1.width, vp1.height);
+        const imgId = await pdfPageImage(page, vp1, box.w, note.id);
+        added.push({ t: 'i', id: uid(), img: imgId, ...box, pdf: file.name, page: i });   // vorerst auf Blatt 0, unten verschoben
+        page.cleanup();
+      } catch (err) { console.error(err); failed.push(i); }
+      await nextFrame();
+    }
+  } finally { pdf.destroy(); }
+  const bad = failed.length ? `, Seite ${failed.join(', ')} fehlerhaft` : '';
+  if (!added.length || S.note !== note) { toast('Keine PDF-Seite eingefügt' + bad, 4500); return; }
+  const first = free ? cur : cur + 1, extra = added.length - (free ? 1 : 0), step = paperSize(note)[1] + GAP;
+  added.forEach((it, j) => { it.y += (first + j) * step; });
+  commit(withImages(extra ? withSheets(S.items, cur, extra) : S.items, added), true, sheetCount() + extra);
+  if (first !== cur) showSheet(first);
+  const last = first + added.length - 1;
+  toast((added.length === 1 ? `1 PDF-Seite auf Blatt ${first + 1}` : `${added.length} PDF-Seiten auf Blatt ${first + 1}–${last + 1}`) + ' eingefügt' + bad, 4000);
 }
 $('#bImg').onclick = () => $('#fImg').click();
 $('#bPdf').onclick = () => $('#fPdf').click();
@@ -1791,45 +1925,135 @@ $('#stage').addEventListener('drop', e => {
 });
 
 /* ---------- Export ---------- */
-async function renderTo(items, box, scale, bg, cheap) {
+// o: { cheap (Vorschaubild: Striche als einfache Linien), note (Seite mit Format: außen Tisch, Muster passend in den Feldern),
+//      light (immer hell) }
+async function renderTo(items, box, scale, bg, o = {}) {
   const [x0, y0, x1, y1] = box, W = Math.max(1, Math.ceil((x1 - x0) * scale)), H = Math.max(1, Math.ceil((y1 - y0) * scale));
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = paperColor(); ctx.fillRect(0, 0, W, H);
-  drawBg(ctx, bg, { tx: -x0 * scale, ty: -y0 * scale, z: scale }, W / 1, H / 1, 1);
+  // Farben hängen am Darkmode: hell gezeichnet wird nur in diesen kurzen, synchronen Abschnitten (dazwischen zeichnet evtl. der Bildschirm)
+  const paint = fn => { lightOnly = !!o.light; try { fn(); } finally { lightOnly = false; } };
+  paint(() => {
+    const n = o.note && paperSize(o.note) ? o.note : null, X = v => (v - x0) * scale, Y = v => (v - y0) * scale;
+    if (!n) { ctx.fillStyle = paperColor(); ctx.fillRect(0, 0, W, H); drawBg(ctx, bg, { tx: -x0 * scale, ty: -y0 * scale, z: scale }, W, H, 1); return; }
+    ctx.fillStyle = deskColor(); ctx.fillRect(0, 0, W, H);
+    for (let k = 0; k < sheetCount(n); k++) {
+      const r = sheetRect(k, n); if (!boxHit(r, box)) continue;
+      ctx.fillStyle = paperColor(); ctx.fillRect(X(r[0]), Y(r[1]), (r[2] - r[0]) * scale, (r[3] - r[1]) * scale);
+      for (const f of fieldsOf(k, n)) {
+        const pad = 2;
+        ctx.save(); ctx.beginPath(); ctx.rect(X(f[0]) - pad, Y(f[1]) - pad, (f[2] - f[0]) * scale + 2 * pad, (f[3] - f[1]) * scale + 2 * pad); ctx.clip();
+        drawBg(ctx, bg, { tx: X(f[0]), ty: Y(f[1]), z: scale }, W, H, 1);
+        ctx.restore();
+      }
+    }
+  });
   ctx.setTransform(scale, 0, 0, scale, -x0 * scale, -y0 * scale);
   for (const it of items) {
     if (it.t === 'i') {
       const e = imgEntry(it.img); await e.ready;
       // Export: jedes Bild einzeln in voller Auflösung dekodieren und gleich wieder freigeben
-      const bmp = !cheap && e.rec ? await decodeBlob(e.rec.blob).catch(() => null) : null;
+      const bmp = !o.cheap && e.rec ? await decodeBlob(e.rec.blob).catch(() => null) : null;
       const use = bmp || e.low;
       if (use) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(use, it.x, it.y, it.w, it.h); }
       if (bmp) bmp.close();
-    } else if (cheap) {
+    } else if (o.cheap) paint(() => {
       // Vorschaubild: Striche als einfache Linien (schnell)
       ctx.strokeStyle = colorOf(it.c); ctx.lineWidth = it.w; ctx.lineCap = ctx.lineJoin = 'round';
-      if (it.hl) { ctx.globalAlpha = hlAlpha(); if (!S.dark) ctx.globalCompositeOperation = 'multiply'; }
+      if (it.hl) { ctx.globalAlpha = hlAlpha(); if (!isDark()) ctx.globalCompositeOperation = 'multiply'; }
       ctx.beginPath(); ctx.moveTo(it.pts[0], it.pts[1]);
       const step = Math.max(3, Math.floor(it.pts.length / 3 / 20) * 3);
       for (let i = step; i < it.pts.length; i += step) ctx.lineTo(it.pts[i], it.pts[i + 1]);
       ctx.lineTo(it.pts[it.pts.length - 3], it.pts[it.pts.length - 2]); ctx.stroke();
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-    } else drawItem(ctx, it, scale);
+    });
+    else paint(() => drawItem(ctx, it, scale));
   }
   return c;
 }
+// Beschriebener Bereich mit etwas Rand (unendliche Fläche)
+function inkBox() {
+  const b = contentBox(); if (!b) return null;
+  const pad = 40; return [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
+}
+// PNG: mit Seitenformat das Blatt in der Mitte des Bildschirms, sonst der beschriebene Bereich
 async function exportPNG() {
-  const b = contentBox(); if (!b) { toast('Die Seite ist noch leer'); return; }
-  const pad = 40, box = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
+  const box = paperSize() ? sheetRect(currentSheet()) : inkBox(); if (!box) { toast('Die Seite ist noch leer'); return; }
   const bw = box[2] - box[0], bh = box[3] - box[1];
   const scale = Math.min(2, 16000 / Math.max(bw, bh), Math.sqrt(120e6 / (bw * bh)));
   toast('Bild wird erstellt …', 0);
   try {
-    const c = await renderTo(S.items, box, scale, S.note.bg || 'dots');
+    const c = await renderTo(S.items.filter(it => boxHit(itemBox(it), box)), box, scale, S.note.bg || 'dots', { note: S.note });
     const blob = await canvasToBlob(c, 'image/png'); c.width = c.height = 0;
     download(blob, (S.note.name || 'Notiz') + '.png'); toast('Bild gespeichert');
   } catch (e) { toast('Export fehlgeschlagen: ' + e.message, 5000); }
+}
+/* PDF: jede Seite als ein Bild (verlustfrei, etwa 240 dpi), immer hell. Mit Seitenformat eine PDF-Seite je Blatt,
+   genau DIN A4/A3; sonst eine Seite so groß wie der beschriebene Bereich. 1 Welteinheit = 1/96 Zoll = 0,75 pt. */
+async function exportPDF() {
+  const boxes = paperSize() ? Array.from({ length: sheetCount() }, (_, k) => sheetRect(k)) : [inkBox()];
+  if (!boxes[0]) { toast('Die Seite ist noch leer'); return; }
+  const note = S.note, items = S.items, bg = note.bg || 'dots';
+  const pages = boxes.map((box, k) => {
+    const bw = box[2] - box[0], bh = box[3] - box[1];
+    const scale = Math.min(2.5, 16000 / Math.max(bw, bh), Math.sqrt(24e6 / (bw * bh)));
+    const pt = 0.75 * Math.min(1, 14400 / (0.75 * Math.max(bw, bh)));   // PDF-Seiten höchstens 200 Zoll
+    return { w: bw * pt, h: bh * pt, render: () => {
+      if (boxes.length > 1) toast(`PDF wird erstellt … Blatt ${k + 1} von ${boxes.length}`, 0);
+      return renderTo(items.filter(it => boxHit(itemBox(it), box)), box, scale, bg, { note, light: true });
+    } };
+  });
+  toast('PDF wird erstellt …', 0);
+  try {
+    const blob = await makePDF(pages, note.name || 'Notiz');
+    download(blob, (note.name || 'Notiz') + '.pdf');
+    toast(boxes.length > 1 ? `PDF mit ${boxes.length} Seiten gespeichert` : 'PDF gespeichert');
+  } catch (e) { toast('Export fehlgeschlagen: ' + e.message, 5000); }
+}
+// Bild einer Seite für das PDF: RGB, mit Deflate komprimiert (ohne CompressionStream: JPEG)
+async function pdfImage(c) {
+  const W = c.width, H = c.height;
+  if (typeof CompressionStream === 'undefined') {
+    const jpg = await canvasToBlob(c, 'image/jpeg', 0.92);
+    return { W, H, filter: 'DCTDecode', data: new Uint8Array(await jpg.arrayBuffer()) };
+  }
+  const ctx = c.getContext('2d'), parts = [], band = Math.max(1, Math.floor(4e6 / W));
+  for (let y = 0; y < H; y += band) {
+    const h = Math.min(band, H - y), d = ctx.getImageData(0, y, W, h).data, rgb = new Uint8Array(W * h * 3);
+    for (let i = 0, j = 0; i < d.length; i += 4, j += 3) { rgb[j] = d[i]; rgb[j + 1] = d[i + 1]; rgb[j + 2] = d[i + 2]; }
+    parts.push(rgb);
+  }
+  const z = new Blob(parts).stream().pipeThrough(new CompressionStream('deflate'));
+  return { W, H, filter: 'FlateDecode', data: new Uint8Array(await new Response(z).arrayBuffer()) };
+}
+// Text im PDF (Titel): UTF-16 mit Byte-Order-Mark, als Hex
+const pdfText = s => '<FEFF' + Array.from({ length: s.length }, (_, i) => s.charCodeAt(i).toString(16).padStart(4, '0')).join('').toUpperCase() + '>';
+// pages: [{ render: () => Promise<Canvas>, w, h (Seitengröße in pt) }]; die Seiten werden nacheinander gezeichnet
+// und gleich wieder freigegeben (viele Blätter in hoher Auflösung passen nicht gleichzeitig in den Speicher)
+async function makePDF(pages, title) {
+  const enc = new TextEncoder(), out = [], offs = [];
+  let len = 0;
+  const put = x => { const b = typeof x === 'string' ? enc.encode(x) : x; out.push(b); len += b.length; };
+  const obj = (n, body) => { offs[n] = len; put(n + ' 0 obj\n'); body(); put('\nendobj\n'); };
+  const num = v => String(Math.round(v * 100) / 100);
+  const d = new Date(), p2 = v => String(v).padStart(2, '0');
+  put('%PDF-1.4\n'); put(new Uint8Array([37, 226, 227, 207, 211, 10]));   // %âãÏÓ: Datei enthält Binärdaten
+  obj(1, () => put('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2, () => put(`<< /Type /Pages /Kids [${pages.map((_, k) => (4 + 3 * k) + ' 0 R').join(' ')}] /Count ${pages.length} >>`));
+  obj(3, () => put(`<< /Title ${pdfText(title)} /Producer (Notizen) /CreationDate (D:${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}) >>`));
+  for (let k = 0; k < pages.length; k++) {
+    const pg = pages[k], P = 4 + 3 * k, c = await pg.render(), im = await pdfImage(c), W = num(pg.w), H = num(pg.h);
+    c.width = c.height = 0;
+    const cs = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+    obj(P, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${P + 1} 0 R >> >> /Contents ${P + 2} 0 R >>`));
+    obj(P + 1, () => { put(`<< /Type /XObject /Subtype /Image /Width ${im.W} /Height ${im.H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /${im.filter} /Length ${im.data.length} >>\nstream\n`); put(im.data); put('\nendstream'); });
+    obj(P + 2, () => put(`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`));
+  }
+  const xref = len, size = 4 + 3 * pages.length;
+  put(`xref\n0 ${size}\n0000000000 65535 f \n`);
+  for (let i = 1; i < size; i++) put(String(offs[i]).padStart(10, '0') + ' 00000 n \n');
+  put(`trailer\n<< /Size ${size} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return new Blob(out, { type: 'application/pdf' });
 }
 async function download(blob, name) {
   name = name.replace(/[\\/:*?"<>|]/g, '_');
@@ -1844,26 +2068,53 @@ async function download(blob, name) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }
-async function makeThumb() {
-  const b = contentBox(); if (!b) return null;
-  const pad = 20, x0 = b[0] - pad, y0 = b[1] - pad;
-  let w = b[2] + pad - x0, h = b[3] + pad - y0;
-  // Ausschnitt im Format 4:3, oben links beginnend (erste Seite / Anfang der Notiz)
-  if (w / h > 4 / 3) h = w * 3 / 4; else w = Math.min(w, h * 4 / 3), h = w * 3 / 4;
-  const box = [x0, y0, x0 + w, y0 + h];
-  const c = await renderTo(S.items.filter(it => boxHit(itemBox(it), box)), box, 320 / w, S.note.bg || 'dots', true);
+async function makeThumb(note = S.note, items = S.items) {
+  const b = contentBox(items); if (!b) return null;
+  const pg = paperSize(note) && sheetRect(0, note);
+  let box;
+  if (pg) {
+    // Seitenformat: das ganze erste Blatt mit etwas Tisch drumherum, Ausschnitt 4:3
+    const m = 0.8 * GAP, cx = (pg[0] + pg[2]) / 2, cy = (pg[1] + pg[3]) / 2;   // Rand kleiner als der Abstand: das nächste Blatt bleibt draußen
+    let w = pg[2] - pg[0] + 2 * m, h = pg[3] - pg[1] + 2 * m;
+    if (w / h > 4 / 3) h = w * 3 / 4; else w = h * 4 / 3;
+    box = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+  } else {
+    const pad = 20, x0 = b[0] - pad, y0 = b[1] - pad;
+    let w = b[2] + pad - x0, h = b[3] + pad - y0;
+    // Ausschnitt im Format 4:3, oben links beginnend (erste Seite / Anfang der Notiz)
+    if (w / h > 4 / 3) h = w * 3 / 4; else w = Math.min(w, h * 4 / 3), h = w * 3 / 4;
+    box = [x0, y0, x0 + w, y0 + h];
+  }
+  const w = box[2] - box[0];
+  const c = await renderTo(items.filter(it => boxHit(itemBox(it), box)), box, 320 / w, note.bg || 'dots', { cheap: true, note });
   const url = c.toDataURL('image/jpeg', 0.8); c.width = c.height = 0;
   return url;
 }
 
 /* ---------- Dialog ---------- */
 // Eigener Dialog, weil prompt/confirm in Electron nicht gehen.
-// o: { value, input (false = nur Ja/Nein), ok (Beschriftung), danger, color (Buch-Dialog mit Farbwahl und Vorschau) }
+// o: { value, input (false = nur Ja/Nein), ok (Beschriftung), danger, color (Buch-Dialog mit Farbwahl und Vorschau),
+//      page ({ f: 'inf'|'a4'|'a3', o: 'p'|'l' }: Seitenformat wählen, liefert die Auswahl) }
 function dialog(msg, o = {}) {
   return new Promise(res => {
     const d = $('#dlg'), box = $('#dlgBox'), inp = $('#dlgIn'), ok = $('#dlgOk'), sw = $('#dlgSw'), prev = $('#dlgPrev');
-    const withInput = o.input !== false, bk = !!o.color;
+    const withInput = o.input !== false, bk = !!o.color, pf = !!o.page, fmt = $('#dlgFmt');
     let color = o.color;
+    const sel = pf ? { ...o.page } : null;
+    box.classList.toggle('pf', pf); fmt.classList.toggle('hidden', !pf);
+    if (pf) {
+      const upd = () => {
+        fmt.querySelectorAll('[data-f]').forEach(b => b.classList.toggle('on', b.dataset.f === sel.f));
+        fmt.querySelectorAll('[data-o]').forEach(b => { b.classList.toggle('on', b.dataset.o === sel.o); b.disabled = sel.f === 'inf'; });
+        fmt.classList.toggle('ls', sel.o === 'l'); fmt.classList.toggle('inf', sel.f === 'inf');
+        $('#dlgFmtHint').textContent = sel.f === 'inf' ? 'Freie Fläche ohne Rand, sie wächst in alle Richtungen.'
+          : sel.f === 'a3' && sel.o === 'l' ? 'Jede PDF-Seite kommt auf die linke Hälfte eines Blatts, rechts bleibt eine A4-Seite frei für Notizen.'
+          : 'Mehrere Blätter untereinander; ein PDF kommt Seite für Seite auf eigene Blätter.';
+      };
+      fmt.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { sel.f = b.dataset.f; upd(); });
+      fmt.querySelectorAll('[data-o]').forEach(b => b.onclick = () => { sel.o = b.dataset.o; upd(); });
+      upd();
+    }
     const ae = document.activeElement; if (ae && ae.blur) ae.blur();
     $('#dlgMsg').textContent = msg; inp.classList.toggle('hidden', !withInput); inp.value = o.value || '';
     inp.placeholder = o.placeholder || '';
@@ -1883,13 +2134,15 @@ function dialog(msg, o = {}) {
     d.classList.remove('hidden');
     if (withInput) { inp.focus(); inp.select(); } else ok.focus();
     const done = v => { d.classList.add('hidden'); box.onsubmit = $('#dlgNo').onclick = d.onpointerdown = inp.oninput = null; res(v); };
-    box.onsubmit = e => { e.preventDefault(); done(!withInput ? true : bk ? { name: inp.value, color } : inp.value); };
+    box.onsubmit = e => { e.preventDefault(); done(pf ? sel : !withInput ? true : bk ? { name: inp.value, color } : inp.value); };
     $('#dlgNo').onclick = () => done(null);
     d.onpointerdown = e => { if (e.target === d) done(null); };
   });
 }
 function ask(msg, value, withInput = true, o = {}) { return dialog(msg, { ...o, value, input: withInput }); }
 const askYes = (msg, o) => dialog(msg, { ...o, input: false }).then(v => v === true);
+// Neue Seite: Format wählen, liefert { f, o } oder null
+const askPage = page => dialog('Neue Seite', { input: false, ok: 'Anlegen', page });
 // Buch anlegen/bearbeiten: liefert { name, color } oder null
 function askBook(title, name, color, ok) {
   return dialog(title, { value: name, color: BOOK_COLORS[color] ? color : 'blue', ok, placeholder: 'Neues Buch' })
@@ -1976,10 +2229,19 @@ function renderBook(grid, book, notes) {
       <div class="meta"><div class="grow"><div class="nm"></div><div class="dt"></div></div>
       <button class="mbtn" title="Seite bearbeiten"><svg class="i"><use href="#ic-more"/></svg></button></div>`;
     if (n.thumb) { const im = new Image(); im.alt = ''; im.src = n.thumb; card.firstChild.prepend(im); }
-    else card.firstChild.classList.add('bg-' + (n.bg || 'dots'));   // leere Seite: ihr Hintergrund
+    else if (paperSize(n)) {   // leeres Blatt: auf dem Tisch, im richtigen Format
+      const sh = document.createElement('span'), [w, h] = paperSize(n);
+      sh.className = 'sheet bg-' + (n.bg || 'dots'); sh.style.aspectRatio = w + '/' + h; sh.classList.toggle('ls', w > h);
+      card.firstChild.classList.add('desk'); card.firstChild.prepend(sh);
+    } else card.firstChild.classList.add('bg-' + (n.bg || 'dots'));   // leere Seite: ihr Hintergrund
     card.querySelector('.pno').textContent = k + 1;
     card.querySelector('.nm').textContent = n.name;
     card.querySelector('.dt').textContent = fmtDate(n.updated);
+    if (paperSize(n)) {   // Format und Zahl der Blätter als Schild auf dem Vorschaubild
+      const f = document.createElement('span'); f.className = 'pfmt';
+      f.textContent = paperName(n.paper).replace('DIN ', '') + (sheetCount(n) > 1 ? ' · ' + sheetsWord(sheetCount(n)) : '');
+      card.firstChild.appendChild(f);
+    }
     const mb = card.querySelector('.mbtn');
     card.onclick = e => { if (e.target.closest('.mbtn')) pageMenu(n, book, mb); else openNote(n); };
     grid.appendChild(card);
@@ -2116,6 +2378,16 @@ async function movePage(n, b) {
 async function movePageToNew(n) { const b = await createBook(); if (b) movePage(n, b); }
 async function newPage() {
   if (navBusy || S.note) return;
+  let fmt;
+  try {
+    // Format abfragen, vorausgewählt wie die letzte Seite im Buch (sonst wie zuletzt gewählt)
+    const { books, notes } = await ensureBooks(), book = books.find(b => b.id === homeBook);
+    const last = book && notes.filter(x => x.book === book.id).sort(byCreated).pop();
+    const st = store.get('paper', {}), was = last ? (last.paper && PAPER[last.paper.f] ? last.paper : { f: 'inf', o: st.o }) : st;
+    fmt = await askPage({ f: PAPER[was.f] ? was.f : 'inf', o: was.o === 'l' ? 'l' : 'p' });
+  } catch (e) { toast('Speicher nicht verfügbar: ' + e.message, 5000); return; }
+  if (!fmt || navBusy || S.note) return;
+  store.set('paper', fmt);
   navBusy = true;
   let n;
   try {
@@ -2126,6 +2398,7 @@ async function newPage() {
     // neue Seite immer ans Ende, mit dem Hintergrund der letzten Seite (z. B. kariert in Mathe)
     n = { id: uid(), name: 'Seite ' + (pages.length + 1), created: Math.max(now, prev ? (prev.created || 0) + 1 : 0), updated: now,
       thumb: null, bg: (prev && prev.bg) || 'dots', view: { tx: 0, ty: 0, z: 1 }, book: book.id };
+    if (PAPER[fmt.f]) { n.paper = { f: fmt.f, o: fmt.o }; n.view = null; }   // Blatt: beim Öffnen ganz zeigen
     await dbIndexPut(n); homeBook = book.id;
   } catch (e) { toast('Speichern nicht möglich: ' + e.message, 5000); navBusy = false; return; }
   navBusy = false;
@@ -2163,6 +2436,8 @@ async function openNote(meta) {
     if (!$('#home').classList.contains('hidden')) homeScroll = { key: homeKey, top: $('#grid').scrollTop };
     closeMenus(); $('#home').classList.add('hidden'); $('#editor').classList.remove('hidden');
     updateUndo(); setTool(S.tool === 'hand' ? 'pen' : S.tool); resize();
+    $('#bSheet').classList.toggle('hidden', !paperSize()); $('#sheetNo').classList.toggle('hidden', !paperSize());
+    if (!meta.view) fitAll(0);   // neue Seite mit Format: das ganze erste Blatt zeigen
     if (renumber) markDirty();
   } catch (e) { toast('Notiz konnte nicht geöffnet werden: ' + e.message, 6000); S.note = null; }
   navBusy = false;

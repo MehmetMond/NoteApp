@@ -4,7 +4,7 @@ Handschrift-App im Stil von GoodNotes für das Surface Pro 11 (Windows ARM64, Su
 
 ![Vorschau](docs/vorschau.png)
 
-Bücher mit Seiten, unendliche Arbeitsfläche, Stift, Textmarker, Radierer, Lasso, Formen und Pfeile, Graphen-Vorlagen (x/y, x/y/z), eigene Formen, Am Raster ausrichten, PDF-Import, Darkmode, Sichern/Wiederherstellen. Bedienung: siehe [ANLEITUNG.md](ANLEITUNG.md).
+Bücher mit Seiten, unendliche Arbeitsfläche oder Dokument aus Blättern DIN A4/A3 (hoch/quer), Stift, Textmarker, Radierer, Lasso, Formen und Pfeile, Graphen-Vorlagen (x/y, x/y/z), eigene Formen, Am Raster ausrichten, PDF-Import, PDF-Export, Darkmode, Sichern/Wiederherstellen. Bedienung: siehe [ANLEITUNG.md](ANLEITUNG.md).
 
 ## Aufbau
 - `app.js` – das JavaScript der App (lesbare Quelle).
@@ -35,3 +35,4 @@ Vor jeder Weitergabe `version` in `electron/package.json` erhöhen.
 - Die Daten liegen in IndexedDB `notizen-app` (Version 4; Stores index, items, images, books, shapes) unter `%APPDATA%\Notizen`. Ein Upgrade darf nie bestehende Notizen löschen; die Version nur erhöhen.
 - Das Sicherungsformat (3) muss alte Sicherungen weiter lesen können.
 - Striche liegen in Weltkoordinaten, Ansicht {tx, ty, z}, gezeichnet wird in Kacheln zu 512 px.
+- Seitenformat im Index-Eintrag: `paper: { f: 'a4' | 'a3', o: 'p' | 'l', n }`, ohne `paper` ist die Fläche unendlich. `n` Blätter liegen untereinander, das erste bei (0, 0), Abstand 40; 1 Welteinheit = 1/96 Zoll (A4 hoch = 793,7 × 1122,5). Das Raster (Muster, Am Raster ausrichten) beginnt auf Blättern am inneren Rand jedes Felds (`fieldsOf`), sonst bei 0.

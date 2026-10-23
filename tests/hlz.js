@@ -6,7 +6,7 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   const p = await ctx.newPage();
   await p.goto('file://' + DIR + '/Notizen.html'); await p.waitForTimeout(500);
   await p.evaluate(async () => { for (const m of await dbIndexAll()) await dbDeleteNote(m.id); });
-  await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew');   /* ab 1.4: Seiten liegen in Büchern */ await p.waitForTimeout(400); await p.evaluate(z => zoomAt(VW / 2, VH / 2, z), +process.env.Z); await p.waitForTimeout(400);
+  await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */   /* ab 1.4: Seiten liegen in Büchern */ await p.waitForTimeout(400); await p.evaluate(z => zoomAt(VW / 2, VH / 2, z), +process.env.Z); await p.waitForTimeout(400);
   const cdp = await ctx.newCDPSession(p);
   const send = (type, x, y, extra = {}) => cdp.send('Input.dispatchMouseEvent', { type, x, y, pointerType: 'pen', button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, force: 0.6, ...extra });
   const wave = (x0, y0) => Array.from({ length: 60 }, (_, i) => [x0 + i * 6, y0 + Math.sin(i / 5) * 25]);

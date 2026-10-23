@@ -157,13 +157,13 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
   // ---------- 5. Seiten anlegen, Reihenfolge, Navigation
   await openCover('Mathe');
-  await p.click('#grid .empty button'); await inEditor();
+  await p.click('#grid .empty button'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */ await inEditor();
   check('new page name + book', eq(await p.evaluate(() => [S.note.name, S.note.book === homeBook, $('#title').value]), ['Seite 1', true, 'Seite 1']));
   await draw(300, 300); await back();
   check('back to Mathe after new page', (await p.textContent('#hBookName')) === 'Mathe' && eq(await cards(), ['Seite 1']));
-  await p.click('#hNew'); await inEditor(); await draw(320, 320);
+  await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */ await inEditor(); await draw(320, 320);
   await p.evaluate(() => { S.note.bg = 'grid'; markDirty(); }); await back();
-  await p.click('#grid .addtile'); await inEditor();
+  await p.click('#grid .addtile'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */ await inEditor();
   check('new page inherits background of last page', (await p.evaluate(() => S.note.bg)) === 'grid');
   await back();
   check('page order: appended', eq(await cards(), ['Seite 1', 'Seite 2', 'Seite 3']));
@@ -228,7 +228,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
   // ---------- 7. Buch löschen
   await p.click('#hShelf'); await shelfReady(); await idle();
-  await openCover('Physik LK'); await p.click('#hNew'); await inEditor(); await draw(300, 300); await back();
+  await openCover('Physik LK'); await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */ await inEditor(); await draw(300, 300); await back();
   const phys = (await db()).notes.filter(n => n.book === (st.books.find(x => x.name === 'Physik LK').id)).map(n => n.id);
   await p.click('#hBookMenu'); await menuItem('Löschen'); await dlgOpen();
   check('delete book text', (await p.textContent('#dlgMsg')) === 'Buch „Physik LK“ mit 2 Seiten löschen? Das kann nicht rückgängig gemacht werden.', await p.textContent('#dlgMsg'));
@@ -334,7 +334,7 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   await p.setViewportSize({ width: 1440, height: 960 });
   await p.evaluate(() => { if (S.dark) toggleDark(); showShelf(); }); await shelfReady(); await idle();
   await p.click('#hNewBook'); await dlgOpen(); await p.fill('#dlgIn', 'Mathe Leistungskurs');
-  check('dialog targets ≥ 40px', await p.$$eval('#dlg button', e => e.every(x => { const r = x.getBoundingClientRect(); return r.width >= 40 && r.height >= 40; })));
+  check('dialog targets ≥ 40px', await p.$$eval('#dlg button', e => e.filter(x => x.offsetParent).every(x => { const r = x.getBoundingClientRect(); return r.width >= 40 && r.height >= 40; })));
   await p.screenshot({ path: path.join(__dirname, 'books_dialog_light.png') });
   await p.click('#dlgNo');
   // Scrollposition bleibt beim Öffnen und Schließen einer Seite erhalten

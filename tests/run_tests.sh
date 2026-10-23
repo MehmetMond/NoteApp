@@ -16,6 +16,7 @@ run bench2 node t3/bench2.js
 run barwidth node t3/barwidth.js "$PWD/Notizen.html"
 run barlong node t3/barlong.js "$PWD/Notizen.html" "$PWD/t3/barlong.png"
 run shapes node t3/shapes.js
+run paper node t3/paper.js
 run books node t3/books.js
 run integ node t3/integ.js
 run custom node t3/custom.js

@@ -15,7 +15,7 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   res.fresh = await p.evaluate(() => ({ idx: S.sizeIdx, size: S.size, presets: S.presets }));
   await p.evaluate(async () => { for (const m of await dbIndexAll()) await dbDeleteNote(m.id); });
   // ab 1.4: Seiten liegen in Büchern -> Buch anlegen (öffnet es), dann neue Seite
-  await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew'); await p.waitForTimeout(400);
+  await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew'); await p.click('#dlgOk');   /* Seitenformat wählen (vorausgewählt: unendlich) */ await p.waitForTimeout(400);
   const cdp = await ctx.newCDPSession(p);
   const send = (type, x, y, extra = {}) => cdp.send('Input.dispatchMouseEvent', { type, x, y, pointerType: 'pen', button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, force: 0.5, ...extra });
   const line = async (x0, y0) => {
