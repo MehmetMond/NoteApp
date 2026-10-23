@@ -1,0 +1,15 @@
+{
+  "name": "Notizen",
+  "short_name": "Notizen",
+  "description": "Handschriftliche Notizen mit unendlicher Arbeitsfläche",
+  "lang": "de",
+  "start_url": "Notizen-Browser.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#151618",
+  "theme_color": "#151618",
+  "icons": [
+    { "src": "electron/icon.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

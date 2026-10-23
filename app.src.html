@@ -4,11 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Notizen</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Notizen">
+<meta name="theme-color" content="#f2f2ef">
 <style>
 :root{--bg:#f2f2ef;--panel:#ffffff;--text:#1d1d1f;--muted:#6b6b70;--border:#e0e0dc;--accent:#2f6fed;--accent-soft:#e6eefe;--hover:#ececea;--paper:#fcfcfa;--danger:#d93025;--shadow:0 1px 3px rgba(0,0,0,.08),0 6px 20px rgba(0,0,0,.07);--shadow-sm:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);--dot:#dcdcd6;--dash:#cfcfc8;--page:#fbfaf5;--page-edge:#d9d5ca;--label:#fbfaf6;--cover-shadow:0 1px 2px rgba(0,0,0,.16),0 14px 26px -10px rgba(0,0,0,.42);--cover-shadow-lift:0 2px 4px rgba(0,0,0,.14),0 22px 34px -12px rgba(0,0,0,.45);--c1:#5a8ae0;--c2:#2d55a8}
 html.dark{--bg:#151618;--panel:#232427;--text:#ececec;--muted:#9a9aa0;--border:#36383c;--accent:#6b97ff;--accent-soft:#2a3550;--hover:#2f3135;--paper:#1c1d20;--danger:#ff6b5e;--shadow:0 1px 3px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);--shadow-sm:0 1px 2px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.2);--dot:#3a3c41;--dash:#44464c;--page:#d9d6cc;--page-edge:#a9a59a;--label:#f1efe8;--cover-shadow:0 1px 2px rgba(0,0,0,.5),0 14px 28px -10px rgba(0,0,0,.75);--cover-shadow-lift:0 2px 4px rgba(0,0,0,.5),0 22px 36px -12px rgba(0,0,0,.8)}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.4 "Segoe UI Variable","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none;overflow:hidden}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.4 "Segoe UI Variable","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;overflow:hidden}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;border-radius:10px}
 svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;display:block}
 .hidden{display:none!important}
@@ -409,6 +415,9 @@ Object.assign(S.color, store.get('color', {}));
     S.sizeIdx[k] = i; S.size[k] = ps[i];
   }
 }
+
+// iPad/iPhone (iPadOS meldet sich als Mac mit Touch)
+const IOS = /iP(ad|hone|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 function colorOf(c) { return c === 'ink' ? (S.dark ? '#f1f1f1' : '#1b1b1d') : c; }
 function paperColor() { return S.dark ? '#1c1d20' : '#fcfcfa'; }
@@ -1750,6 +1759,7 @@ cvLive.addEventListener('wheel', e => {
 }, { passive: false });
 // Browser-Zoom der ganzen Seite verhindern (Strg+Mausrad, Pinch auf der Leiste)
 document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturestart', e => e.preventDefault());   // Safari (iPad): Zwei-Finger-Zoom der Seite
 
 /* ---------- Werkzeugleiste ---------- */
 function setTool(t) {
@@ -1938,6 +1948,7 @@ document.addEventListener('click', e => { const b = e.target.closest('button'); 
 
 function applyDark() {
   document.documentElement.classList.toggle('dark', S.dark);
+  $('meta[name=theme-color]').content = S.dark ? '#151618' : '#f2f2ef';   // Statusleiste auf dem iPad
   $('#hDark span').textContent = S.dark ? 'Hellmodus' : 'Darkmode';
   patCache.clear(); clearTiles(); renderColors();
   if (S.note) { draw(); drawLive(); }
@@ -2189,8 +2200,17 @@ async function exportPNG() {
     download(blob, (S.note.name || 'Notiz') + '.png'); toast('Bild gespeichert');
   } catch (e) { toast('Export fehlgeschlagen: ' + e.message, 5000); }
 }
-function download(blob, name) {
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name.replace(/[\\/:*?"<>|]/g, '_');
+async function download(blob, name) {
+  name = name.replace(/[\\/:*?"<>|]/g, '_');
+  // iPad: über das Teilen-Menü (In Dateien sichern, AirDrop, Mail …), ein Download ist dort schlecht auffindbar
+  if (IOS && navigator.canShare) {
+    const file = new File([blob], name, { type: blob.type });
+    if (navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }   // abgebrochen; sonst (z. B. zu lange nach dem Antippen) normal herunterladen
+    }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }
 async function makeThumb() {
@@ -2603,6 +2623,7 @@ async function writeRecords(meta, items, images, replace) {
   for (const im of images || []) tx.objectStore('images').put(im);
   return txDone(tx);
 }
+if (IOS) $('#fRestore').removeAttribute('accept');   // iPadOS kennt .notizen nicht und würde die Sicherungen ausgrauen
 $('#hRestore').onclick = () => $('#fRestore').click();
 $('#fRestore').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || navBusy) return;
@@ -2666,6 +2687,8 @@ window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
 applyDark();
 openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome(); })
   .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
+// Browser-Version im Netz (GitHub Pages): Offline-Start über sw.js; das Windows-Programm lädt die Datei lokal
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>

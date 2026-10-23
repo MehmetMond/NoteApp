@@ -15,6 +15,7 @@ Bücher mit Seiten, unendliche Arbeitsfläche, Stift, Textmarker, Radierer, Lass
   ```
   (`app.js` beginnt mit `"use strict";`.) Die Platzhalter `@@PDFJS@@` und `@@PDFWORKER@@` nicht anfassen.
 - `build.py` – baut `Notizen.html` und fügt pdf.js 3.11.174 aus `pdfjs/` ein. Die Datei läuft auch direkt im Browser.
+- `Notizen-Browser.html` – die gebaute Datei (wie `Notizen.html`) für GitHub Pages: <https://mehmetmond.github.io/NoteApp/>. Dazu gehören `index.html` (leitet weiter), `sw.js` (Service Worker für den Offline-Start), `manifest.webmanifest` und `icon-180.png` (Home-Bildschirm, iPad). Der Service Worker läuft nur bei `http(s)://`, nicht im Windows-Programm.
 - `electron/` – Windows-Hülle (Electron 38, electron-builder).
 - `tests/` – Playwright-Tests (Chromium); Pfade in den Skripten ggf. anpassen.
 - `docs/` – Entwurfsnotizen für Version 1.4.

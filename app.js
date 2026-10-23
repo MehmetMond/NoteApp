@@ -47,6 +47,9 @@ Object.assign(S.color, store.get('color', {}));
   }
 }
 
+// iPad/iPhone (iPadOS meldet sich als Mac mit Touch)
+const IOS = /iP(ad|hone|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
 function colorOf(c) { return c === 'ink' ? (S.dark ? '#f1f1f1' : '#1b1b1d') : c; }
 function paperColor() { return S.dark ? '#1c1d20' : '#fcfcfa'; }
 function patternColor() { return S.dark ? '#43464c' : '#c9c9c4'; }
@@ -1387,6 +1390,7 @@ cvLive.addEventListener('wheel', e => {
 }, { passive: false });
 // Browser-Zoom der ganzen Seite verhindern (Strg+Mausrad, Pinch auf der Leiste)
 document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturestart', e => e.preventDefault());   // Safari (iPad): Zwei-Finger-Zoom der Seite
 
 /* ---------- Werkzeugleiste ---------- */
 function setTool(t) {
@@ -1575,6 +1579,7 @@ document.addEventListener('click', e => { const b = e.target.closest('button'); 
 
 function applyDark() {
   document.documentElement.classList.toggle('dark', S.dark);
+  $('meta[name=theme-color]').content = S.dark ? '#151618' : '#f2f2ef';   // Statusleiste auf dem iPad
   $('#hDark span').textContent = S.dark ? 'Hellmodus' : 'Darkmode';
   patCache.clear(); clearTiles(); renderColors();
   if (S.note) { draw(); drawLive(); }
@@ -1826,8 +1831,17 @@ async function exportPNG() {
     download(blob, (S.note.name || 'Notiz') + '.png'); toast('Bild gespeichert');
   } catch (e) { toast('Export fehlgeschlagen: ' + e.message, 5000); }
 }
-function download(blob, name) {
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name.replace(/[\\/:*?"<>|]/g, '_');
+async function download(blob, name) {
+  name = name.replace(/[\\/:*?"<>|]/g, '_');
+  // iPad: über das Teilen-Menü (In Dateien sichern, AirDrop, Mail …), ein Download ist dort schlecht auffindbar
+  if (IOS && navigator.canShare) {
+    const file = new File([blob], name, { type: blob.type });
+    if (navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }   // abgebrochen; sonst (z. B. zu lange nach dem Antippen) normal herunterladen
+    }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 }
 async function makeThumb() {
@@ -2240,6 +2254,7 @@ async function writeRecords(meta, items, images, replace) {
   for (const im of images || []) tx.objectStore('images').put(im);
   return txDone(tx);
 }
+if (IOS) $('#fRestore').removeAttribute('accept');   // iPadOS kennt .notizen nicht und würde die Sicherungen ausgrauen
 $('#hRestore').onclick = () => $('#fRestore').click();
 $('#fRestore').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || navBusy) return;
@@ -2303,3 +2318,5 @@ window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
 applyDark();
 openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome(); })
   .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
+// Browser-Version im Netz (GitHub Pages): Offline-Start über sw.js; das Windows-Programm lädt die Datei lokal
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});

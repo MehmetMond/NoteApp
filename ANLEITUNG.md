@@ -29,6 +29,12 @@
 2. Windows zeigt beim ersten Mal „Der Computer wurde durch Windows geschützt“, weil das Programm nicht signiert ist. Auf **Weitere Informationen** und dann **Trotzdem ausführen** klicken.
 3. Neue Versionen einfach über die alte installieren, die Notizen bleiben erhalten.
 
+## Auf dem iPad (oder in jedem Browser)
+1. In **Safari** öffnen: <https://mehmetmond.github.io/NoteApp/>
+2. Auf **Teilen** tippen, dann **Zum Home-Bildschirm**. Ab jetzt die App immer über dieses Symbol starten: Sie läuft dann im Vollbild, startet nach dem ersten Mal auch ohne Internet und aktualisiert sich von selbst, sobald Internet da ist.
+3. Die Notizen liegen nur auf dem iPad und sind getrennt von denen in einem normalen Safari-Tab. Notizen vom Surface holen: dort **Sichern**, die Datei z. B. über iCloud Drive oder AirDrop aufs iPad bringen und auf dem iPad **Wiederherstellen** tippen. **Sichern** öffnet auf dem iPad das Teilen-Menü („In Dateien sichern“, AirDrop, Mail …).
+4. Radieren geht mit dem Apple Pencil über das Radierer-Werkzeug in der Leiste (der Pencil hat keine Taste, die eine Webseite auswerten kann).
+
 ## Wenn das Programm nicht startet
 - Im Task-Manager alle Einträge „Notizen“ beenden und neu starten.
 - Nach einem hängenden Start schaltet das Programm automatisch auf eine einfachere Darstellung um. Ein zweiter Klick auf das Symbol löst das sofort aus.
