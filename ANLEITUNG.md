@@ -1,6 +1,6 @@
-# Notizen für das Surface Pro 11 (Version 1.4.2)
+# Notizen für das Surface Pro 11 (Version 1.5.0)
 
-## Neu: Seitenformate und PDF-Export (zuerst in der Browser-Version)
+## Neu in 1.5.0: Seitenformate und PDF-Export
 - **Seitenformat:** Bei „Neue Seite“ fragt die App, ob die Seite eine unendliche Fläche oder ein Dokument aus Blättern DIN A4 bzw. DIN A3 sein soll, und bei DIN hoch oder quer. Vorausgewählt ist das Format der letzten Seite im Buch. Die Blätter liegen untereinander auf einem grauen Tisch; Punkte, Kästchen und Linien passen genau ins Blatt (mit gleichmäßigem Rand, bei A3 quer jede Hälfte für sich). Was über den Rand geschrieben wird, bleibt sichtbar, kommt aber nicht in den Export.
 - **Blatt hinzufügen:** Knopf mit Blatt und Plus in der Leiste (nur bei DIN-Seiten), daneben z. B. „3 / 12“ für das Blatt in der Mitte des Bildschirms. Das neue Blatt kommt hinter das aktuelle; Rückgängig nimmt es wieder weg.
 - **PDF auf DIN-Seiten:** Jede PDF-Seite kommt auf ein eigenes Blatt im selben Dokument, ein PDF mit 12 Seiten ergibt 12 Blätter. Die erste PDF-Seite landet auf dem aktuellen Blatt (liegt dort schon ein PDF, auf einem neuen dahinter), die weiteren auf neuen Blättern direkt dahinter. Bei **DIN A3 quer** kommt jede PDF-Seite auf die linke Hälfte, rechts bleibt eine A4-Seite frei für Notizen.
@@ -25,13 +25,13 @@
 - Ältere Striche behalten ihre Dicke. Wer sie angleichen will: mit dem Lasso markieren, Dicke wählen, **Dicke übernehmen** antippen.
 
 ## Starten ohne Installation (empfohlen)
-1. `Notizen-1.4.2-arm64-ohne-Installation.zip` auf das Surface laden, rechtsklicken und **Alle extrahieren** wählen.
+1. `Notizen-1.5.0-arm64-ohne-Installation.zip` auf das Surface laden, rechtsklicken und **Alle extrahieren** wählen.
 2. Im entpackten Ordner `Notizen\Notizen.exe` starten. Für eine Verknüpfung: rechtsklicken, **Weitere Optionen anzeigen**, **Senden an**, **Desktop (Verknüpfung erstellen)**.
 3. Beim Wechsel von einer älteren Version das Programm schließen und den alten Ordner `Notizen` durch den neuen ersetzen. Die Notizen bleiben erhalten, sie liegen getrennt unter `%APPDATA%\Notizen`.
 4. Hinweis: Nach dem ersten Start von 1.4 kann eine ältere Version die Notizen nicht mehr öffnen. Wer sicher gehen will, tippt vorher in der alten Version auf **Sichern**.
 
 ## Installieren (alternativ)
-1. `Notizen-1.4.2-arm64.zip` entpacken und `Notizen-Setup-1.4.2-arm64.exe` doppelklicken.
+1. `Notizen-1.5.0-arm64.zip` entpacken und `Notizen-Setup-1.5.0-arm64.exe` doppelklicken.
 2. Windows zeigt beim ersten Mal „Der Computer wurde durch Windows geschützt“, weil das Programm nicht signiert ist. Auf **Weitere Informationen** und dann **Trotzdem ausführen** klicken.
 3. Neue Versionen einfach über die alte installieren, die Notizen bleiben erhalten.
 
