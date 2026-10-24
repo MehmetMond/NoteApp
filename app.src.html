@@ -80,10 +80,10 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 .mbtn{width:40px;height:40px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:var(--muted);margin:-6px -8px 0 0}
 .mbtn:hover,.mbtn.on{background:var(--hover);color:var(--text)}
 .mbtn svg{width:20px;height:20px}
-/* Buch anlegen/öffnen/schließen: Ebene über allem (fängt Klicks ab, den Blick setzt viewOn), Standbild der alten Ansicht,
+/* Buch anlegen/öffnen/schließen: Ebene über allem (fängt Klicks ab, Blick: fxBook), Standbild der alten Ansicht,
    Buch als 3D-Körper (Deckel mit Stärke und runden Ecken, zwei Seitenblöcke, die sich beim Aufschlagen wölben) */
 #fx{position:fixed;inset:0;z-index:30}
-.fxbook,.fxbook .tilt,.fxbook .lidz,.fxbook .lid,.fxbook .mz{transform-style:preserve-3d}
+.fxbook .tilt,.fxbook .lidz,.fxbook .lid,.fxbook .mz{transform-style:preserve-3d}
 .fxbook{position:absolute;transform-origin:0 0;will-change:transform}
 .fxbook .tilt,.fxbook .lidz,.fxbook .lid,.fxbook .mz{position:absolute;inset:0}
 .fxbook .tilt{transform-origin:0 50%}
@@ -2768,7 +2768,7 @@ const LID = 'cubic-bezier(.45,.05,.2,1)';   // Einband auf- und zuklappen: weich
 // scale3d, damit die Dicke des Buchs im Raum mitwächst)
 const toRect = (a, b) => { const k = b.width / a.width; return `translate(${b.left - a.left}px,${b.top - a.top}px) scale3d(${k},${k},${k})`; };
 // Lage des Buchs: im Regal flach (Tiefe zusammengedrückt, deckt sich genau mit dem echten Buch), auf der Bühne
-// frontal mit voller Dicke; die Sicht von leicht vorne (viewOn: Auge unterhalb der Bühne) zeigt Schnitt und Kanten.
+// frontal mit voller Dicke; die Sicht von leicht vorne (fxBook: Auge unterhalb des Buchs) zeigt Schnitt und Kanten.
 const FLAT = 'scaleZ(.02)', TILT = 'scaleZ(1)';
 const OPEN = 'rotateY(-180deg)', SHUT = 'rotateY(0deg)';   // Vorderdeckel aufgeschlagen bzw. zu
 /* Kopie des Buchs als 3D-Körper (Koordinaten des ungedrehten Buchs, transform-origin oben links), in der Mitte
@@ -2784,7 +2784,10 @@ function fxBook(fx, book, r) {
   const W = r.width, H = r.height, T = Math.round(W * 0.105), c = Math.max(2.5, W * 0.022);   // T: Dicke je Hälfte
   const x1 = W * 0.97, y0 = H * 0.022, y1 = H * 0.978, ph = y1 - y0;
   const el = document.createElement('div'); el.className = 'fxbook'; coverVars(el, book.color);
-  Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', width: W + 'px', height: H + 'px' });
+  // Blick auf das Buch, in seinen eigenen Maßen (wächst mit ihm): über dem Rücken, weit vorne, sechs Buchhöhen unter
+  // der Unterkante und neun entfernt. So sieht es in jedem Fenster gleich aus, und für das Ein- und Ausblenden ist das
+  // Buch ein fertiges Bild (Deckkraft am Ganzen, ohne Nähte zwischen den Flächen).
+  Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', width: W + 'px', height: H + 'px', perspective: H * 9 + 'px', perspectiveOrigin: `0 ${H * 7}px` });
   const px = v => +v.toFixed(2) + 'px', rad = v => +v.toFixed(4) + 'rad';
   const face = (cls, st, more = '', inner = '') => `<span class="f ${cls}" style="${st}" ${more}>${inner}</span>`;
   const box = (l, t, w, h) => `left:${px(l)};top:${px(t)};width:${px(w)};height:${px(h)};`;
@@ -2904,9 +2907,9 @@ function bendBook(bk, open, o) {
   }
 }
 const tiltOf = bk => bk.querySelector('.tilt'), cutOf = bk => bk.querySelector('.pgs'), shadeOf = bk => bk.querySelector('.lsh .sh');
-// Buch ein- oder ausblenden: an den einzelnen Flächen (Deckkraft am Buch selbst drückt den 3D-Körper flach);
-// der flache Regal-Schnitt (.pgs) hat seine eigene Blende
-const fadeBook = (bk, from, to, o) => [...bk.querySelectorAll('.f:not(.pgs), .cover')].map(p => p.animate([{ opacity: from }, { opacity: to }], { fill: 'both', ...o }));
+// Buch ein- oder ausblenden: als Ganzes (es ist ein flaches Bild seiner 3D-Ansicht, siehe fxBook), sonst schienen
+// beim Ausblenden die Nähte und Schichten zwischen den Flächen durch
+const fadeBook = (bk, from, to, o) => bk.animate([{ opacity: from }, { opacity: to }], { fill: 'both', ...o });
 // Standbild der Startseite über allem; darunter wird schon die nächste Ansicht aufgebaut
 function snapshot(fx) {
   const g = $('#grid'), s = $('#home').cloneNode(true);
@@ -2925,15 +2928,9 @@ function stageRect(r) {
 }
 // offenes Buch größer um den Rücken (linke Kante) herum: wirkt, als käme man näher
 const grown = (r, k) => ({ left: r.left, top: r.top + r.height * (1 - k) / 2, width: r.width * k, height: r.height * k });
-// Blick auf die Bühne r: Abstand und Augenhöhe nach der Größe des Buchs (über dem Rücken, weit vorne: sechs Buchhöhen
-// unter der Unterkante, neun entfernt), damit es in jedem Fenster gleich aussieht. Am Fenster ausgerichtet würde ein
-// hohes Fenster oder ein kleines Buch den aufgestellten Deckel weit nach oben ziehen; aus der Ferne bleibt er kürzer,
-// die Dicke unten sieht man trotzdem.
-const viewOn = (fx, r) => Object.assign(fx.style, { perspective: r.height * 9 + 'px', perspectiveOrigin: `${r.left}px ${r.top + r.height * 7}px` });
 
 async function bookOpenFx(from, id, fx) {
   const book = homeData.books.find(b => b.id === id), r0 = rectOf(from.querySelector('.cv')), r1 = stageRect(r0);
-  viewOn(fx, r1);
   // 1. vorbereiten: Standbild des Regals, Buch als Kopie, darunter die Buchansicht fertig aufbauen (noch unsichtbar)
   const snap = snapshot(fx);
   snap.querySelector(`.book[data-id="${id}"]`).style.visibility = 'hidden';
@@ -2956,7 +2953,7 @@ async function bookOpenFx(from, id, fx) {
   //    der Reihe nach (leicht von unten, kaum merklich größer werdend)
   const tf = tOpen + dOpen - 100;
   bk.animate([{ transform: toRect(r0, r1) }, { transform: toRect(r0, grown(r1, 1.1)) }], { duration: 600, delay: tf, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'forwards' });
-  const gone = Promise.all(fadeBook(bk, 1, 0, { duration: 440, delay: tf, easing: 'ease-out' }).map(a => a.finished));
+  const gone = fadeBook(bk, 1, 0, { duration: 440, delay: tf, easing: 'ease-out' }).finished;
   items.forEach((e, i) => {
     e.style.visibility = '';
     e.animate([{ opacity: 0, transform: 'translateY(12px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 480, delay: tf + 80 + Math.min(i, 12) * 35, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' });
@@ -2978,7 +2975,6 @@ async function bookCloseFx(id, fx) {
   await decoded(grid);
   // das Buch erst jetzt anlegen, gleich mit seiner Startlage: offen, etwas näher, unsichtbar
   const r1 = stageRect(r0), bk = fxBook(fx, book, r0), lid = bk.querySelector('.lid');
-  viewOn(fx, r1);
   lid.style.transform = OPEN; bk.style.transform = toRect(r0, grown(r1, 1.1));
   tiltOf(bk).style.transform = TILT; cutOf(bk).style.opacity = 0;
   // 2. los: die Seiten blenden aus (der Regal-Kopf erst danach), das offene Buch kommt aus der Nähe in die Mitte
