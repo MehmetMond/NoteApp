@@ -441,8 +441,14 @@ function tapeGeo(s) {
     return [x - u[1] * q + u[0] * o, y + u[0] * q + u[1] * o];
   });
   const z1 = zig(p[(n - 1) * 3], p[(n - 1) * 3 + 1], u1, 1), z0 = zig(p[0], p[1], u0, -1);
-  const teeth = new Path2D();
-  for (const z of [z0, z1]) { teeth.moveTo(...z[0]); for (const q of z.slice(1)) teeth.lineTo(...q); teeth.closePath(); }
+  // Zacken: für den Schatten genau anschließend, zum Malen etwas ins Band hinein (sonst bleibt eine helle Fuge)
+  const teeth = new Path2D(), teethS = new Path2D();
+  for (const [z, u, out] of [[z0, u0, -1], [z1, u1, 1]]) {
+    for (const P of [teeth, teethS]) { P.moveTo(...z[0]); for (const q of z.slice(1)) P.lineTo(...q); }
+    const [ax, ay] = z[0], [bx, by] = z[z.length - 1], d = -out * 1.2;
+    teeth.lineTo(bx + u[0] * d, by + u[1] * d); teeth.lineTo(ax + u[0] * d, ay + u[1] * d);
+    teeth.closePath(); teethS.closePath();
+  }
   // Umriss: links vorwärts, Zacken am Ende, rechts zurück, Zacken am Anfang
   const edge = new Path2D(), side = (i, sg) => { const u = dir(Math.max(0, i - 2), Math.min(n - 1, i + 2)); return [p[i * 3] - u[1] * h * sg, p[i * 3 + 1] + u[0] * h * sg]; };
   edge.moveTo(...side(0, 1)); for (let i = 1; i < n; i++) edge.lineTo(...side(i, 1));
@@ -450,29 +456,44 @@ function tapeGeo(s) {
   for (let i = n - 1; i >= 0; i--) edge.lineTo(...side(i, -1));
   for (const q of z0.slice().reverse()) edge.lineTo(...q);
   edge.closePath();
-  g = { line, teeth, edge }; if (!s.live) pathCache.set(s, g);   // die Vorschau beim Zeichnen nicht merken
+  g = { line, teeth, teethS, edge }; if (!s.live) pathCache.set(s, g);   // die Vorschau beim Zeichnen nicht merken
   return g;
 }
-// Muster des Tapes, hell über der Farbe (je Zeichenfläche einmal angelegt, 16 Welteinheiten groß)
+// Muster des Tapes, hell über der Farbe, 16 Welteinheiten groß. Gemalt in der Auflösung, in der es erscheint (ds
+// Gerätepixel je Welteinheit): ein hochskaliertes kleines Muster zeigt an den Kachelecken helle Punkte
 const tapePats = new WeakMap();
-function tapePattern(ctx, kind) {
+function tapePattern(ctx, kind, ds) {
+  const r = clamp(Math.round(ds * 2) / 2, 1, 8), key = kind + '@' + r;
   let m = tapePats.get(ctx); if (!m) tapePats.set(ctx, m = new Map());
-  if (m.has(kind)) return m.get(kind);
-  const N = 16, c = document.createElement('canvas'); c.width = c.height = N;
-  const g = c.getContext('2d'); g.fillStyle = g.strokeStyle = 'rgba(255,255,255,.42)';
-  if (kind === 'streifen') { g.lineWidth = 3.4; for (const o of [-N, 0, N]) { g.beginPath(); g.moveTo(o, N); g.lineTo(o + N, 0); g.stroke(); } }
-  else if (kind === 'punkte') { for (const [x, y] of [[4, 4], [12, 12]]) { g.beginPath(); g.arc(x, y, 1.9, 0, 6.2832); g.fill(); } }
-  else if (kind === 'karo') { g.fillRect(0, 0, N, 2); g.fillRect(0, 0, 2, N); }
+  if (m.has(key)) return m.get(key);
+  const N = 16, c = document.createElement('canvas'); c.width = c.height = Math.round(N * r);
+  const g = c.getContext('2d'); g.scale(r, r); g.fillStyle = g.strokeStyle = 'rgba(255,255,255,.42)';
+  // jeweils ein Pfad in einem Zug: wo sich Teile überlappen, wird es nicht doppelt hell
+  g.beginPath();
+  if (kind === 'streifen') { g.lineWidth = 3.4; for (const o of [-N, 0, N]) { g.moveTo(o - 4, N + 4); g.lineTo(o + N + 4, -4); } g.stroke(); }   // über die Ecken hinaus
+  else if (kind === 'punkte') { for (const [x, y] of [[4, 4], [12, 12]]) { g.moveTo(x + 1.9, y); g.arc(x, y, 1.9, 0, 6.2832); } g.fill(); }
+  else if (kind === 'karo') { g.rect(0, 0, N, 2); g.rect(0, 0, 2, N); g.fill(); }
   const pat = kind === 'uni' ? null : ctx.createPattern(c, 'repeat');
-  m.set(kind, pat); return pat;
+  if (pat) pat.setTransform(new DOMMatrix().scale(N / c.width));
+  m.set(key, pat); return pat;
 }
 function drawTape(ctx, s, ds = 1) {
   const g = tapeGeo(s), on = covered(s);
   ctx.save(); ctx.lineCap = 'butt'; ctx.lineJoin = 'round'; ctx.lineWidth = s.w;
   if (!on) ctx.globalAlpha = 0.16;
+  else {
+    // abgedeckt liegt es mit einem Schatten nach unten auf dem Papier, mit der Dicke wachsend. Nur der Schatten wird
+    // hier gemalt (die Form liegt weit daneben, der Versatz in Gerätepixeln holt den Schatten zurück)
+    const far = 30000 / ds;
+    ctx.save(); ctx.translate(-far, 0);
+    ctx.shadowColor = isDark() ? 'rgba(0,0,0,.55)' : 'rgba(0,0,0,.32)';
+    ctx.shadowOffsetX = (far + s.w * 0.04) * ds; ctx.shadowOffsetY = s.w * 0.13 * ds; ctx.shadowBlur = s.w * 0.035 * ds;
+    ctx.strokeStyle = ctx.fillStyle = '#000'; ctx.stroke(g.line); ctx.fill(g.teethS);
+    ctx.restore();
+  }
   ctx.strokeStyle = ctx.fillStyle = s.c; ctx.stroke(g.line); ctx.fill(g.teeth);
-  const pat = on && tapePattern(ctx, s.tp);
-  if (pat) { ctx.strokeStyle = ctx.fillStyle = pat; ctx.stroke(g.line); ctx.fill(g.teeth); }
+  const pat = on && tapePattern(ctx, s.tp, ds);
+  if (pat) { ctx.strokeStyle = ctx.fillStyle = pat; ctx.stroke(g.line); ctx.fill(g.teethS); }   // halb durchsichtig: nicht doppelt
   ctx.globalAlpha = 1;
   if (!on) { ctx.setLineDash([5 * DPR / ds, 4 * DPR / ds]); ctx.lineWidth = 1.3 * DPR / ds; ctx.strokeStyle = s.c; ctx.stroke(g.edge); }
   ctx.restore();
