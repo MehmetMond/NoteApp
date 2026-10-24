@@ -78,6 +78,15 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 .mbtn{width:40px;height:40px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:var(--muted);margin:-6px -8px 0 0}
 .mbtn:hover,.mbtn.on{background:var(--hover);color:var(--text)}
 .mbtn svg{width:20px;height:20px}
+/* Buch anlegen/öffnen/schließen: Ebene über allem (fängt Klicks ab), Standbild der alten Ansicht,
+   Buch mit aufklappbarem Einband */
+#fx{position:fixed;inset:0;z-index:30;perspective:1800px;perspective-origin:50% 40%}
+.fxbook{position:absolute;transform-origin:0 0;transform-style:preserve-3d;border-radius:4px 12px 12px 4px;will-change:transform}
+.fxbook .block{position:absolute;top:2.2%;bottom:2.2%;left:3%;right:-2px;border-radius:2px 8px 8px 2px;background:linear-gradient(90deg,color-mix(in srgb,var(--page-edge) 60%,var(--page)),var(--page) 9%);box-shadow:0 1px 2px rgba(0,0,0,.14),0 10px 22px -10px rgba(0,0,0,.4)}
+.fxbook .lid{position:absolute;inset:0;border-radius:inherit;transform-origin:0 50%;transform-style:preserve-3d;will-change:transform}
+.fxbook .lid .cover{backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.fxbook .lid .inner{position:absolute;inset:0;border-radius:12px 4px 4px 12px;transform:rotateY(180deg);backface-visibility:hidden;-webkit-backface-visibility:hidden;background:linear-gradient(90deg,color-mix(in srgb,var(--c2) 70%,#000),var(--c2) 85%,color-mix(in srgb,var(--c2) 80%,#000));box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+#fx .fxsnap{pointer-events:none}
 /* Seiten */
 .card{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm);cursor:pointer;display:flex;flex-direction:column;transition:transform .2s cubic-bezier(.2,.7,.3,1),box-shadow .2s}
 .card:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
@@ -2537,7 +2546,15 @@ function dialog(msg, o = {}) {
     }
     d.classList.remove('hidden');
     if (withInput) { inp.focus(); inp.select(); } else ok.focus();
-    const done = v => { d.classList.add('hidden'); box.onsubmit = $('#dlgNo').onclick = d.onpointerdown = inp.oninput = null; res(v); };
+    const done = v => {
+      if (bk && v && !reduceMotion()) {   // Buch angelegt: Vorschau-Einband merken (dort startet die Animation), Dialog blendet aus
+        lastCoverRect = rectOf(prev);
+        const g = d.cloneNode(true); g.querySelector('#dlgPrev').style.visibility = 'hidden'; g.querySelector('#dlgIn').value = inp.value;
+        document.body.appendChild(g);
+        g.querySelector('#dlgBox').animate([{ transform: 'none' }, { transform: 'scale(.97)' }], { duration: 220, easing: 'ease-out', fill: 'forwards' });
+        g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-out', fill: 'forwards' }).finished.then(() => g.remove());
+      }
+      d.classList.add('hidden'); box.onsubmit = $('#dlgNo').onclick = d.onpointerdown = inp.oninput = null; res(v); };
     box.onsubmit = e => { e.preventDefault(); done(pf ? sel : !withInput ? true : bk ? { name: inp.value, color } : inp.value); };
     $('#dlgNo').onclick = () => done(null);
     d.onpointerdown = e => { if (e.target === d) done(null); };
@@ -2548,6 +2565,7 @@ const askYes = (msg, o) => dialog(msg, { ...o, input: false }).then(v => v === t
 // Neue Seite: Format wählen, liefert { f, o } oder null
 const askPage = page => dialog('Neue Seite', { input: false, ok: 'Anlegen', page });
 // Buch anlegen/bearbeiten: liefert { name, color } oder null
+let lastCoverRect = null;   // wo die Einband-Vorschau im Buch-Dialog zuletzt stand
 function askBook(title, name, color, ok) {
   return dialog(title, { value: name, color: BOOK_COLORS[color] ? color : 'blue', ok, placeholder: 'Neues Buch' })
     .then(v => v && { name: v.name.trim() || name || 'Neues Buch', color: v.color });
@@ -2574,7 +2592,8 @@ function coverLabel(lbl, name, avail = 6.7) {
   if (total > 2.2 * avail) k = Math.min(k, 0.82);   // lange Namen: lieber kleiner als abgeschnitten
   lbl.style.setProperty('--k', Math.max(0.55, k).toFixed(3));
 }
-async function renderHome() {
+// quiet: ohne die Einblend-Animation des Rasters (die Buch-Animation übernimmt das)
+async function renderHome(quiet) {
   const token = ++homeToken;
   let data = { books: [], notes: [] };
   try { data = await ensureBooks(); } catch (e) { toast('Speicher nicht verfügbar: ' + e.message, 6000); }
@@ -2587,7 +2606,7 @@ async function renderHome() {
   if (!$('#homeMenu').classList.contains('hidden')) closeMenus();
   grid.innerHTML = '';
   if (book) renderBook(grid, book, data.notes); else renderShelf(grid, data.books, data.notes);
-  grid.classList.toggle('enter', key !== homeKey || !!back);
+  grid.classList.toggle('enter', !quiet && (key !== homeKey || !!back));
   homeKey = key; homeScroll = null;
   grid.scrollTop = top;
 }
@@ -2614,7 +2633,7 @@ function renderShelf(grid, books, notes) {
     coverLabel(el.querySelector('.lbl'), b.name);
     el.querySelector('.nm').textContent = el.firstChild.title = b.name;
     el.querySelector('.dt').textContent = (n ? pagesWord(n) : 'Leer') + ' · ' + fmtDay(last.get(b.id) || b.created || Date.now());
-    el.firstChild.onclick = () => openBook(b.id);
+    el.firstChild.onclick = () => openBook(b.id, el);
     const mb = el.querySelector('.mbtn'); mb.onclick = () => bookMenu(b, mb);
     grid.appendChild(el);
   });
@@ -2671,8 +2690,169 @@ function emptyState(inBook) {
   el.querySelector('button').onclick = inBook ? newPage : newBook;
   return el;
 }
-function openBook(id) { if (navBusy || S.note) return; homeBook = id; renderHome(); }
-function showShelf() { homeBook = null; renderHome(); }
+function openBook(id, from) {
+  if (navBusy || S.note || homeAnim) return;
+  homeBook = id;
+  if (from && !reduceMotion()) animate(fx => bookOpenFx(from, id, fx)); else renderHome();
+}
+function showShelf() {
+  if (homeAnim) return;
+  const id = homeBook; homeBook = null;
+  if (id && !reduceMotion() && !$('#home').classList.contains('hidden')) animate(fx => bookCloseFx(id, fx)); else renderHome();
+}
+
+/* ---------- Animation: Buch anlegen, öffnen und schließen ----------
+   Öffnen: das Buch fliegt in die Mitte und klappt auf, dann kommt es etwas näher und löst sich auf, während die Seiten
+   ruhig an ihren Plätzen erscheinen. Schließen: die Seiten blenden aus, das offene Buch erscheint in der Mitte, klappt
+   zu und stellt sich an seinen Platz. Anlegen: der Einband fliegt aus dem Dialog an seinen Platz im Regal (die anderen
+   rücken nach), dann geht das Buch auf.
+   Sauber und flüssig: bevor sich etwas bewegt, ist die neue Ansicht schon fertig aufgebaut (Bilder dekodiert), ein
+   Standbild der alten liegt darüber und blendet weich aus. Während der Bewegung ändern sich nur transform und opacity.
+   Mit „Bewegung reduzieren“ im System wird nur umgeschaltet. */
+let homeAnim = false;
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+async function animate(fn) {
+  homeAnim = navBusy = true;   // gilt als Navigation: nichts anderes öffnen, bis es fertig ist
+  const fx = document.createElement('div'); fx.id = 'fx'; document.body.appendChild(fx);   // fängt Klicks ab, solange es läuft
+  try { await fn(fx); } catch (e) { console.error(e); renderHome(); }
+  finally { fx.remove(); homeAnim = navBusy = false; }
+}
+// Warten auf der Zeitachse der Animationen (läuft genau mit ihnen, nicht mit setTimeout daneben)
+const wait = ms => document.documentElement.animate([], { duration: Math.max(0, ms) }).finished;
+const rectOf = el => el.getBoundingClientRect();
+const onScreen = r => r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+// Feder als Easing (CSS linear() mit Stützpunkten), wie bei Apple über Dauer und Nachschwingen beschrieben:
+// bounce 0 = kommt ohne Überschwingen an. Liefert { easing, duration } bis zum Ausschwingen und settled: ab da
+// weicht sie um weniger als 0,5 % ab (sichtbar angekommen, der Rest ist nur noch feines Ausschwingen).
+const SPRINGS = new Map();
+function spring(bounce, ms) {
+  const key = bounce + '|' + ms; if (SPRINGS.has(key)) return SPRINGS.get(key);
+  const w = 2 * Math.PI / (ms / 1000), z = 1 - bounce, wd = w * Math.sqrt(Math.max(1e-9, 1 - z * z));
+  const x = t => z >= 1 ? 1 - Math.exp(-w * t) * (1 + w * t) : 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + z * w / wd * Math.sin(wd * t));
+  let T = 0.1; while (T < 3 && (Math.abs(1 - x(T)) > 0.0015 || Math.abs(1 - x(T + 0.03)) > 0.0015)) T += 0.01;
+  let S = T; while (S > 0 && Math.abs(1 - x(S)) < 0.005) S -= 0.005;
+  const pts = Array.from({ length: 61 }, (_, i) => i === 60 ? 1 : +x(T * i / 60).toFixed(4));
+  const ok = window.CSS && CSS.supports('animation-timing-function', 'linear(0, 0.5, 1)');
+  const r = { easing: ok ? `linear(${pts.join(', ')})` : 'cubic-bezier(.22,1,.36,1)', duration: Math.round(T * 1000), settled: Math.round((S + 0.005) * 1000) };
+  SPRINGS.set(key, r); return r;
+}
+// WAAPI-Optionen einer Feder (ohne settled)
+const sp = (s, o = {}) => ({ easing: s.easing, duration: s.duration, ...o });
+const LID = 'cubic-bezier(.45,.05,.2,1)';   // Einband auf- und zuklappen: weich an und weich aus
+// transform, das ein Element mit Rechteck a (origin oben links) auf Rechteck b legt (Breite bestimmt die Größe)
+const toRect = (a, b, extra = '') => `translate(${b.left - a.left}px,${b.top - a.top}px) scale(${b.width / a.width})${extra}`;
+// Kopie des Buchs: Seitenblock, Schnitt und Einband mit Außen- und Innenseite; transform-origin oben links
+function fxBook(fx, book, r) {
+  const el = document.createElement('div'); el.className = 'fxbook'; coverVars(el, book.color);
+  Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+  el.innerHTML = '<span class="pgs"></span><span class="block"></span><span class="lid"><span class="cover"><span class="gl"></span><span class="lbl"><span class="t"></span></span></span><span class="inner"></span></span>';
+  fx.appendChild(el); coverLabel(el.querySelector('.lbl'), book.name);
+  return el;
+}
+// Buch ein- oder ausblenden: an den einzelnen Flächen (Deckkraft am Buch selbst drückt den 3D-Einband flach)
+const fadeBook = (bk, from, to, o) => [...bk.querySelectorAll('.block, .pgs, .cover, .inner')].map(p => p.animate([{ opacity: from }, { opacity: to }], { fill: 'both', ...o }));
+// Standbild der Startseite über allem; darunter wird schon die nächste Ansicht aufgebaut
+function snapshot(fx) {
+  const g = $('#grid'), s = $('#home').cloneNode(true);
+  s.classList.add('fxsnap'); fx.prepend(s);
+  s.querySelector('#grid').scrollTop = g.scrollTop;
+  return s;
+}
+// Bilder der neuen Ansicht fertig dekodieren, bevor sich etwas bewegt (höchstens 200 ms warten)
+const decoded = root => Promise.race([Promise.all([...root.querySelectorAll('img')].map(i => i.decode().catch(() => {}))), wait(200)]);
+// Bühne: das Buch kommt zum Aufklappen etwas größer in die Mitte, der Rücken mittig (Einband klappt nach links auf)
+function stageRect(r) {
+  const w = Math.min(r.width * 1.3, innerWidth * 0.24, (innerHeight - 180) * r.width / r.height), h = w * r.height / r.width;
+  return { left: innerWidth / 2 - w * 0.04, top: Math.max(96, (innerHeight - h) / 2), width: w, height: h };
+}
+// offenes Buch größer um den Rücken (linke Kante) herum: wirkt, als käme man näher
+const grown = (r, k) => ({ left: r.left, top: r.top + r.height * (1 - k) / 2, width: r.width * k, height: r.height * k });
+
+async function bookOpenFx(from, id, fx) {
+  const book = homeData.books.find(b => b.id === id), r0 = rectOf(from.querySelector('.cv')), r1 = stageRect(r0);
+  // 1. vorbereiten: Standbild des Regals, Buch als Kopie, darunter die Buchansicht fertig aufbauen (noch unsichtbar)
+  const snap = snapshot(fx);
+  snap.querySelector(`.book[data-id="${id}"]`).style.visibility = 'hidden';
+  const bk = fxBook(fx, book, r0), lid = bk.querySelector('.lid');
+  homeBook = id; await renderHome(true);
+  const grid = $('#grid'), head = $('#home header'), items = [...grid.children];
+  items.forEach(e => e.style.visibility = 'hidden');
+  await decoded(grid);
+  // 2. los: Regal blendet aus (der neue Kopf erst danach, nicht übereinander), Buch fliegt in die Mitte und klappt auf
+  snap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: 'ease-out', fill: 'forwards' });
+  head.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 340, delay: 200, easing: 'ease-out', fill: 'backwards' });
+  bk.animate([{ transform: 'none' }, { transform: toRect(r0, r1) }], sp(spring(0.06, 520), { fill: 'forwards' }));
+  const tOpen = 110, dOpen = 640;
+  lid.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(-165deg)' }], { duration: dOpen, delay: tOpen, easing: LID, fill: 'forwards' });
+  // 3. das offene Buch kommt etwas näher und löst sich auf; die Seiten erscheinen dabei ruhig an ihren Plätzen,
+  //    der Reihe nach (leicht von unten, kaum merklich größer werdend)
+  const tf = tOpen + dOpen - 100;
+  bk.animate([{ transform: toRect(r0, r1) }, { transform: toRect(r0, grown(r1, 1.1)) }], { duration: 600, delay: tf, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'forwards' });
+  const gone = Promise.all(fadeBook(bk, 1, 0, { duration: 440, delay: tf, easing: 'ease-out' }).map(a => a.finished));
+  items.forEach((e, i) => {
+    e.style.visibility = '';
+    e.animate([{ opacity: 0, transform: 'translateY(12px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 480, delay: tf + 80 + Math.min(i, 12) * 35, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' });
+  });
+  await gone;
+}
+
+async function bookCloseFx(id, fx) {
+  const book = homeData.books.find(b => b.id === id); if (!book) { renderHome(); return; }
+  // 1. vorbereiten: Standbild der Buchansicht, darunter das Regal fertig aufbauen (noch unsichtbar)
+  const grid = $('#grid'), snap = snapshot(fx);
+  homeBook = null; await renderHome(true);
+  const target = grid.querySelector(`.book[data-id="${id}"]`);
+  if (!target) { snap.remove(); return; }
+  let r0 = rectOf(target.querySelector('.cv'));
+  if (r0.bottom > innerHeight - 20 || r0.top < rectOf(grid).top) { grid.scrollTop += r0.top - rectOf(grid).top - 40; r0 = rectOf(target.querySelector('.cv')); }
+  const others = [...grid.children].filter(e => e !== target), head = $('#home header');
+  target.style.visibility = 'hidden'; others.forEach(e => e.style.visibility = 'hidden');
+  await decoded(grid);
+  // das Buch erst jetzt anlegen, gleich mit seiner Startlage: offen, etwas näher, unsichtbar
+  const r1 = stageRect(r0), bk = fxBook(fx, book, r0), lid = bk.querySelector('.lid');
+  lid.style.transform = 'rotateY(-165deg)'; bk.style.transform = toRect(r0, grown(r1, 1.1));
+  // 2. los: die Seiten blenden aus (der Regal-Kopf erst danach), das offene Buch kommt aus der Nähe in die Mitte
+  snap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: 'ease-out', fill: 'forwards' });
+  head.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 340, delay: 220, easing: 'ease-out', fill: 'backwards' });
+  fadeBook(bk, 0, 1, { duration: 300, delay: 60, easing: 'ease-out' });
+  bk.animate([{ transform: toRect(r0, grown(r1, 1.1)) }, { transform: toRect(r0, r1) }], sp(spring(0, 480), { delay: 60, fill: 'both' }));
+  // 3. zuklappen, dann an den Platz im Regal; das Regal kommt dabei herein
+  const tc = 340, dClose = 540, tb = tc + dClose * 0.62;
+  lid.animate([{ transform: 'rotateY(-165deg)' }, { transform: 'rotateY(0deg)' }], { duration: dClose, delay: tc, easing: LID, fill: 'forwards' });
+  others.forEach((e, i) => { e.style.visibility = ''; e.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: tb + Math.min(i, 8) * 28, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' }); });
+  const home = spring(0.08, 480), back = bk.animate([{ transform: toRect(r0, r1) }, { transform: 'none' }], sp(home, { delay: tb, fill: 'forwards' }));
+  await wait(tb + home.settled);
+  target.style.visibility = ''; back.cancel(); bk.remove();   // sichtbar angekommen: das echte Buch übernimmt
+  target.querySelector('.cap').animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' });
+  await wait(220);
+}
+
+// Neues Buch: der Einband fliegt aus dem Dialog an seinen Platz im Regal, die anderen rücken weich nach; dann geht es auf
+async function bookCreateFx(b, from, fx) {
+  const grid = $('#grid'), key = e => e.dataset.id || e.className, before = new Map([...grid.children].map(e => [key(e), rectOf(e)]));
+  homeBook = null; await renderHome(true);
+  const el = grid.querySelector(`.book[data-id="${b.id}"]`); if (!el) return;
+  let r0 = rectOf(el.querySelector('.cv'));
+  const jump = r0.bottom > innerHeight - 20;
+  if (jump) { grid.scrollTop += r0.bottom - innerHeight + 60; r0 = rectOf(el.querySelector('.cv')); }
+  el.style.visibility = 'hidden';
+  const bk = fxBook(fx, b, r0);
+  if (!from) from = { left: innerWidth / 2 - r0.width / 2, top: innerHeight / 2 - r0.height / 2, width: r0.width, height: r0.height };
+  bk.style.transform = toRect(r0, from);
+  // Nachrücken (FLIP): jedes Element startet an seiner alten Stelle
+  if (!jump) for (const e of grid.children) {
+    const r = before.get(key(e)); if (!r || e === el) continue;
+    const n = rectOf(e), dx = r.left - n.left, dy = r.top - n.top;
+    if (Math.abs(dx) + Math.abs(dy) > 0.5) e.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], sp(spring(0.12, 460)));
+  }
+  // der Einband fliegt mit leichtem Nachfedern an seinen Platz; sobald er sichtbar sitzt, übernimmt das echte Buch
+  const cap = el.querySelector('.cap'), land = spring(0.12, 500), fly = bk.animate([{ transform: toRect(r0, from) }, { transform: 'none' }], sp(land, { fill: 'forwards' }));
+  cap.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 260, delay: land.settled * 0.5, easing: 'ease-out', fill: 'backwards' });
+  await wait(land.settled * 0.85);
+  el.style.visibility = ''; fly.cancel(); bk.remove();
+  await wait(80);   // kurz innehalten, dann geht das neue Buch auf
+  await bookOpenFx(el, b.id, fx);
+}
 
 /* Menüs der Startseite (⋯ an Büchern und Seiten) */
 let homeMenuKey = null, homeMenuBtn = null;
@@ -2737,9 +2917,11 @@ async function createBook() {
   return b;
 }
 async function newBook() {
-  if (navBusy || S.note) return;
+  if (navBusy || S.note || homeAnim) return;
+  lastCoverRect = null;
   const b = await createBook(); if (!b) return;
-  homeBook = b.id; renderHome();   // das neue Buch gleich öffnen
+  if (reduceMotion() || homeAnim) { homeBook = b.id; renderHome(); return; }   // das neue Buch gleich öffnen
+  animate(fx => bookCreateFx(b, lastCoverRect, fx));
 }
 async function editBook(b) {
   const r = await askBook('Buch bearbeiten', b.name, b.color, 'Speichern'); if (!r) return;
