@@ -162,20 +162,20 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 #stage{position:absolute;inset:0;overflow:hidden;background:var(--paper)}
 #stage canvas{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none}
 #penDot{position:absolute;left:0;top:0;display:none;border-radius:50%;opacity:.5;pointer-events:none}
-#bar{position:absolute;left:10px;right:10px;top:10px;display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);z-index:5;flex-wrap:wrap}
+#bar{position:absolute;left:10px;right:10px;top:10px;display:flex;align-items:center;gap:5px;padding:6px 8px;background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);z-index:5;flex-wrap:wrap}
 .tb{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--text)}
 .tb:hover{background:var(--hover)}
 .tb.on{background:var(--accent-soft);color:var(--accent)}
 .tb:disabled{opacity:.35;cursor:default;background:none}
-.sep{width:1px;height:28px;background:var(--border);margin:0 4px}
+.sep{width:1px;height:28px;background:var(--border);margin:0 3px}
 #title{field-sizing:content;min-width:90px;max-width:280px;font:inherit;font-weight:600;color:var(--text);background:transparent;border:1px solid transparent;border-radius:8px;padding:7px 8px;-webkit-user-select:text;user-select:text}
 #title:hover,#title:focus{border-color:var(--border);outline:none}
 @media (max-width:1500px){#bar{gap:4px}.sep{margin:0 2px}#title{max-width:180px;text-overflow:ellipsis}}  /* bleibt bei ~1440 px einzeilig */
-.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--border);margin:0 2px;padding:0;position:relative}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--border);margin:0 1px;padding:0;position:relative}
 .sw.on{box-shadow:0 0 0 2px var(--accent)}
 .sw.custom{background:conic-gradient(#e53935,#fdd835,#43a047,#1e88e5,#8e24aa,#e53935)}
 .sw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
-.sz{width:34px;height:40px;display:flex;align-items:center;justify-content:center}
+.sz{width:32px;height:40px;display:flex;align-items:center;justify-content:center}
 .sz span{display:block;border-radius:50%;background:var(--text)}
 .sz:hover{background:var(--hover)}
 .sz.on{background:var(--accent-soft)}
@@ -187,6 +187,10 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 #sizeMenu .smchips{display:flex;gap:6px;margin:8px 0 2px}
 #sizeMenu .smchips button{flex:1;justify-content:center;width:auto;height:34px;padding:0;border:1px solid var(--border);border-radius:9px;font-size:13px;font-variant-numeric:tabular-nums;color:var(--text)}
 #sizeMenu .smchips button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+#sizeMenu #stBox,#sizeMenu #tpAll{margin:10px 0}
+#sizeMenu #tpAll{margin-bottom:2px}
+#sizeMenu .szhint{font-size:12px;line-height:1.35;color:var(--muted);margin-top:8px}
+#sizeMenu .szhint:empty,#sizeMenu [hidden]{display:none!important}
 #sizeMenu .szprev{height:84px;border-radius:10px;background:var(--paper)}
 #szPrev{display:block;width:100%;height:100%}
 .grow{flex:1}
@@ -317,6 +321,7 @@ html.dark #toast{background:#eee;color:#111}
     <div class="sep"></div>
     <button class="tb" data-tool="pen" title="Stift (P)"><svg class="i"><use href="#ic-pen"/></svg></button>
     <button class="tb" data-tool="hl" title="Textmarker (M)"><svg class="i"><use href="#ic-hl"/></svg></button>
+    <button class="tb" data-tool="tape" title="Tape: abdecken, antippen deckt auf (T)"><svg class="i"><use href="#ic-tape"/></svg></button>
     <button class="tb" data-tool="shape" id="bShape" title="Formen (F)"><svg class="i"><use href="#ic-shape"/></svg></button>
     <button class="tb" data-tool="eraser" title="Radierer (E)"><svg class="i"><use href="#ic-eraser"/></svg></button>
     <button class="tb" data-tool="lasso" title="Auswählen / Verschieben (L)"><svg class="i"><use href="#ic-lasso"/></svg></button>
@@ -357,10 +362,16 @@ html.dark #toast{background:#eee;color:#111}
 <div id="sizeMenu" class="menu hidden">
   <div class="szhead"><span id="szLabel">Stift</span><b id="szVal"></b></div>
   <input type="range" id="szRange" min="0" max="1000" step="1" aria-label="Strichstärke">
-  <div class="szhead"><span>Glättung</span><b id="smVal"></b></div>
-  <div id="smPresets" class="smchips"></div>
-  <input type="range" id="smRange" min="0" max="100" step="1" aria-label="Glättung">
+  <div id="tpBox"><div class="szhead"><span>Muster</span></div><div id="tpPats" class="smchips"></div></div>
+  <div id="smBox">
+    <div class="szhead"><span>Glättung</span><b id="smVal"></b></div>
+    <div id="smPresets" class="smchips"></div>
+    <input type="range" id="smRange" min="0" max="100" step="1" aria-label="Glättung">
+  </div>
+  <div id="stBox" class="smchips"><button id="stBtn">Immer gerade</button></div>
   <div class="szprev"><canvas id="szPrev"></canvas></div>
+  <div id="tpAll" class="smchips"><button id="tpShow">Alle aufdecken</button><button id="tpHide">Alle abdecken</button></div>
+  <div class="szhint" id="szHint"></div>
 </div>
 <div id="shapeMenu" class="menu hidden">
   <div class="mh">Formen</div>
@@ -406,6 +417,7 @@ html.dark #toast{background:#eee;color:#111}
   <symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="ic-pen" viewBox="0 0 24 24"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/><path d="M14 6l3 3"/></symbol>
   <symbol id="ic-hl" viewBox="0 0 24 24"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 01-2.8 0l-5.2-5.2a2 2 0 010-2.8L14 4"/></symbol>
+  <symbol id="ic-tape" viewBox="0 0 24 24"><path d="M7.1 21.1L21.1 7.1 18 6 16.9 2.9 2.9 16.9 6 18z"/><path d="M8.6 12.6l2.8 2.8M12.6 8.6l2.8 2.8"/></symbol>
   <symbol id="ic-eraser" viewBox="0 0 24 24"><path d="M7 21h12"/><path d="M5.4 13.6l7.2-7.2a2 2 0 012.8 0l3.2 3.2a2 2 0 010 2.8L11.5 19.5H8.4L5.4 16.4a2 2 0 010-2.8z"/><path d="M9 10l5 5"/></symbol>
   <symbol id="ic-lasso" viewBox="0 0 24 24"><ellipse cx="12" cy="9.5" rx="8.5" ry="5.5" stroke-dasharray="3 3"/><path d="M7.5 14.2c-1.2 1.6-.6 3.8 1.5 4.8"/></symbol>
   <symbol id="ic-hand" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 00-4 0v5M14 10V4a2 2 0 00-4 0v6M10 10.5V6a2 2 0 00-4 0v8a8 8 0 0016 0v-3a2 2 0 00-4 0"/></symbol>
@@ -495,9 +507,12 @@ const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 const PALETTE = ['ink', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'];
 // Strichstärken in Weltkoordinaten: ein Strich ist bei jedem Zoom gleich dick wie die anderen.
 // Die Voreinstellungen lassen sich per Schieberegler ändern (aktive Dicke nochmal antippen).
-const SIZES = { pen: [1, 2, 3.5, 6, 10], hl: [8, 14, 22, 32] };
-const SIZE_DEFAULT = { pen: 2, hl: 1 };
-const SIZE_RANGE = { pen: [0.5, 30], hl: [4, 80] };
+const SIZES = { pen: [1, 2, 3.5, 6, 10], hl: [8, 14, 22, 32], tape: [14, 22, 32, 48] };
+const SIZE_DEFAULT = { pen: 2, hl: 1, tape: 1 };
+const SIZE_RANGE = { pen: [0.5, 30], hl: [4, 80], tape: [6, 120] };
+// Tape (wie Washi-Tape): eigene Farben und Muster
+const TAPE_PALETTE = ['#f4a7b9', '#f6c86e', '#9fd6aa', '#8ec5ef', '#c4a9ea', '#b8bec7'];
+const TAPE_PATTERNS = [['uni', 'Uni'], ['streifen', 'Streifen'], ['punkte', 'Punkte'], ['karo', 'Karo']];
 // Glättung der Handschrift (0 = roh … 1 = stark), fünf Voreinstellungen wie bei der Strichstärke; 0,5 entspricht der
 // früheren festen Glättung und ist gewählt
 const SMOOTH_PRESETS = [0, 0.25, 0.5, 0.75, 1], SMOOTH_IDX = 2;
@@ -508,7 +523,9 @@ const S = {
   saved: new Map(),    // id -> Objekt, so wie es zuletzt gespeichert wurde
   view: { tx: 0, ty: 0, z: 1 },
   level: 1,            // Zoomstufe, in der die Kacheln gerendert werden
-  tool: 'pen', color: { pen: 'ink', hl: '#fdd835' }, size: {}, presets: {}, sizeIdx: {},
+  tool: 'pen', color: { pen: 'ink', hl: '#fdd835', tape: '#8ec5ef' }, size: {}, presets: {}, sizeIdx: {},
+  tapePat: 'streifen',  // Muster neuer Tapes
+  straight: { hl: false, tape: false },   // Textmarker / Tape immer gerade
   sel: null, undo: [], redo: [], fingerDraw: false, dark: false,
   busy: 0, thumbDirty: false,
   shape: 'rect',       // gewählte Form des Formen-Werkzeugs
@@ -529,9 +546,11 @@ S.snap = store.get('snap', false) === true;
   S.smooth = S.smoothPresets[S.smoothIdx];
 }
 Object.assign(S.color, store.get('color', {}));
+if (TAPE_PATTERNS.some(([k]) => k === store.get('tapePat'))) S.tapePat = store.get('tapePat');
+{ const st = store.get('straight', {}); for (const k of ['hl', 'tape']) S.straight[k] = st[k] === true; }
 {
   const pre = store.get('presets', {}), idx = store.get('sizeIdx', {}), old = store.get('size', {});
-  for (const k of ['pen', 'hl']) {
+  for (const k of Object.keys(SIZES)) {
     const [lo, hi] = SIZE_RANGE[k], p = pre[k];
     const ps = S.presets[k] = Array.isArray(p) && p.length === SIZES[k].length && p.every(v => typeof v === 'number' && v >= lo && v <= hi) ? p : [...SIZES[k]];
     let i = idx[k];
@@ -885,7 +904,8 @@ function bboxOf(pts, m) {
 }
 const itemBox = it => it.t === 's' ? it.bb : [it.x, it.y, it.x + it.w, it.y + it.h];
 const boxHit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
-function makeStroke(pts, c, w, hl) { const p = Float32Array.from(pts); return { t: 's', id: uid(), c, w, hl: !!hl, pts: p, bb: bboxOf(p, w) }; }
+// more: weitere Angaben (Tape: tp, hid; Strich auf einem Tape: on)
+function makeStroke(pts, c, w, hl, more) { const p = Float32Array.from(pts); return { t: 's', id: uid(), c, w, hl: !!hl, pts: p, bb: bboxOf(p, w), ...more }; }
 // Ein Strich mit seinem Pfad: Kacheln, Formvorschau und Vorschaubilder zeichnen alle genau so
 function fillStroke(ctx, s, P) {
   ctx.fillStyle = colorOf(s.c);
@@ -894,9 +914,95 @@ function fillStroke(ctx, s, P) {
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 function drawItem(ctx, it, devScale) {
-  if (it.t === 's') fillStroke(ctx, it, strokePath(it));
+  if (it.t === 's') { if (it.tp) drawTape(ctx, it, devScale); else fillStroke(ctx, it, strokePath(it)); }
   else if (it.t === 'i') drawImageItem(ctx, it, devScale);
 }
+
+/* ---------- Tape ----------
+   Wie das Tape bei Goodnotes: ein Band zum Abdecken. Technisch ein Strich mit tp (Muster) und hid (abgedeckt);
+   Auswahl, Radierer, Rückgängig, Speichern und Export gelten damit wie für Striche. Abgedeckt ist es deckend in seiner
+   Farbe mit Muster, aufgedeckt nur ein Schimmer mit gestrichelter Kante. Antippen deckt auf bzw. wieder ab. Was auf
+   einem abgedeckten Tape geschrieben wird (on = Tape), verschwindet beim Aufdecken mit ihm: Antwort daraufschreiben,
+   aufdecken, vergleichen. */
+const covered = s => s.hid !== false;
+// Band (Mittellinie, Enden gerade abgeschnitten), Zacken an beiden Enden und Umriss für die gestrichelte Kante
+function tapeGeo(s) {
+  let g = pathCache.get(s); if (g) return g;
+  const p = s.pts, n = p.length / 3, h = s.w / 2;
+  const line = new Path2D(); line.moveTo(p[0], p[1]); for (let i = 1; i < n; i++) line.lineTo(p[i * 3], p[i * 3 + 1]);
+  const dir = (i0, i1) => { const dx = p[i1 * 3] - p[i0 * 3], dy = p[i1 * 3 + 1] - p[i0 * 3 + 1], d = Math.hypot(dx, dy); return d > 1e-6 ? [dx / d, dy / d] : [1, 0]; };
+  const m = Math.min(n - 1, 6), u0 = dir(0, m), u1 = dir(n - 1 - m, n - 1);
+  const k = Math.max(3, Math.round(s.w / 6)), dep = Math.min(s.w * 0.12, 4);
+  // Zacken an der Stirnseite durch (x, y) mit Richtung u, nach außen out (±1): von links (+Normale) nach rechts
+  const zig = (x, y, u, out) => Array.from({ length: 2 * k + 1 }, (_, j) => {
+    const q = h - j * h / k, o = j % 2 ? out * dep : 0;
+    return [x - u[1] * q + u[0] * o, y + u[0] * q + u[1] * o];
+  });
+  const z1 = zig(p[(n - 1) * 3], p[(n - 1) * 3 + 1], u1, 1), z0 = zig(p[0], p[1], u0, -1);
+  const teeth = new Path2D();
+  for (const z of [z0, z1]) { teeth.moveTo(...z[0]); for (const q of z.slice(1)) teeth.lineTo(...q); teeth.closePath(); }
+  // Umriss: links vorwärts, Zacken am Ende, rechts zurück, Zacken am Anfang
+  const edge = new Path2D(), side = (i, sg) => { const u = dir(Math.max(0, i - 2), Math.min(n - 1, i + 2)); return [p[i * 3] - u[1] * h * sg, p[i * 3 + 1] + u[0] * h * sg]; };
+  edge.moveTo(...side(0, 1)); for (let i = 1; i < n; i++) edge.lineTo(...side(i, 1));
+  for (const q of z1) edge.lineTo(...q);
+  for (let i = n - 1; i >= 0; i--) edge.lineTo(...side(i, -1));
+  for (const q of z0.slice().reverse()) edge.lineTo(...q);
+  edge.closePath();
+  g = { line, teeth, edge }; if (!s.live) pathCache.set(s, g);   // die Vorschau beim Zeichnen nicht merken
+  return g;
+}
+// Muster des Tapes, hell über der Farbe (je Zeichenfläche einmal angelegt, 16 Welteinheiten groß)
+const tapePats = new WeakMap();
+function tapePattern(ctx, kind) {
+  let m = tapePats.get(ctx); if (!m) tapePats.set(ctx, m = new Map());
+  if (m.has(kind)) return m.get(kind);
+  const N = 16, c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d'); g.fillStyle = g.strokeStyle = 'rgba(255,255,255,.42)';
+  if (kind === 'streifen') { g.lineWidth = 3.4; for (const o of [-N, 0, N]) { g.beginPath(); g.moveTo(o, N); g.lineTo(o + N, 0); g.stroke(); } }
+  else if (kind === 'punkte') { for (const [x, y] of [[4, 4], [12, 12]]) { g.beginPath(); g.arc(x, y, 1.9, 0, 6.2832); g.fill(); } }
+  else if (kind === 'karo') { g.fillRect(0, 0, N, 2); g.fillRect(0, 0, 2, N); }
+  const pat = kind === 'uni' ? null : ctx.createPattern(c, 'repeat');
+  m.set(kind, pat); return pat;
+}
+function drawTape(ctx, s, ds = 1) {
+  const g = tapeGeo(s), on = covered(s);
+  ctx.save(); ctx.lineCap = 'butt'; ctx.lineJoin = 'round'; ctx.lineWidth = s.w;
+  if (!on) ctx.globalAlpha = 0.16;
+  ctx.strokeStyle = ctx.fillStyle = s.c; ctx.stroke(g.line); ctx.fill(g.teeth);
+  const pat = on && tapePattern(ctx, s.tp);
+  if (pat) { ctx.strokeStyle = ctx.fillStyle = pat; ctx.stroke(g.line); ctx.fill(g.teeth); }
+  ctx.globalAlpha = 1;
+  if (!on) { ctx.setLineDash([5 * DPR / ds, 4 * DPR / ds]); ctx.lineWidth = 1.3 * DPR / ds; ctx.strokeStyle = s.c; ctx.stroke(g.edge); }
+  ctx.restore();
+}
+// Was gezeichnet wird, in welcher Reihenfolge: Bilder, dann Textmarker (unter der Schrift wie auf Papier, außer auf
+// einem Tape), dann alles andere wie gelegt; ohne das, was auf einem aufgedeckten Tape geschrieben wurde
+const orderCache = new WeakMap();
+function tapeInfo(items = S.items) {
+  let r = orderCache.get(items); if (r) return r;
+  const open = new Set(); for (const it of items) if (it.tp && !covered(it)) open.add(it.id);
+  const img = [], hl = [], rest = [];
+  for (const it of items) { if (it.on && open.has(it.on)) continue; (it.t === 'i' ? img : it.hl && !it.on ? hl : rest).push(it); }
+  orderCache.set(items, r = { order: [...img, ...hl, ...rest], open }); return r;
+}
+const paintOrder = (items = S.items) => tapeInfo(items).order;
+// sichtbar (nicht mit einem aufgedeckten Tape verschwunden)
+const shown = it => !it.on || !tapeInfo().open.has(it.on);
+// oberstes Tape unter (x, y)
+function tapeAt(x, y) {
+  for (let k = S.items.length - 1; k >= 0; k--) { const it = S.items[k]; if (it.tp && hitStroke(it, x, y, 4 / S.view.z)) return it; }
+  return null;
+}
+// Tapes ab- (hid) oder aufdecken. Kein Bearbeiten: nicht im Verlauf, aber gespeichert
+function setTapes(ids, hid) {
+  let changed = false;
+  const next = S.items.map(it => { if (it.tp && ids.has(it.id) && covered(it) !== hid) { changed = true; return { ...it, hid }; } return it; });
+  if (!changed) return false;
+  next.sheets = S.items.sheets;
+  for (const it of S.items) if (it.on && ids.has(it.on)) invalidateBox(it.bb);   // Schrift auf dem Tape kommt/geht mit
+  setItems(next); markDirty(); requestDraw(); return true;
+}
+function toggleTapeAt(x, y) { const t = tapeAt(x, y); if (t) setTapes(new Set([t.id]), !covered(t)); return !!t; }
 
 /* ---------- Canvas & Kacheln ----------
    cvMain zeigt Hintergrund + zwischengespeicherte Kacheln (512 px), cvLive den Strich,
@@ -931,7 +1037,7 @@ function renderTile(L, i, j) {
   fillBg(ctx, L, -i * T, -j * T, T, T);
   ctx.setTransform(s, 0, 0, s, -i * T, -j * T);
   const hid = hiddenIds();
-  for (const it of S.items) {
+  for (const it of paintOrder()) {
     if (hid && hid.has(it.id)) continue;
     if (boxHit(itemBox(it), t.wb)) drawItem(ctx, it, s);
   }
@@ -1054,7 +1160,14 @@ function liveStyle(a) {
 function liveWorld() { const { tx, ty, z } = S.view; ctxLive.setTransform(DPR * z, 0, 0, DPR * z, DPR * tx, DPR * ty); }
 function drawLive() {
   liveQ = false;
-  if (action && action.kind === 'draw') return;   // der Strich wird direkt gezeichnet
+  if (action && action.kind === 'draw') {   // der Strich wird direkt gezeichnet; Tape und Geraden hier jedes Mal ganz
+    const a = action; if (!a.redraw) return;
+    liveClear(); liveWorld();
+    const pts = a.straight ? straightPts(a) : a.pts;
+    if (a.tape) drawTape(ctxLive, { pts, w: a.w, c: a.c, tp: a.tp, live: true }, DPR * S.view.z);
+    else { ctxLive.fillStyle = colorOf(a.c); ctxLive.fill(buildPath(pts, a.w, a.hl)); }
+    return;
+  }
   liveClear(); liveWorld();
   const ctx = ctxLive, z = S.view.z, blue = S.dark ? '#8fb0ff' : '#2f6fed';
   if (action && action.kind === 'shape') liveShape(action);
@@ -1083,7 +1196,7 @@ function drawLive() {
         ctx.save();
         if (a.kind === 'move') ctx.translate(a.dx, a.dy);
         else { const [ax, ay] = a.anchor; ctx.translate(ax, ay); ctx.scale(a.s, a.s); ctx.translate(-ax, -ay); }
-        for (const it of S.items) if (S.sel.ids.has(it.id)) drawItem(ctx, it, DPR * z * (a.s || 1));
+        for (const it of paintOrder()) if (S.sel.ids.has(it.id)) drawItem(ctx, it, DPR * z * (a.s || 1));
         ctx.restore();
       }
       if (a.kind === 'move') { a0 += a.dx; a1 += a.dx; b0 += a.dy; b1 += a.dy; }
@@ -1221,11 +1334,13 @@ function withImages(list, added) {
 }
 
 /* ---------- Auswahl ---------- */
-// Striche eines Graphen gehören zusammen: wird einer gewählt, kommt die ganze Gruppe mit
+// Striche eines Graphen gehören zusammen: wird einer gewählt, kommt die ganze Gruppe mit;
+// mit einem Tape kommt auch, was darauf geschrieben ist
 function withGroups(ids) {
   const gs = new Set();
   for (const it of S.items) if (it.g && ids.has(it.id)) gs.add(it.g);
   if (gs.size) for (const it of S.items) if (it.g && gs.has(it.g)) ids.add(it.id);
+  for (const it of S.items) if (it.on && ids.has(it.on)) ids.add(it.id);
   return ids;
 }
 // Ausdehnung ohne Strichbreite (Punkte der Striche, Bildränder) – daran richtet sich das Raster aus
@@ -1287,7 +1402,7 @@ function lassoSelect(P) {
   if (len * S.view.z < 12) { // Antippen: oberstes Objekt unter dem Stift
     const x = P[0], y = P[1];
     for (let k = S.items.length - 1; k >= 0; k--) {
-      const it = S.items[k];
+      const it = S.items[k]; if (!shown(it)) continue;
       if (it.t === 'i' ? (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) : hitStroke(it, x, y, 8 / S.view.z)) { ids.add(it.id); break; }
     }
     return withGroups(ids);
@@ -1295,7 +1410,7 @@ function lassoSelect(P) {
   const lb = [Infinity, Infinity, -Infinity, -Infinity];
   for (let i = 0; i < P.length; i += 2) { lb[0] = Math.min(lb[0], P[i]); lb[1] = Math.min(lb[1], P[i + 1]); lb[2] = Math.max(lb[2], P[i]); lb[3] = Math.max(lb[3], P[i + 1]); }
   for (const it of S.items) {
-    const b = itemBox(it); if (!boxHit(b, lb)) continue;
+    const b = itemBox(it); if (!boxHit(b, lb) || !shown(it)) continue;
     if (it.t === 'i') { if (pointInPoly(it.x + it.w / 2, it.y + it.h / 2, P)) ids.add(it.id); continue; }
     const n = it.pts.length / 3, step = Math.max(1, Math.floor(n / 40));
     let inside = 0, tested = 0;
@@ -1312,7 +1427,7 @@ function selBitmap() {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d'), z = S.view.z;
   g.setTransform(DPR * z, 0, 0, DPR * z, DPR * (S.view.tx - sx0), DPR * (S.view.ty - sy0));
-  for (const it of S.items) if (S.sel.ids.has(it.id)) drawItem(g, it, DPR * z);
+  for (const it of paintOrder()) if (S.sel.ids.has(it.id)) drawItem(g, it, DPR * z);
   return { c, sx: sx0, sy: sy0 };
 }
 
@@ -1332,7 +1447,10 @@ function hitStroke(s, x, y, r) {
 }
 function eraseAt(x, y) {
   const r = ERASE_R / S.view.z;
-  for (const it of S.items) if (it.t === 's' && !action.removed.has(it.id) && hitStroke(it, x, y, r)) { action.removed.add(it.id); invalidateBox(it.bb); }
+  for (const it of S.items) if (it.t === 's' && !action.removed.has(it.id) && shown(it) && hitStroke(it, x, y, r)) {
+    action.removed.add(it.id); invalidateBox(it.bb);
+    if (it.tp) for (const o of S.items) if (o.on === it.id && !action.removed.has(o.id)) { action.removed.add(o.id); invalidateBox(o.bb); }   // was darauf steht, geht mit
+  }
 }
 
 /* ---------- Formen, Koordinatensysteme, Raster ----------
@@ -1714,8 +1832,25 @@ function smoothStart(x, y, p, t, toW = toWorld) {
 function strokeInput(a, sx, sy, p, t) {
   a.raw = [sx, sy, p, t];
   filterStep(a, sx, sy, p, t);
-  if (pushFiltered(a)) livePiece(a);
+  const pushed = pushFiltered(a);
+  if (a.holdT !== undefined && Math.hypot(sx - a.still[0], sy - a.still[1]) > 4) { a.still = [sx, sy]; armHold(a); }
+  if (a.redraw) requestLive(); else if (pushed) livePiece(a);
 }
+// Halten zum Begradigen (Textmarker, Tape): bleibt der Stift eine knappe halbe Sekunde fast still, wird der Strich zur
+// Geraden vom Anfang bis zum Stift, Weiterziehen dreht und verlängert sie (wie bei Goodnotes)
+function armHold(a) {
+  clearTimeout(a.holdT);
+  a.holdT = setTimeout(() => { if (action === a && !a.straight && a.pts.length > 9) { a.straight = a.redraw = true; liveClear(); requestLive(); } }, 450);
+}
+// Gerade vom Anfang bis zum Stift; fast waagerecht oder senkrecht wird genau waagerecht bzw. senkrecht
+function straightPts(a) {
+  const [x0, y0] = toWorld(...a.start), [x1, y1] = a.raw ? toWorld(a.raw[0], a.raw[1]) : [x0, y0];
+  const ang = Math.abs(Math.atan2(y1 - y0, x1 - x0)) * 180 / Math.PI;
+  let ex = x1, ey = y1;
+  if (ang < 4 || ang > 176) ey = y0; else if (Math.abs(ang - 90) < 4) ex = x0;
+  return [x0, y0, a.g.p, ex, ey, a.g.p];
+}
+const pathLen = p => { let L = 0; for (let i = 3; i < p.length; i += 3) L += Math.hypot(p[i] - p[i - 3], p[i + 1] - p[i - 2]); return L; };
 // Beim Absetzen: der Strich läuft bis dorthin weiter, wo der Stift abgehoben hat (bei starker Glättung endet er sonst zu früh)
 function catchUp(a) {
   const [x, y, p] = a.raw, g = a.g; let t = a.raw[3];
@@ -1736,11 +1871,15 @@ function startAction(e) {
   if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || spaceDown)) tool = 'hand';
   if (tool === 'hand') { action = { kind: 'pan', id: e.pointerId, sx, sy, tx: S.view.tx, ty: S.view.ty, touch: e.pointerType === 'touch' }; return; }
   if (tool !== 'lasso' && S.sel) clearSel();
-  if (tool === 'pen' || tool === 'hl') {
-    const hl = tool === 'hl', p = pressureOf(e);
-    action = { kind: 'draw', id: e.pointerId, hl, c: S.color[tool], w: S.size[tool], drawn: 0, ...smoothStart(sx, sy, p, e.timeStamp) };
-    liveClear(); liveStyle(action); liveWorld(); ctxLive.fillStyle = colorOf(action.c);
-    livePiece(action);
+  if (tool === 'pen' || tool === 'hl' || tool === 'tape') {
+    const hl = tool === 'hl', tape = tool === 'tape', p = pressureOf(e);
+    action = { kind: 'draw', id: e.pointerId, hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[tool], w: S.size[tool], drawn: 0,
+      ...smoothStart(sx, sy, p, e.timeStamp), start: [sx, sy], still: [sx, sy], straight: !!S.straight[tool] };
+    if (!tape) { const t = tapeAt(wx, wy); if (t && covered(t)) action.on = t.id; }   // auf ein abgedecktes Tape geschrieben
+    liveClear(); liveStyle(tape ? null : action);
+    if (tape || action.straight) { action.redraw = true; requestLive(); }
+    else { liveWorld(); ctxLive.fillStyle = colorOf(action.c); livePiece(action); }
+    if (hl || tape) armHold(action);
   } else if (tool === 'shape') {
     let cs = null;
     if (isCustom(S.shape)) { cs = customOf(S.shape); if (!cs) { if (!customReady) return; setShape('rect'); } }   // Bibliothek lädt noch / Form fehlt
@@ -1802,7 +1941,19 @@ function moveAction(e) {
 function deferLiveClear() {
   requestAnimationFrame(() => requestAnimationFrame(() => { if (!action || action.kind !== 'draw') { if (!action) liveStyle(null); liveClear(); drawLive(); } }));
 }
-function finishStroke(a) { settleStroke(a); commitLive([makeStroke(a.pts, a.c, a.w, a.hl)], a.noComposite); }
+// Textmarker und Tape: Kacheln neu zeichnen statt die Live-Ebene übernehmen (Textmarker liegt unter der Schrift)
+function finishStroke(a) {
+  clearTimeout(a.holdT);
+  if (a.straight) a.pts = straightPts(a); else if (a.redraw) { if (a.raw) catchUp(a); } else settleStroke(a);
+  if (a.tape) {
+    const r = a.raw || a.start;
+    if (!a.straight && Math.hypot(r[0] - a.start[0], r[1] - a.start[1]) < 6 && pathLen(a.pts) * S.view.z < 12) {   // nur angetippt
+      liveClear(); toggleTapeAt(...toWorld(...a.start)); return;
+    }
+    commitLive([makeStroke(a.pts, a.c, a.w, false, { tp: a.tp, hid: true })], true, true); return;
+  }
+  commitLive([makeStroke(a.pts, a.c, a.w, a.hl, a.on ? { on: a.on } : undefined)], a.noComposite || a.hl, a.hl);
+}
 // Fertige Striche übernehmen, die gerade auf der Live-Ebene zu sehen sind (Strich oder Form).
 // Liegen sie ganz im Bild, werden die Pixel von der Live-Ebene übernommen,
 // damit sie beim Absetzen exakt gleich aussehen.
@@ -1836,7 +1987,7 @@ function endAction(cancel) {
   const a = action; action = null;
   if (!a) return;
   if (a.kind === 'draw') {
-    if (cancel) { liveClear(); liveStyle(null); return; }
+    if (cancel) { clearTimeout(a.holdT); liveClear(); liveStyle(null); return; }
     finishStroke(a); return;
   }
   if (a.kind === 'shape') {
@@ -1902,12 +2053,13 @@ function penArrived() {
 // Das Fadenkreuz kommt erst zurück, wenn wirklich die Maus benutzt wird: Windows meldet beim Aufsetzen
 // und Abheben des Stifts auch Mausbewegungen, und beim Verlassen der Fläche ist der Cursor ohnehin nicht zu sehen.
 let penLast = false;   // zuletzt war der Stift auf oder über der Fläche, nicht die Maus
-function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : penLast && (t === 'pen' || t === 'hl') ? 'none' : 'crosshair'; }
+const inkTool = t => t === 'pen' || t === 'hl' || t === 'tape';   // Werkzeuge mit Farbe, Dicke und Punkt beim Schweben
+function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : penLast && inkTool(t) ? 'none' : 'crosshair'; }
 function hoverDot(e) {
   if (e.pointerType === 'mouse' && performance.now() < penActiveUntil) return;   // vom Stift ausgelöste Mausbewegung
   penLast = e.pointerType === 'pen';
   const k = S.tool;
-  const on = penLast && !action && !spaceDown && !(e.buttons & 34) && (k === 'pen' || k === 'hl');
+  const on = penLast && !action && !spaceDown && !(e.buttons & 34) && inkTool(k);
   if (on) {
     const d = Math.max(3, S.size[k] * S.view.z), [sx, sy] = localXY(e), st = penDot.style;
     st.width = st.height = d + 'px'; st.background = colorOf(S.color[k]);
@@ -1974,6 +2126,7 @@ function pointerEnd(e) {
     if (touches.size === 0) {
       const g = gesture; gesture = null;
       if (g && !g.cancelled && g.maxN === 2 && !g.moved && performance.now() - g.t0 < 350) { undo(); toast('Rückgängig', 900); }
+      else if (g && !g.cancelled && g.maxN === 1 && !g.moved && performance.now() - g.t0 < 350) toggleTapeAt(...toWorld(...g.c0));   // Tape antippen
       settleZoom(); viewChanged();
     } else gestureStart();
   }
@@ -2012,20 +2165,21 @@ function setTool(t) {
 }
 // Farbe und Dicke gelten für Stift, Textmarker, Lasso (übernehmen) und Formen – nicht für eigene Formen,
 // die behalten ihre gespeicherten Farben (Antippen wechselt dann zum Stift, wie beim Radierer)
-const penLike = () => S.tool === 'pen' || S.tool === 'hl' || S.tool === 'lasso' || (S.tool === 'shape' && !isCustom(S.shape));
+const penLike = () => inkTool(S.tool) || S.tool === 'lasso' || (S.tool === 'shape' && !isCustom(S.shape));
+const toolKind = () => S.tool === 'hl' || S.tool === 'tape' ? S.tool : 'pen';   // wessen Farbe und Dicke die Leiste zeigt
 function renderColors() {
   const box = $('#colors'); box.innerHTML = '';
-  const k = S.tool === 'hl' ? 'hl' : 'pen';
+  const k = toolKind();
   const show = penLike();
   box.style.opacity = show ? 1 : 0.35;
   const pick = () => { store.set('color', S.color); if (!show) setTool('pen'); else renderColors(); };
-  for (const c of PALETTE) {
+  for (const c of k === 'tape' ? TAPE_PALETTE : PALETTE) {
     const b = document.createElement('button'); b.className = 'sw' + (S.color[k] === c ? ' on' : '');
     b.style.background = colorOf(c); b.title = c === 'ink' ? 'Schwarz / Weiß' : c;
     b.onclick = () => { S.color[k] = c; pick(); };
     box.appendChild(b);
   }
-  const custom = !PALETTE.includes(S.color[k]);
+  const custom = !(k === 'tape' ? TAPE_PALETTE : PALETTE).includes(S.color[k]);
   const cb = document.createElement('label'); cb.className = 'sw custom' + (custom ? ' on' : ''); cb.title = 'Eigene Farbe';
   if (custom) cb.style.background = S.color[k];
   const inp = document.createElement('input'); inp.type = 'color'; inp.value = custom ? S.color[k] : '#3366ff';
@@ -2035,11 +2189,11 @@ function renderColors() {
 }
 const fmtSize = v => String(v).replace('.', ',');
 const fmtSmooth = v => v ? Math.round(v * 100) + ' %' : 'Aus';
-const dotPx = (k, v) => k === 'hl' ? clamp(2 + v * 0.55, 4, 26) : clamp(1.5 + v * 1.65, 3, 24);
+const dotPx = (k, v) => k === 'tape' ? clamp(2 + v * 0.42, 6, 26) : k === 'hl' ? clamp(2 + v * 0.55, 4, 26) : clamp(1.5 + v * 1.65, 3, 24);
 function setSize(k, i) { S.sizeIdx[k] = i; S.size[k] = S.presets[k][i]; store.set('sizeIdx', S.sizeIdx); }
 function renderSizes() {
   const box = $('#sizes'); box.innerHTML = '';
-  const k = S.tool === 'hl' ? 'hl' : 'pen';
+  const k = toolKind();
   const show = penLike();
   box.style.opacity = show ? 1 : 0.35;
   S.presets[k].forEach((v, i) => {
@@ -2062,18 +2216,28 @@ const sizeToT = (k, v) => { const [lo, hi] = SIZE_RANGE[k]; return Math.round(Ma
 const tToSize = (k, t) => { const [lo, hi] = SIZE_RANGE[k], v = lo * Math.pow(hi / lo, t / 1000); return v < 10 ? Math.round(v * 10) / 10 : Math.round(v * 2) / 2; };
 function showSize() {
   const k = sizeKind, v = S.size[k];
-  $('#szLabel').textContent = k === 'hl' ? 'Textmarker' : 'Stift';
+  $('#szLabel').textContent = { hl: 'Textmarker', tape: 'Tape' }[k] || 'Stift';
   $('#szVal').textContent = fmtSize(v);
   $('#smVal').textContent = fmtSmooth(S.smooth);
+  $('#stBtn').classList.toggle('on', !!S.straight[k]);
+  $('#szHint').textContent = k === 'tape' ? 'Tape antippen deckt auf oder wieder ab, auch mit dem Finger. Was auf dem Tape geschrieben steht, verschwindet beim Aufdecken mit. Am Ende kurz halten macht es gerade.'
+    : k === 'hl' ? 'Der Textmarker liegt unter der Schrift. Am Ende kurz halten macht die Linie gerade.' : '';
   drawSizePreview(k, v);
 }
 // Probestrich: Wellenlinie mit leichtem Zittern der Hand, im Tempo normaler Schrift (ein Ereignis alle 8 ms) durch
-// denselben Filter wie beim Schreiben; so dick, wie der Strich beim jetzigen Zoom aussieht
+// denselben Filter wie beim Schreiben; so dick, wie der Strich beim jetzigen Zoom aussieht. Tape und gerade
+// Textmarker: ein gerades Stück quer durch die Vorschau
 function drawSizePreview(k, v) {
   const cv = $('#szPrev'), W = cv.clientWidth || 248, H = cv.clientHeight || 84;
   if (cv.width !== Math.round(W * DPR) || cv.height !== Math.round(H * DPR)) { cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); }
   const g = cv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
   const w = clamp(v * S.view.z, 1, H * 0.6), m = Math.max(12, w / 2 + 6), amp = Math.max(3, (H / 2 - m) * 0.75);
+  if (k === 'tape' || (k === 'hl' && S.straight.hl)) {
+    const pts = [m, H / 2, 0.5, W - m, H / 2, 0.5];
+    if (k === 'tape') drawTape(g, { pts, w, c: S.color.tape, tp: S.tapePat, live: true }, DPR);
+    else { g.globalAlpha = hlAlpha(); g.fillStyle = colorOf(S.color.hl); g.fill(buildPath(pts, w, true)); }
+    return;
+  }
   let seed = 7, a = null; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647 - 0.5;
   for (let i = 0; i <= 160; i++) {
     const u = i / 160, x = m + u * (W - 2 * m), p = 0.45 + 0.25 * Math.sin(u * Math.PI);
@@ -2089,7 +2253,9 @@ function drawSizePreview(k, v) {
 function openSizeMenu(k, btn) {
   const m = $('#sizeMenu');
   const was = !m.classList.contains('hidden'); closeMenus(); if (was) return;
-  sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth();
+  sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth(); renderTapePats();
+  // Stift: Glättung; Textmarker: dazu „Immer gerade“; Tape: Muster, „Immer gerade“, alle auf- und abdecken
+  $('#tpBox').hidden = $('#tpAll').hidden = k !== 'tape'; $('#smBox').hidden = k === 'tape'; $('#stBox').hidden = k === 'pen';
   m.classList.remove('hidden'); showSize();
   const r = btn.getBoundingClientRect();
   m.style.top = (r.bottom + 8) + 'px';
@@ -2100,7 +2266,24 @@ $('#szRange').oninput = () => {
   S.presets[k][S.sizeIdx[k]] = v; S.size[k] = v;
   store.set('presets', S.presets); showSize(); renderSizes();
 };
-// Glättung: vier Voreinstellungen (Knöpfe) für Stift und Textmarker, der Regler stellt die gewählte ein (wie bei der
+// Tape: Muster neuer Tapes, gerade oder frei, alle Tapes der Seite auf- oder abdecken
+function renderTapePats() {
+  const box = $('#tpPats'); box.innerHTML = '';
+  for (const [k, name] of TAPE_PATTERNS) {
+    const b = document.createElement('button'); b.className = S.tapePat === k ? 'on' : ''; b.textContent = name;
+    b.onclick = () => { S.tapePat = k; store.set('tapePat', k); renderTapePats(); showSize(); };
+    box.appendChild(b);
+  }
+}
+$('#stBtn').onclick = () => { S.straight[sizeKind] = !S.straight[sizeKind]; store.set('straight', S.straight); showSize(); };
+function allTapes(hid) {
+  const ids = new Set(S.items.filter(it => it.tp).map(it => it.id));
+  if (!ids.size) { toast('Auf dieser Seite gibt es noch kein Tape'); return; }
+  setTapes(ids, hid);
+}
+$('#tpShow').onclick = () => allTapes(false);
+$('#tpHide').onclick = () => allTapes(true);
+// Glättung: fünf Voreinstellungen (Knöpfe) für Stift und Textmarker, der Regler stellt die gewählte ein (wie bei der
 // Strichstärke); alles bleibt gespeichert. Neue Striche werden so geschrieben, alte bleiben, wie sie sind.
 function renderSmooth() {
   const box = $('#smPresets'); box.innerHTML = '';
@@ -2161,7 +2344,7 @@ async function loadCustomShapes() {
 }
 async function saveCustomShape() {
   if (!S.sel) return;
-  const strokes = S.items.filter(it => S.sel.ids.has(it.id) && it.t === 's');
+  const strokes = S.items.filter(it => S.sel.ids.has(it.id) && it.t === 's' && !it.tp);   // Tapes nicht als Form
   if (!strokes.length) return;
   const n = strokes.reduce((m, s) => m + s.pts.length / 3, 0);
   if (n > CUSTOM_MAX_PTS) { toast(`Die Auswahl ist zu groß für eine Form (${n.toLocaleString('de-DE')} Punkte, höchstens ${CUSTOM_MAX_PTS.toLocaleString('de-DE')})`, 4500); return; }
@@ -2268,13 +2451,13 @@ $('#sDup').onclick = () => {
 $('#sSave').onclick = saveCustomShape;
 $('#sColor').onclick = () => {
   if (!S.sel) return;
-  commit(S.items.map(it => S.sel.ids.has(it.id) && it.t === 's' ? { ...it, c: it.hl ? S.color.hl : S.color.pen } : it)); refreshSel();
+  commit(S.items.map(it => S.sel.ids.has(it.id) && it.t === 's' ? { ...it, c: it.tp ? S.color.tape : it.hl ? S.color.hl : S.color.pen } : it)); refreshSel();
 };
 $('#sSize').onclick = () => {
   if (!S.sel) return;
   commit(S.items.map(it => {
     if (!S.sel.ids.has(it.id) || it.t !== 's') return it;
-    const w = it.hl ? S.size.hl : S.size.pen;
+    const w = it.tp ? S.size.tape : it.hl ? S.size.hl : S.size.pen;
     return { ...it, w, bb: bboxOf(it.pts, w) };
   })); refreshSel();
 };
@@ -2306,7 +2489,7 @@ document.addEventListener('keydown', e => {
   else if ((k === 'delete' || k === 'backspace') && S.sel) { e.preventDefault(); $('#sDel').click(); }
   else if (k === 'escape') { clearSel(); closeMenus(); }
   else if (!mod && !e.altKey && k === 'g') toggleSnap();
-  else if (!mod && !e.altKey) { const t = { p: 'pen', m: 'hl', f: 'shape', e: 'eraser', l: 'lasso', h: 'hand' }[k]; if (t) setTool(t); }
+  else if (!mod && !e.altKey) { const t = { p: 'pen', m: 'hl', t: 'tape', f: 'shape', e: 'eraser', l: 'lasso', h: 'hand' }[k]; if (t) setTool(t); }
 });
 document.addEventListener('keyup', e => {
   if (e.key === ' ' && spaceDown) { e.preventDefault(); spaceDown = false; setTool(S.tool); }
@@ -2521,7 +2704,7 @@ async function renderTo(items, box, scale, bg, o = {}) {
     }
   });
   ctx.setTransform(scale, 0, 0, scale, -x0 * scale, -y0 * scale);
-  for (const it of items) {
+  for (const it of paintOrder(items)) {
     if (it.t === 'i') {
       const e = imgEntry(it.img); await e.ready;
       // Export: jedes Bild einzeln in voller Auflösung dekodieren und gleich wieder freigeben
@@ -2530,9 +2713,10 @@ async function renderTo(items, box, scale, bg, o = {}) {
       if (use) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(use, it.x, it.y, it.w, it.h); }
       if (bmp) bmp.close();
     } else if (o.cheap) paint(() => {
-      // Vorschaubild: Striche als einfache Linien (schnell)
+      // Vorschaubild: Striche als einfache Linien (schnell), Tapes deckend bzw. aufgedeckt nur als Schimmer
       ctx.strokeStyle = colorOf(it.c); ctx.lineWidth = it.w; ctx.lineCap = ctx.lineJoin = 'round';
       if (it.hl) { ctx.globalAlpha = hlAlpha(); if (!isDark()) ctx.globalCompositeOperation = 'multiply'; }
+      if (it.tp) { ctx.lineCap = 'butt'; if (!covered(it)) ctx.globalAlpha = 0.16; }
       ctx.beginPath(); ctx.moveTo(it.pts[0], it.pts[1]);
       const step = Math.max(3, Math.floor(it.pts.length / 3 / 20) * 3);
       for (let i = step; i < it.pts.length; i += step) ctx.lineTo(it.pts[i], it.pts[i + 1]);

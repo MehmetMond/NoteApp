@@ -1,5 +1,9 @@
 # Notizen für das Surface Pro 11 (Version 1.5.2)
 
+## Neu (zuerst in der Browser-Version)
+- **Tape** (Knopf neben dem Textmarker, Taste T), wie bei Goodnotes: Über Text oder Bilder ziehen deckt sie ab, wie mit Washi-Tape. **Antippen** deckt auf (das Tape bleibt als blasser, gestrichelter Umriss), nochmal antippen deckt wieder ab, auch mit dem Finger. Was auf ein abgedecktes Tape geschrieben wird, gehört zum Tape und verschwindet beim Aufdecken mit: Antwort daraufschreiben, aufdecken, vergleichen. Am Ende kurz halten macht das Tape gerade (weiterziehen dreht es). Im Menü (gewählte Dicke nochmal antippen): Muster Uni, Streifen, Punkte oder Karo, „Immer gerade“ und **Alle aufdecken / Alle abdecken** für die ganze Seite. Radieren nimmt das Tape mit dem, was darauf steht; das Lasso wählt beides zusammen.
+- **Textmarker:** Er liegt jetzt unter der Schrift wie auf Papier, die Schrift bleibt klar und wird nicht eingefärbt (vor allem im Darkmode). Am Ende kurz halten macht die Linie gerade; im Menü gibt es „Immer gerade“. Fast waagerechte Linien werden genau waagerecht.
+
 ## Neu in 1.5.2: Glättung beim Stift
 - **Glättung beim Stift:** Die gewählte Strichstärke nochmal antippen, dann gibt es unter der Dicke die **Glättung** mit fünf Voreinstellungen: **Aus** (die Linie genau so, wie der Stift sie zeichnet), **25 %**, **50 %** (wie bisher, voreingestellt), **75 %** (deutlich ruhiger) und **100 %** (sehr ruhig). Die Glättung richtet sich nach dem Tempo: Wer langsam schreibt, wo Zittern auffällt, bekommt mehr davon weggenommen; schnell geschriebene Linien folgen dem Stift fast ohne Verzögerung, so bleiben auch bei 100 % die Buchstaben in Form. Der Regler darunter stellt die gewählte Voreinstellung fein ein, die Vorschau zeigt die Wirkung an einer Probelinie. Gilt für Stift und Textmarker und bleibt gespeichert; wirkt auf neue Striche, schon geschriebene bleiben, wie sie sind.
 - Beim Öffnen eines Buchs blendet das Buch jetzt als Ganzes aus, ohne helle Striche zwischen den Seiten.
@@ -60,6 +64,8 @@
 | Schreiben | Surface Pen (druckempfindlich) |
 | Strichstärke | Punkte in der Leiste; die gewählte nochmal antippen für den Schieberegler |
 | Glättung | Gewählte Strichstärke nochmal antippen: Aus, 25, 50 (wie bisher), 75 oder 100 %, Feineinstellung mit dem Regler |
+| Tape | Tape-Knopf (T), über den Inhalt ziehen; antippen deckt auf oder ab; am Ende halten = gerade |
+| Gerader Textmarker | Am Ende kurz halten, oder im Menü des Textmarkers „Immer gerade“ |
 | Formen und Graphen | Formen-Knopf (F), dann aufziehen; nochmal antippen öffnet die Auswahl |
 | Am Raster ausrichten | Magnet-Knopf (G) an/aus |
 | Radieren | Radierer-Ende des Stifts oder die Taste am Stift gedrückt halten, oder Radierer-Werkzeug |

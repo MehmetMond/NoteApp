@@ -388,7 +388,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
       && r.picked[0] === 'arrow' && r.picked[1] === '"arrow"' && r.picked[2] === 'Formen (F) – Pfeil' && r.onMark2.join() === 'arrow' && r.canvasCloses
       && r.colorSize[0] === 'shape' && r.colorSize[1] === '#1e88e5' && r.colorSize[2] === 6 && r.colorSize[3] === '1' && r.colorSize[4]
       && r.keyF.join() === 'shape,crosshair' && r.keyG[0] === true && r.keyG[1] === 'Am Raster ausrichten: an'
-      && /hl bShape eraser/.test(r.order) && /bBg bSnap/.test(r.order);
+      && /hl tape bShape eraser/.test(r.order) && /bBg bSnap/.test(r.order);
     check('menuUI', ok, r);
     // Farbe/Dicke werden für die Form übernommen
     await drag(300, 300, 500, 420); const [s] = await last();
