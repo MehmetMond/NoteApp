@@ -1,7 +1,7 @@
 # Notizen für das Surface Pro 11 (Version 1.5.0)
 
 ## Neu (zuerst in der Browser-Version)
-- **Animationen auf der Startseite:** Ein Buch fliegt beim Öffnen in die Mitte, klappt auf und gibt den Blick auf seine Seiten frei; beim Zurückgehen klappt es zu und stellt sich wieder ins Regal. Ein neues Buch fliegt aus dem Dialog an seinen Platz im Regal und geht dann auf. Ist im System „Bewegung reduzieren“ eingeschaltet, wird ohne Animation umgeschaltet.
+- **Animationen auf der Startseite:** Ein Buch fliegt beim Öffnen in die Mitte und schlägt wie ein echtes dickes Buch in der Mitte auf (die Seiten wölben sich in die Falz, der Rücken hält die Deckel zusammen, außen sieht man den Schnitt), dann gibt es den Blick auf seine Seiten frei; beim Zurückgehen klappt es zu und stellt sich wieder ins Regal. Ein neues Buch fliegt aus dem Dialog an seinen Platz im Regal und geht dann auf. Ist im System „Bewegung reduzieren“ eingeschaltet, wird ohne Animation umgeschaltet.
 
 ## Neu in 1.5.0: Seitenformate und PDF-Export
 - **Seitenformat:** Bei „Neue Seite“ fragt die App, ob die Seite eine unendliche Fläche oder ein Dokument aus Blättern DIN A4 bzw. DIN A3 sein soll, und bei DIN hoch oder quer. Vorausgewählt ist das Format der letzten Seite im Buch. Die Blätter liegen untereinander auf einem grauen Tisch; Punkte, Kästchen und Linien passen genau ins Blatt (mit gleichmäßigem Rand, bei A3 quer jede Hälfte für sich). Was über den Rand geschrieben wird, bleibt sichtbar, kommt aber nicht in den Export.

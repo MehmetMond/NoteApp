@@ -79,13 +79,36 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 .mbtn:hover,.mbtn.on{background:var(--hover);color:var(--text)}
 .mbtn svg{width:20px;height:20px}
 /* Buch anlegen/öffnen/schließen: Ebene über allem (fängt Klicks ab), Standbild der alten Ansicht,
-   Buch mit aufklappbarem Einband */
-#fx{position:fixed;inset:0;z-index:30;perspective:1800px;perspective-origin:50% 40%}
-.fxbook{position:absolute;transform-origin:0 0;transform-style:preserve-3d;border-radius:4px 12px 12px 4px;will-change:transform}
-.fxbook .block{position:absolute;top:2.2%;bottom:2.2%;left:3%;right:-2px;border-radius:2px 8px 8px 2px;background:linear-gradient(90deg,color-mix(in srgb,var(--page-edge) 60%,var(--page)),var(--page) 9%);box-shadow:0 1px 2px rgba(0,0,0,.14),0 10px 22px -10px rgba(0,0,0,.4)}
-.fxbook .lid{position:absolute;inset:0;border-radius:inherit;transform-origin:0 50%;transform-style:preserve-3d;will-change:transform}
+   Buch als 3D-Körper (Deckel mit Stärke und runden Ecken, zwei Seitenblöcke, die sich beim Aufschlagen wölben) */
+#fx{position:fixed;inset:0;z-index:30;perspective:900px;perspective-origin:50% 150%}
+.fxbook,.fxbook .tilt,.fxbook .lidz,.fxbook .lid,.fxbook .mz{transform-style:preserve-3d}
+.fxbook{position:absolute;transform-origin:0 0;will-change:transform}
+.fxbook .tilt,.fxbook .lidz,.fxbook .lid,.fxbook .mz{position:absolute;inset:0}
+.fxbook .tilt{transform-origin:0 50%}
+.fxbook .lid{border-radius:4px 12px 12px 4px;transform-origin:0 50%;will-change:transform}
+.fxbook .f{position:absolute;transform-origin:0 0}
+.fxbook .f>i{position:absolute;inset:0;border-radius:inherit;opacity:0}
+/* Rückendeckel (mit weichem Schatten auf den Tisch, ebenso die aufgeklappte linke Hälfte); Innenseiten der Deckel wie
+   der Einband, Kanten (.rim) setzt fxBook in der Farbe des Einbands */
+.fxbook .back{border-radius:4px 12px 12px 4px;background:linear-gradient(165deg,color-mix(in srgb,var(--c1) 80%,var(--c2)),var(--c2));box-shadow:0 34px 60px -22px rgba(0,0,0,.55),0 10px 22px -10px rgba(0,0,0,.35)}
+/* Schatten links: derselbe wie hinten, aber als weich gezeichnete Fläche (box-shadow ließe unter dem Element ein Loch,
+   das man sieht, solange die linke Hälfte noch angehoben ist) */
+.fxbook .lsh .sh{position:absolute;inset:0;opacity:0}
+.fxbook .lsh .sh::before,.fxbook .lsh .sh::after{content:'';position:absolute;border-radius:12px 4px 4px 12px}
+.fxbook .lsh .sh::before{inset:56px 22px -12px;background:rgba(0,0,0,.55);filter:blur(30px)}
+.fxbook .lsh .sh::after{inset:20px 10px 0;background:rgba(0,0,0,.35);filter:blur(11px)}
 .fxbook .lid .cover{backface-visibility:hidden;-webkit-backface-visibility:hidden}
-.fxbook .lid .inner{position:absolute;inset:0;border-radius:12px 4px 4px 12px;transform:rotateY(180deg);backface-visibility:hidden;-webkit-backface-visibility:hidden;background:linear-gradient(90deg,color-mix(in srgb,var(--c2) 70%,#000),var(--c2) 85%,color-mix(in srgb,var(--c2) 80%,#000));box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.fxbook .lid .inner{inset:0;border-radius:12px 4px 4px 12px;transform-origin:50% 50%;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:linear-gradient(195deg,color-mix(in srgb,var(--c1) 80%,var(--c2)),var(--c2))}
+/* Seiten: Papier mit feinem Punkteraster, darüber der Schatten der Wölbung (i); Schnitt mit unregelmäßigen
+   Seitenlinien, unten zum Deckel hin dunkler */
+.fxbook .pg{background:radial-gradient(color-mix(in srgb,var(--page-edge) 55%,transparent) .8px,transparent 1.05px) 0 0/11px 11px,linear-gradient(180deg,color-mix(in srgb,var(--page) 96%,#fff),var(--page))}
+.fxbook .pgb{background:var(--page)}
+.fxbook .cut{--sd:90deg;--dk:linear-gradient(rgba(0,0,0,.2),rgba(0,0,0,.2));background:var(--dk),repeating-linear-gradient(var(--sd),transparent 0 1.5px,color-mix(in srgb,var(--page-edge) 75%,transparent) 1.5px 2.1px),repeating-linear-gradient(var(--sd),transparent 0 3.3px,rgba(0,0,0,.07) 3.3px 3.9px),repeating-linear-gradient(var(--sd),transparent 0 5.9px,rgba(255,255,255,.18) 5.9px 6.5px),var(--page)}
+.fxbook .cut-b{--sd:180deg;--dk:linear-gradient(180deg,rgba(0,0,0,.32),rgba(0,0,0,.12) 45%,rgba(0,0,0,.1))}
+.fxbook .cut-s{--dk:linear-gradient(rgba(0,0,0,.36),rgba(0,0,0,.36))}
+.fxbook .spn{border-radius:50% 50% 0 0/100% 100% 0 0}
+.fxbook .spn>i{background:linear-gradient(0deg,color-mix(in srgb,var(--c2) 70%,#000),color-mix(in srgb,var(--c2) 45%,#000))}
+.fxbook .spine{background:linear-gradient(90deg,color-mix(in srgb,var(--c2) 80%,#000),color-mix(in srgb,var(--c2) 92%,#000) 50%,color-mix(in srgb,var(--c2) 80%,#000))}
 #fx .fxsnap{pointer-events:none}
 /* Seiten */
 .card{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm);cursor:pointer;display:flex;flex-direction:column;transition:transform .2s cubic-bezier(.2,.7,.3,1),box-shadow .2s}
@@ -2739,18 +2762,149 @@ function spring(bounce, ms) {
 // WAAPI-Optionen einer Feder (ohne settled)
 const sp = (s, o = {}) => ({ easing: s.easing, duration: s.duration, ...o });
 const LID = 'cubic-bezier(.45,.05,.2,1)';   // Einband auf- und zuklappen: weich an und weich aus
-// transform, das ein Element mit Rechteck a (origin oben links) auf Rechteck b legt (Breite bestimmt die Größe)
-const toRect = (a, b, extra = '') => `translate(${b.left - a.left}px,${b.top - a.top}px) scale(${b.width / a.width})${extra}`;
-// Kopie des Buchs: Seitenblock, Schnitt und Einband mit Außen- und Innenseite; transform-origin oben links
+// transform, das ein Element mit Rechteck a (origin oben links) auf Rechteck b legt (Breite bestimmt die Größe;
+// scale3d, damit die Dicke des Buchs im Raum mitwächst)
+const toRect = (a, b) => { const k = b.width / a.width; return `translate(${b.left - a.left}px,${b.top - a.top}px) scale3d(${k},${k},${k})`; };
+// Lage des Buchs: im Regal flach (Tiefe zusammengedrückt, deckt sich genau mit dem echten Buch), auf der Bühne
+// frontal mit voller Dicke; die Sicht von leicht vorne (#fx: perspective-origin unterhalb) zeigt Schnitt und Kanten.
+const FLAT = 'scaleZ(.02)', TILT = 'scaleZ(1)';
+const OPEN = 'rotateY(-180deg)', SHUT = 'rotateY(0deg)';   // Vorderdeckel aufgeschlagen bzw. zu
+/* Kopie des Buchs als 3D-Körper (Koordinaten des ungedrehten Buchs, transform-origin oben links), in der Mitte
+   aufgeschlagen wie ein dickes Buch: Rückendeckel, darauf die rechte Hälfte der Seiten. Am Rücken aufgehängt darüber
+   die linke Hälfte (dieselben Seiten, in der Tiefe gespiegelt) mit dem Vorderdeckel (Innenseite, Einband außen); sie
+   klappt als Ganzes nach links auf. Die Kanten der Deckel folgen genau den runden Ecken des Einbands, in seiner Farbe.
+   Beim Aufklappen wölben sich die Seiten: am Rücken gebunden laufen sie in einer Falz zusammen, jede behält ihre
+   Länge, darum ziehen sich die oberen nach innen und die unteren stehen außen weiter heraus (wie bei einem echten
+   Buch). In .tilt liegt alles, was sich neigt; .pgs ist der flache Schnitt wie im Regal, .lsh der Schatten der
+   linken Hälfte auf dem Tisch. Der Rücken (.spine) verbindet Vorder- und Rückendeckel: ein Bezug, der beim Aufklappen
+   mitgeht und offen unter dem Bund liegt. */
 function fxBook(fx, book, r) {
+  const W = r.width, H = r.height, T = Math.round(W * 0.105), c = Math.max(2.5, W * 0.022);   // T: Dicke je Hälfte
+  const x1 = W * 0.97, y0 = H * 0.022, y1 = H * 0.978, ph = y1 - y0;
   const el = document.createElement('div'); el.className = 'fxbook'; coverVars(el, book.color);
-  Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
-  el.innerHTML = '<span class="pgs"></span><span class="block"></span><span class="lid"><span class="cover"><span class="gl"></span><span class="lbl"><span class="t"></span></span></span><span class="inner"></span></span>';
+  Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', width: W + 'px', height: H + 'px' });
+  const px = v => +v.toFixed(2) + 'px', rad = v => +v.toFixed(4) + 'rad';
+  const face = (cls, st, more = '', inner = '') => `<span class="f ${cls}" style="${st}" ${more}>${inner}</span>`;
+  const box = (l, t, w, h) => `left:${px(l)};top:${px(t)};width:${px(w)};height:${px(h)};`;
+  // Teile, die sich mit dem Deckel bewegen: Eigenschaft und Werte von zu bis auf, gleichmäßig über den Weg verteilt
+  // (bendBook spielt sie im Takt des Deckels ab)
+  const parts = [], bend = (prop, ...v) => (parts.push({ prop, v }), `data-k="${parts.length - 1}"`);
+  // Kante eines Deckels (Dicke c ab z0) als Streifen von A nach B in der Ebene des Buchs, Farbe wie der Einband an
+  // der Stelle, nach Richtung abgedunkelt (unten am dunkelsten)
+  const wall = (ax, ay, bx, by, z0) => {
+    const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy), nx = -dy / l, ny = dx / l, m = Math.round(60 * (1 - (ay + by) / 2 / H));
+    return face('rim', box(0, 0, l + 0.6, c) + `transform:translate3d(${px(ax)},${px(ay)},${px(z0)}) rotateZ(${rad(Math.atan2(dy, dx))}) rotateX(90deg);` +
+      `background:color-mix(in srgb,color-mix(in srgb,var(--c1) ${m}%,var(--c2)) ${Math.round(91 - 7 * ny + 4 * nx)}%,#000)`);
+  };
+  // Umriss mit den Radien des Einbands (links 4, rechts 12 px): unten, rechts und die Ecken dazwischen; oben links
+  // sieht man nie
+  const rim = z0 => {
+    const pts = [], arc = (cx, cy, rr, f0, f1, k) => { for (let i = 0; i <= k; i++) { const f = f0 + (f1 - f0) * i / k; pts.push([cx + rr * Math.cos(f), cy + rr * Math.sin(f)]); } };
+    const R = Math.min(12, W / 4), q = Math.min(4, W / 8), P2 = Math.PI / 2;
+    arc(q, H - q, q, Math.PI, P2, 2); arc(W - R, H - R, R, P2, 0, 4); arc(W - R, R, R, 0, -P2, 4);
+    return pts.slice(1).map((p, i) => wall(pts[i][0], pts[i][1], p[0], p[1], z0)).join('');
+  };
+  // Profil der obersten Seite (x vom Bund, z über dem Rückendeckel). Zu: flach bei z = T. Auf: am Bund unten
+  // gebunden (z = 0), steil hoch, leicht gewölbt, dann flach; X so, dass die Länge gleich bleibt
+  const U = [0, .01, .025, .05, .085, .13, .2, .3, .45, .65, .84, 1], lam = W * 0.032, hump = T * 0.16;
+  const zf = (x, X) => T * (1 - Math.exp(-x / lam)) + hump * 6.75 * (x / X) * (1 - x / X) ** 2;
+  const prof = X => U.map(u => [u * X, zf(u * X, X)]), len = P => P.slice(1).reduce((s, p, i) => s + Math.hypot(p[0] - P[i][0], p[1] - P[i][1]), 0);
+  let X = x1; for (let i = 0; i < 8; i++) X *= x1 / len(prof(X));
+  const P = prof(X), seg = P.slice(1).map((p, i) => ({ x: P[i][0], z: P[i][1], l: Math.hypot(p[0] - P[i][0], p[1] - P[i][1]), a: Math.atan2(p[1] - P[i][1], p[0] - P[i][0]) }));
+  const S = [0]; seg.forEach(s => S.push(S[S.length - 1] + s.l));
+  // Schatten der Wölbung je Punkt: je steiler, desto dunkler (in der Falz am dunkelsten)
+  const ang = P.map((_, i) => (seg[Math.max(0, i - 1)].a + seg[Math.min(seg.length - 1, i)].a) / 2);
+  const shade = i => Math.min(0.5, 0.62 * (1 - Math.cos(ang[i]))).toFixed(3);
+  const n = seg.length, last = P[n], fe = Math.hypot(x1 - last[0], last[1]), hc = Math.ceil(T + hump + 2);
+  const flatTop = S.map(v => `${px(v)} ${px(T)}`).reverse().join(','), curvedTop = P.map(p => `${px(p[0])} ${px(p[1])}`).reverse().join(',');
+  const down = rad(-Math.PI / 2);
+  // eine Hälfte der Seiten (rechts; links dieselbe im Deckel, gespiegelt). Unter dem flachen Teil liegt eine Seite als
+  // Grund, unter der Falz je Stück eine etwas breitere im Ton des Schattens: zwischen den Stücken der Wölbung scheint
+  // so nie der Hintergrund durch (auch nicht beim Ausblenden, wo sich Überlappungen als helle Linien zeigen würden)
+  const j = 5, bw = S[n] - S[j];
+  const under = seg.slice(0, j).map((s, i) => {
+    const a = `translate3d(${px(S[i] - 0.6)},0,${px(T - 0.5)}) rotateY(0rad)`, b = `translate3d(${px(s.x - 0.6 * Math.cos(s.a))},0,${px(s.z - 0.6 * Math.sin(s.a) - 0.5)}) rotateY(${rad(-s.a)})`;
+    return face('pgu', box(0, y0, s.l + 1.2, ph) + `background:color-mix(in srgb,var(--page) ${Math.round(100 - 100 * shade(i))}%,#000);transform:${a}`, bend('transform', a, b));
+  }).join('');
+  const half = under + face('pg pgb', box(0, y0, bw, ph) + `transform:translate3d(${px(S[j])},0,${px(T - 0.4)}) scaleX(1)`,
+      bend('transform', `translate3d(${px(S[j])},0,${px(T - 0.4)}) scaleX(1)`, `translate3d(${px(P[j][0])},0,${px(T * 0.95)}) scaleX(${((X - P[j][0]) / bw).toFixed(4)})`)) +
+    seg.map((s, i) => {
+      const a = `translate3d(${px(S[i])},0,${px(T)}) rotateY(0rad)`, b = `translate3d(${px(s.x)},0,${px(s.z)}) rotateY(${rad(-s.a)})`;
+      return face('pg', box(0, y0, s.l + 0.3, ph) + `background-position:${px(-S[i])} 0,0 0;` + (i === n - 1 ? 'border-radius:0 3px 3px 0;' : '') + `transform:${a}`,
+        bend('transform', a, b), `<i style="background:linear-gradient(90deg,rgba(0,0,0,${shade(i)}),rgba(0,0,0,${shade(i + 1)}))" ${bend('opacity', 0, 1)}></i>`);
+    }).join('') +
+    // Schnitt unten: oben entlang der Seite, außen schräg (untere Seiten weiter draußen)
+    face('cut cut-b', box(0, y1, x1 + 1, hc) + `transform:rotateX(90deg);clip-path:polygon(0 0,${px(x1)} 0,${flatTop})`,
+      bend('clipPath', `polygon(0 0,${px(x1)} 0,${flatTop})`, `polygon(0 0,${px(x1)} 0,${curvedTop})`)) +
+    // Schnitt außen: von der untersten Seite (x1, 0) zur obersten
+    face('cut cut-r', box(0, y0, T, ph) + `transform:translate3d(${px(x1)},0,0) rotateY(${down}) scaleX(1)`,
+      bend('transform', `translate3d(${px(x1)},0,0) rotateY(${down}) scaleX(1)`, `translate3d(${px(x1)},0,0) rotateY(${rad(-Math.atan2(last[1], last[0] - x1))}) scaleX(${(fe / T).toFixed(4)})`)) +
+    // Seiten am Bund: füllt beim Aufklappen die Stelle zwischen Gelenk und Falz (offen nicht mehr nötig)
+    face('cut cut-s', box(0, y0, T, ph) + `transform:translate3d(0,0,${px(T)}) rotateY(${down}) scaleX(.001)`,
+      bend('transform', `translate3d(0,0,${px(T)}) rotateY(${down}) scaleX(.001)`, `translate3d(0,0,${px(T / 2)}) rotateY(${down}) scaleX(.5)`, `translate3d(0,0,0) rotateY(${down}) scaleX(.001)`));
+  // Rücken: Bezug von der Außenseite des Rückendeckels (0, -c) zu der des Vorderdeckels, der sich um (0, T) dreht,
+  // als Kreisbogen: zu gerade an der linken Kante (so lang wie das Buch dick ist), beim Aufklappen wölbt er sich nach
+  // außen und zieht sich unter den Bund zurück; offen sieht man von ihm nur das flache Ende unten (.spn).
+  // NS Stücke, Lage an KF + 1 Stellen des Wegs.
+  const Ls = 2 * (T + c), NS = 8, KF = 12;
+  const spineAt = t => {
+    const f = Math.PI * t, A = [0, -c], B = [-(T + c) * Math.sin(f), T + (T + c) * Math.cos(f)];
+    const dx = B[0] - A[0], dz = B[1] - A[1], dd = Math.hypot(dx, dz), L = Math.max(dd * 1.02, Ls - (Ls - 0.5 * c) * t * t);
+    const out = pts => ({ pts, k: L / Ls });
+    if (dd >= L * 0.9995) return out(Array.from({ length: NS + 1 }, (_, k) => [A[0] + dx * k / NS, A[1] + dz * k / NS]));
+    const v = dd > 1e-3 ? [dx, dz] : [-Math.sin(f), 1 + Math.cos(f)], vm = Math.hypot(v[0], v[1]);
+    const u = vm > 1e-9 ? [v[0] / vm, v[1] / vm] : [-1, 0], nb = [-u[1], u[0]];   // Richtung A→B, Wölbung links davon
+    let lo = 1e-6, hi = 2 * Math.PI;   // Mittelpunktswinkel al: Sehne dd bei Bogenlänge L
+    for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (Math.sin(m / 2) / (m / 2) > dd / L) lo = m; else hi = m; }
+    const al = (lo + hi) / 2, r = L / al, h = r * Math.cos(al / 2);
+    const C = [(A[0] + B[0]) / 2 - nb[0] * h, (A[1] + B[1]) / 2 - nb[1] * h], b0 = Math.atan2(A[1] - C[1], A[0] - C[0]);
+    const top = [C[0] + nb[0] * r, C[1] + nb[1] * r], mid = sg => [C[0] + r * Math.cos(b0 + sg * al / 2), C[1] + r * Math.sin(b0 + sg * al / 2)];
+    const sg = Math.hypot(...mid(1).map((q, i) => q - top[i])) < Math.hypot(...mid(-1).map((q, i) => q - top[i])) ? 1 : -1;
+    return out(Array.from({ length: NS + 1 }, (_, k) => [C[0] + r * Math.cos(b0 + sg * al * k / NS), C[1] + r * Math.sin(b0 + sg * al * k / NS)]));
+  };
+  const SP = Array.from({ length: KF + 1 }, (_, j) => spineAt(j / KF));
+  const spine = Array.from({ length: NS }, (_, k) => {
+    let prev = null;
+    const tf = SP.map(({ pts, k: sc }) => {
+      const [ax, az] = pts[k], [bx, bz] = pts[k + 1];
+      let a = Math.atan2(bz - az, bx - ax);
+      if (prev !== null) a += 2 * Math.PI * Math.round((prev - a) / (2 * Math.PI));   // ohne Sprung um 360°
+      prev = a;
+      return `translate3d(${px(ax)},0,${px(az)}) rotateY(${rad(-a)}) scaleX(${sc.toFixed(4)})`;
+    });
+    return face('spine', box(0, 0, Ls / NS + 0.6, H) + `transform:${tf[0]}`, bend('transform', ...tf));
+  }).join('');
+  // Ende des Rückens unten am Bund (wie bei einem echten Buch): flache Linse über der Fuge der Deckel, oben bündig mit
+  // ihnen, unten leicht gerundet; erscheint im letzten Drittel des Aufklappens
+  const sw = W * 0.07, sh = 1.8 * c;
+  const spn = face('spn', box(-sw, H + 0.4, 2 * sw, sh) + `transform:translateZ(${px(-sh)}) rotateX(90deg)`, '', `<i ${bend('opacity', 0, 0, 0, 1)}></i>`);
+  el.innerHTML = `<div class="tilt" style="transform:${FLAT}">
+    <span class="f lsh" style="${box(-W, 0, W, H)}transform:translateZ(${px(-c - 1)})"><span class="sh"></span></span>
+    ${rim(-c)}${face('back', box(0, 0, W, H))}
+    ${half}
+    ${spine}${spn}
+    <span class="f pgs"></span>
+    <div class="lidz" style="transform:translateZ(${px(T)})"><div class="lid">
+      <div class="mz" style="transform:translateZ(${px(T)}) scaleZ(-1)">${half}</div>
+      ${rim(T)}
+      <span class="f inner" style="transform:translateZ(${px(T)}) rotateY(180deg)"></span>
+      <span class="cover" style="transform:translateZ(${px(T + c)})"><span class="gl"></span><span class="lbl"><span class="t"></span></span></span>
+    </div></div></div>`;
+  el.bend = parts;
   fx.appendChild(el); coverLabel(el.querySelector('.lbl'), book.name);
   return el;
 }
-// Buch ein- oder ausblenden: an den einzelnen Flächen (Deckkraft am Buch selbst drückt den 3D-Einband flach)
-const fadeBook = (bk, from, to, o) => [...bk.querySelectorAll('.block, .pgs, .cover, .inner')].map(p => p.animate([{ opacity: from }, { opacity: to }], { fill: 'both', ...o }));
+// Seiten wölben (open) bzw. wieder glätten, im Takt des Deckels
+function bendBook(bk, open, o) {
+  for (const p of bk.querySelectorAll('[data-k]')) {
+    const { prop, v } = bk.bend[p.dataset.k], k = v.map(x => ({ [prop]: x }));
+    p.animate(open ? k : k.reverse(), { fill: 'both', ...o });
+  }
+}
+const tiltOf = bk => bk.querySelector('.tilt'), cutOf = bk => bk.querySelector('.pgs'), shadeOf = bk => bk.querySelector('.lsh .sh');
+// Buch ein- oder ausblenden: an den einzelnen Flächen (Deckkraft am Buch selbst drückt den 3D-Körper flach);
+// der flache Regal-Schnitt (.pgs) hat seine eigene Blende
+const fadeBook = (bk, from, to, o) => [...bk.querySelectorAll('.f:not(.pgs), .cover')].map(p => p.animate([{ opacity: from }, { opacity: to }], { fill: 'both', ...o }));
 // Standbild der Startseite über allem; darunter wird schon die nächste Ansicht aufgebaut
 function snapshot(fx) {
   const g = $('#grid'), s = $('#home').cloneNode(true);
@@ -2782,8 +2936,12 @@ async function bookOpenFx(from, id, fx) {
   snap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: 'ease-out', fill: 'forwards' });
   head.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 340, delay: 200, easing: 'ease-out', fill: 'backwards' });
   bk.animate([{ transform: 'none' }, { transform: toRect(r0, r1) }], sp(spring(0.06, 520), { fill: 'forwards' }));
-  const tOpen = 110, dOpen = 640;
-  lid.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(-165deg)' }], { duration: dOpen, delay: tOpen, easing: LID, fill: 'forwards' });
+  tiltOf(bk).animate([{ transform: FLAT }, { transform: TILT }], sp(spring(0.04, 640), { fill: 'forwards' }));   // neigt sich: wird räumlich
+  cutOf(bk).animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-out', fill: 'forwards' });
+  const tOpen = 110, dOpen = 680;
+  lid.animate([{ transform: SHUT }, { transform: OPEN }], { duration: dOpen, delay: tOpen, easing: LID, fill: 'forwards' });
+  shadeOf(bk).animate([{ opacity: 0 }, { opacity: 1 }], { duration: dOpen * 0.3, delay: tOpen + dOpen * 0.7, easing: 'ease-in-out', fill: 'both' });
+  bendBook(bk, true, { duration: dOpen, delay: tOpen, easing: LID });
   // 3. das offene Buch kommt etwas näher und löst sich auf; die Seiten erscheinen dabei ruhig an ihren Plätzen,
   //    der Reihe nach (leicht von unten, kaum merklich größer werdend)
   const tf = tOpen + dOpen - 100;
@@ -2810,7 +2968,8 @@ async function bookCloseFx(id, fx) {
   await decoded(grid);
   // das Buch erst jetzt anlegen, gleich mit seiner Startlage: offen, etwas näher, unsichtbar
   const r1 = stageRect(r0), bk = fxBook(fx, book, r0), lid = bk.querySelector('.lid');
-  lid.style.transform = 'rotateY(-165deg)'; bk.style.transform = toRect(r0, grown(r1, 1.1));
+  lid.style.transform = OPEN; bk.style.transform = toRect(r0, grown(r1, 1.1));
+  tiltOf(bk).style.transform = TILT; cutOf(bk).style.opacity = 0;
   // 2. los: die Seiten blenden aus (der Regal-Kopf erst danach), das offene Buch kommt aus der Nähe in die Mitte
   snap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: 'ease-out', fill: 'forwards' });
   head.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 340, delay: 220, easing: 'ease-out', fill: 'backwards' });
@@ -2818,9 +2977,13 @@ async function bookCloseFx(id, fx) {
   bk.animate([{ transform: toRect(r0, grown(r1, 1.1)) }, { transform: toRect(r0, r1) }], sp(spring(0, 480), { delay: 60, fill: 'both' }));
   // 3. zuklappen, dann an den Platz im Regal; das Regal kommt dabei herein
   const tc = 340, dClose = 540, tb = tc + dClose * 0.62;
-  lid.animate([{ transform: 'rotateY(-165deg)' }, { transform: 'rotateY(0deg)' }], { duration: dClose, delay: tc, easing: LID, fill: 'forwards' });
+  lid.animate([{ transform: OPEN }, { transform: SHUT }], { duration: dClose, delay: tc, easing: LID, fill: 'forwards' });
+  shadeOf(bk).animate([{ opacity: 1 }, { opacity: 0 }], { duration: dClose * 0.3, delay: tc, easing: 'ease-in-out', fill: 'both' });
+  bendBook(bk, false, { duration: dClose, delay: tc, easing: LID });
   others.forEach((e, i) => { e.style.visibility = ''; e.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: tb + Math.min(i, 8) * 28, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' }); });
   const home = spring(0.08, 480), back = bk.animate([{ transform: toRect(r0, r1) }, { transform: 'none' }], sp(home, { delay: tb, fill: 'forwards' }));
+  tiltOf(bk).animate([{ transform: TILT }, { transform: FLAT }], sp(spring(0.04, 520), { delay: tb, fill: 'forwards' }));   // stellt sich wieder gerade hin
+  cutOf(bk).animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: tb + home.settled * 0.5, fill: 'forwards' });
   await wait(tb + home.settled);
   target.style.visibility = ''; back.cancel(); bk.remove();   // sichtbar angekommen: das echte Buch übernimmt
   target.querySelector('.cap').animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' });
