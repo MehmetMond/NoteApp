@@ -2330,7 +2330,7 @@ const LID = 'cubic-bezier(.45,.05,.2,1)';   // Einband auf- und zuklappen: weich
 // scale3d, damit die Dicke des Buchs im Raum mitwächst)
 const toRect = (a, b) => { const k = b.width / a.width; return `translate(${b.left - a.left}px,${b.top - a.top}px) scale3d(${k},${k},${k})`; };
 // Lage des Buchs: im Regal flach (Tiefe zusammengedrückt, deckt sich genau mit dem echten Buch), auf der Bühne
-// frontal mit voller Dicke; die Sicht von leicht vorne (#fx: perspective-origin unterhalb) zeigt Schnitt und Kanten.
+// frontal mit voller Dicke; die Sicht von leicht vorne (viewOn: Auge unterhalb der Bühne) zeigt Schnitt und Kanten.
 const FLAT = 'scaleZ(.02)', TILT = 'scaleZ(1)';
 const OPEN = 'rotateY(-180deg)', SHUT = 'rotateY(0deg)';   // Vorderdeckel aufgeschlagen bzw. zu
 /* Kopie des Buchs als 3D-Körper (Koordinaten des ungedrehten Buchs, transform-origin oben links), in der Mitte
@@ -2478,16 +2478,24 @@ function snapshot(fx) {
 }
 // Bilder der neuen Ansicht fertig dekodieren, bevor sich etwas bewegt (höchstens 200 ms warten)
 const decoded = root => Promise.race([Promise.all([...root.querySelectorAll('img')].map(i => i.decode().catch(() => {}))), wait(200)]);
-// Bühne: das Buch kommt zum Aufklappen etwas größer in die Mitte, der Rücken mittig (Einband klappt nach links auf)
+// Bühne: das Buch kommt zum Aufklappen etwas größer in die Mitte, der Rücken mittig (Einband klappt nach links auf).
+// Offen ist es zwei Seiten breit, das muss ins Fenster passen (je Seite höchstens 44 % der Breite) und in der Höhe
+// unter den Kopf; schmaler wird es nur, wenn sonst nichts geht
 function stageRect(r) {
-  const w = Math.min(r.width * 1.3, innerWidth * 0.24, (innerHeight - 180) * r.width / r.height), h = w * r.height / r.width;
+  const w = Math.min(r.width * 1.3, innerWidth * 0.44, (innerHeight - 180) * r.width / r.height), h = w * r.height / r.width;
   return { left: innerWidth / 2 - w * 0.04, top: Math.max(96, (innerHeight - h) / 2), width: w, height: h };
 }
 // offenes Buch größer um den Rücken (linke Kante) herum: wirkt, als käme man näher
 const grown = (r, k) => ({ left: r.left, top: r.top + r.height * (1 - k) / 2, width: r.width * k, height: r.height * k });
+// Blick auf die Bühne r: Abstand und Augenhöhe nach der Größe des Buchs (über dem Rücken, weit vorne: sechs Buchhöhen
+// unter der Unterkante, neun entfernt), damit es in jedem Fenster gleich aussieht. Am Fenster ausgerichtet würde ein
+// hohes Fenster oder ein kleines Buch den aufgestellten Deckel weit nach oben ziehen; aus der Ferne bleibt er kürzer,
+// die Dicke unten sieht man trotzdem.
+const viewOn = (fx, r) => Object.assign(fx.style, { perspective: r.height * 9 + 'px', perspectiveOrigin: `${r.left}px ${r.top + r.height * 7}px` });
 
 async function bookOpenFx(from, id, fx) {
   const book = homeData.books.find(b => b.id === id), r0 = rectOf(from.querySelector('.cv')), r1 = stageRect(r0);
+  viewOn(fx, r1);
   // 1. vorbereiten: Standbild des Regals, Buch als Kopie, darunter die Buchansicht fertig aufbauen (noch unsichtbar)
   const snap = snapshot(fx);
   snap.querySelector(`.book[data-id="${id}"]`).style.visibility = 'hidden';
@@ -2532,6 +2540,7 @@ async function bookCloseFx(id, fx) {
   await decoded(grid);
   // das Buch erst jetzt anlegen, gleich mit seiner Startlage: offen, etwas näher, unsichtbar
   const r1 = stageRect(r0), bk = fxBook(fx, book, r0), lid = bk.querySelector('.lid');
+  viewOn(fx, r1);
   lid.style.transform = OPEN; bk.style.transform = toRect(r0, grown(r1, 1.1));
   tiltOf(bk).style.transform = TILT; cutOf(bk).style.opacity = 0;
   // 2. los: die Seiten blenden aus (der Regal-Kopf erst danach), das offene Buch kommt aus der Nähe in die Mitte
