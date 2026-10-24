@@ -183,9 +183,12 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 #sizeMenu{min-width:0;width:280px;padding:12px 16px 14px}
 #sizeMenu .szhead{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;color:var(--muted)}
 #sizeMenu .szhead b{color:var(--text);font-size:16px;font-variant-numeric:tabular-nums}
-#szRange{display:block;width:100%;height:32px;margin:6px 0;accent-color:var(--accent);touch-action:none}
-#sizeMenu .szprev{height:84px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--paper)}
-#szDot{display:block;width:180px;border-radius:999px}
+#szRange,#smRange{display:block;width:100%;height:32px;margin:6px 0;accent-color:var(--accent);touch-action:none}
+#sizeMenu .smchips{display:flex;gap:6px;margin:8px 0 2px}
+#sizeMenu .smchips button{flex:1;justify-content:center;width:auto;height:34px;padding:0;border:1px solid var(--border);border-radius:9px;font-size:13px;font-variant-numeric:tabular-nums;color:var(--text)}
+#sizeMenu .smchips button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+#sizeMenu .szprev{height:84px;border-radius:10px;background:var(--paper)}
+#szPrev{display:block;width:100%;height:100%}
 .grow{flex:1}
 #zoom{min-width:58px;height:40px;padding:0 8px;font-variant-numeric:tabular-nums;color:var(--muted)}
 #zoom:hover{background:var(--hover)}
@@ -353,8 +356,11 @@ html.dark #toast{background:#eee;color:#111}
 </div>
 <div id="sizeMenu" class="menu hidden">
   <div class="szhead"><span id="szLabel">Stift</span><b id="szVal"></b></div>
-  <input type="range" id="szRange" min="0" max="1000" step="1">
-  <div class="szprev"><span id="szDot"></span></div>
+  <input type="range" id="szRange" min="0" max="1000" step="1" aria-label="Strichstärke">
+  <div class="szhead"><span>Glättung</span><b id="smVal"></b></div>
+  <div id="smPresets" class="smchips"></div>
+  <input type="range" id="smRange" min="0" max="100" step="1" aria-label="Glättung">
+  <div class="szprev"><canvas id="szPrev"></canvas></div>
 </div>
 <div id="shapeMenu" class="menu hidden">
   <div class="mh">Formen</div>
@@ -450,6 +456,9 @@ const PALETTE = ['ink', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '
 const SIZES = { pen: [1, 2, 3.5, 6, 10], hl: [8, 14, 22, 32] };
 const SIZE_DEFAULT = { pen: 2, hl: 1 };
 const SIZE_RANGE = { pen: [0.5, 30], hl: [4, 80] };
+// Glättung der Handschrift (0 = roh … 1 = stark), fünf Voreinstellungen wie bei der Strichstärke; 0,5 entspricht der
+// früheren festen Glättung und ist gewählt
+const SMOOTH_PRESETS = [0, 0.25, 0.5, 0.75, 1], SMOOTH_IDX = 2;
 const HL_ALPHA = { light: 0.42, dark: 0.45 };
 const S = {
   note: null,          // Eintrag aus dem Index (Name, Ansicht, Hintergrund, Vorschaubild)
@@ -462,6 +471,7 @@ const S = {
   busy: 0, thumbDirty: false,
   shape: 'rect',       // gewählte Form des Formen-Werkzeugs
   snap: false,         // Am Raster ausrichten
+  smooth: SMOOTH_PRESETS[SMOOTH_IDX], smoothPresets: [], smoothIdx: SMOOTH_IDX,   // Glättung von Stift und Textmarker
 };
 const store = {
   get(k, d) { try { const v = localStorage.getItem('notizen.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -470,6 +480,12 @@ const store = {
 S.dark = store.get('dark', matchMedia('(prefers-color-scheme: dark)').matches);
 S.fingerDraw = store.get('fingerDraw', false);
 S.snap = store.get('snap', false) === true;
+{
+  const ps = store.get('smoothPresets'), i = store.get('smoothIdx');
+  S.smoothPresets = Array.isArray(ps) && ps.length === SMOOTH_PRESETS.length && ps.every(v => typeof v === 'number' && v >= 0 && v <= 1) ? ps : [...SMOOTH_PRESETS];
+  S.smoothIdx = Number.isInteger(i) && i >= 0 && i < S.smoothPresets.length ? i : SMOOTH_IDX;
+  S.smooth = S.smoothPresets[S.smoothIdx];
+}
 Object.assign(S.color, store.get('color', {}));
 {
   const pre = store.get('presets', {}), idx = store.get('sizeIdx', {}), old = store.get('size', {});
@@ -1615,17 +1631,55 @@ function capture(e) { try { cvLive.setPointerCapture(e.pointerId); } catch (err)
 function localXY(e) { const r = cvLive.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
 function pressureOf(e) { return e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : 0.5; }
 
-// Eingabefilter: glättet die Stiftposition schon beim Schreiben.
-// Gespeichert wird genau das, was auf dem Bildschirm zu sehen ist, nichts ändert sich nach dem Absetzen.
-function strokeInput(a, sx, sy, p) {
-  const [wx, wy] = toWorld(sx, sy);
-  const f = a.f;
-  f.x += (wx - f.x) * 0.55; f.y += (wy - f.y) * 0.55; f.p += (p - f.p) * 0.35;
-  const n = a.pts.length;
-  if (Math.hypot(f.x - a.pts[n - 3], f.y - a.pts[n - 2]) * S.view.z < 0.8) return;
-  a.pts.push(f.x, f.y, f.p);
-  livePiece(a);
+// Eingabefilter: glättet die Stiftposition schon beim Schreiben, so stark wie eingestellt (S.smooth).
+// Verfahren wie der 1€-Filter (Casiez, Roussel, Vogel, CHI 2012): ein Tiefpass, dessen Grenzfrequenz mit der
+// Geschwindigkeit steigt. Langsam geschrieben, wo Zittern auffällt, glättet er stark; schnell geschrieben, wo Nachlauf
+// auffällt, kaum. So bleiben Buchstaben in Form (ein fester Filter rundet sie bei Tempo ab, aus einem n wird ein h).
+// Gefiltert wird in Bildschirmpunkten und nach der Zeit der Ereignisse, damit die Wirkung weder vom Zoom noch von der
+// Abtastrate des Stifts abhängt. Über 50 % kommt eine zweite gleiche Stufe dazu (nimmt Zittern stärker weg als eine
+// Stufe mit gleichem Nachlauf). 50 % entspricht der früheren festen Glättung. Beim Absetzen holt der Strich bis zur
+// Stiftspitze auf. Gespeichert wird genau das, was auf dem Bildschirm zu sehen ist, nichts ändert sich danach.
+const logLerp = (a, b, t) => a * Math.pow(b / a, t);
+// S.smooth → Grenzfrequenz in Ruhe (Hz), Anstieg je px/s, Glättung der Geschwindigkeit (Hz), Anteil der zweiten Stufe
+function smoothParams(s) {
+  if (s <= 0.5) { const t = s / 0.5; return { fmin: logLerp(120, 17.3, t), beta: logLerp(0.08, 0.0475, t), dcut: 8, w2: 0 }; }
+  const t = Math.sqrt((s - 0.5) / 0.5);
+  return { fmin: logLerp(17.3, 1.5, t), beta: logLerp(0.0475, 0.005, t), dcut: logLerp(8, 0.5, t), w2: t };
 }
+const alphaOf = (fc, dt) => 1 / (1 + 1 / (2 * Math.PI * fc * dt));
+// ein Schritt mit der Stiftposition (Bildschirm) zur Zeit t (ms); Druck wird immer leicht geglättet
+function filterStep(a, x, y, p, t) {
+  const f = a.f, g = a.g, P = a.P;
+  f.p += (p - f.p) * 0.35; g.p = f.p;
+  if (!P) { f.x = g.x = x; f.y = g.y = y; return; }   // Glättung aus
+  const dt = clamp((t - f.t) / 1000, 0.001, 0.05); f.t = t;
+  const ad = alphaOf(P.dcut, dt);
+  f.vx += ((x - f.x) / dt - f.vx) * ad; f.vy += ((y - f.y) / dt - f.vy) * ad;
+  const al = alphaOf(P.fmin + P.beta * Math.hypot(f.vx, f.vy), dt), a2 = 1 - (1 - al) * P.w2;
+  f.x += (x - f.x) * al; f.y += (y - f.y) * al;
+  g.x += (f.x - g.x) * a2; g.y += (f.y - g.y) * a2;
+}
+// Ausgang anhängen (in Weltkoordinaten), wenn er sich auf dem Bildschirm genug bewegt hat
+function pushFiltered(a) {
+  const g = a.g;
+  if (Math.hypot(g.x - a.last[0], g.y - a.last[1]) < 0.8) return false;
+  a.last = [g.x, g.y]; const [wx, wy] = a.toW(g.x, g.y); a.pts.push(wx, wy, g.p); return true;
+}
+// Filter für einen neuen Strich ab (x, y) auf dem Bildschirm zur Zeit t
+function smoothStart(x, y, p, t, toW = toWorld) {
+  return { pts: [...toW(x, y), p], f: { x, y, p, t, vx: 0, vy: 0 }, g: { x, y, p }, P: S.smooth > 0 ? smoothParams(S.smooth) : null, last: [x, y], raw: null, toW };
+}
+function strokeInput(a, sx, sy, p, t) {
+  a.raw = [sx, sy, p, t];
+  filterStep(a, sx, sy, p, t);
+  if (pushFiltered(a)) livePiece(a);
+}
+// Beim Absetzen: der Strich läuft bis dorthin weiter, wo der Stift abgehoben hat (bei starker Glättung endet er sonst zu früh)
+function catchUp(a) {
+  const [x, y, p] = a.raw, g = a.g; let t = a.raw[3];
+  for (let i = 0; i < 400 && Math.hypot(x - g.x, y - g.y) > 0.5; i++) { t += 4; filterStep(a, x, y, p, t); pushFiltered(a); }
+}
+function settleStroke(a) { if (a.raw) { catchUp(a); livePiece(a); } }
 function livePiece(a) {
   const P = new Path2D(), n = a.pts.length / 3;
   for (let i = a.drawn; i < n; i++) addPiece(P, a.pts, i, a.w, a.hl);
@@ -1642,7 +1696,7 @@ function startAction(e) {
   if (tool !== 'lasso' && S.sel) clearSel();
   if (tool === 'pen' || tool === 'hl') {
     const hl = tool === 'hl', p = pressureOf(e);
-    action = { kind: 'draw', id: e.pointerId, hl, c: S.color[tool], w: S.size[tool], pts: [wx, wy, p], f: { x: wx, y: wy, p }, drawn: 0 };
+    action = { kind: 'draw', id: e.pointerId, hl, c: S.color[tool], w: S.size[tool], drawn: 0, ...smoothStart(sx, sy, p, e.timeStamp) };
     liveClear(); liveStyle(action); liveWorld(); ctxLive.fillStyle = colorOf(action.c);
     livePiece(action);
   } else if (tool === 'shape') {
@@ -1678,7 +1732,7 @@ function moveAction(e) {
   const a = action;
   for (const ev of list) {
     const [sx, sy] = localXY(ev);
-    if (a.kind === 'draw') { strokeInput(a, sx, sy, pressureOf(ev)); continue; }
+    if (a.kind === 'draw') { strokeInput(a, sx, sy, pressureOf(ev), ev.timeStamp); continue; }
     const [wx, wy] = toWorld(sx, sy);
     if (a.kind === 'pan') setView(a.tx + sx - a.sx, a.ty + sy - a.sy, S.view.z);
     else if (a.kind === 'erase') { a.at = [wx, wy]; eraseAt(wx, wy); }
@@ -1706,7 +1760,7 @@ function moveAction(e) {
 function deferLiveClear() {
   requestAnimationFrame(() => requestAnimationFrame(() => { if (!action || action.kind !== 'draw') { if (!action) liveStyle(null); liveClear(); drawLive(); } }));
 }
-function finishStroke(a) { commitLive([makeStroke(a.pts, a.c, a.w, a.hl)], a.noComposite); }
+function finishStroke(a) { settleStroke(a); commitLive([makeStroke(a.pts, a.c, a.w, a.hl)], a.noComposite); }
 // Fertige Striche übernehmen, die gerade auf der Live-Ebene zu sehen sind (Strich oder Form).
 // Liegen sie ganz im Bild, werden die Pixel von der Live-Ebene übernommen,
 // damit sie beim Absetzen exakt gleich aussehen.
@@ -1938,6 +1992,7 @@ function renderColors() {
   cb.appendChild(inp); box.appendChild(cb);
 }
 const fmtSize = v => String(v).replace('.', ',');
+const fmtSmooth = v => v ? Math.round(v * 100) + ' %' : 'Aus';
 const dotPx = (k, v) => k === 'hl' ? clamp(2 + v * 0.55, 4, 26) : clamp(1.5 + v * 1.65, 3, 24);
 function setSize(k, i) { S.sizeIdx[k] = i; S.size[k] = S.presets[k][i]; store.set('sizeIdx', S.sizeIdx); }
 function renderSizes() {
@@ -1964,17 +2019,36 @@ let sizeKind = 'pen';
 const sizeToT = (k, v) => { const [lo, hi] = SIZE_RANGE[k]; return Math.round(Math.log(v / lo) / Math.log(hi / lo) * 1000); };
 const tToSize = (k, t) => { const [lo, hi] = SIZE_RANGE[k], v = lo * Math.pow(hi / lo, t / 1000); return v < 10 ? Math.round(v * 10) / 10 : Math.round(v * 2) / 2; };
 function showSize() {
-  const k = sizeKind, v = S.size[k], dot = $('#szDot');
+  const k = sizeKind, v = S.size[k];
   $('#szLabel').textContent = k === 'hl' ? 'Textmarker' : 'Stift';
   $('#szVal').textContent = fmtSize(v);
-  dot.style.height = clamp(v * S.view.z, 1, 80) + 'px';   // so dick, wie der Strich beim jetzigen Zoom aussieht
-  dot.style.background = colorOf(S.color[k]); dot.style.opacity = k === 'hl' ? hlAlpha() : 1;
+  $('#smVal').textContent = fmtSmooth(S.smooth);
+  drawSizePreview(k, v);
+}
+// Probestrich: Wellenlinie mit leichtem Zittern der Hand, im Tempo normaler Schrift (ein Ereignis alle 8 ms) durch
+// denselben Filter wie beim Schreiben; so dick, wie der Strich beim jetzigen Zoom aussieht
+function drawSizePreview(k, v) {
+  const cv = $('#szPrev'), W = cv.clientWidth || 248, H = cv.clientHeight || 84;
+  if (cv.width !== Math.round(W * DPR) || cv.height !== Math.round(H * DPR)) { cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); }
+  const g = cv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+  const w = clamp(v * S.view.z, 1, H * 0.6), m = Math.max(12, w / 2 + 6), amp = Math.max(3, (H / 2 - m) * 0.75);
+  let seed = 7, a = null; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647 - 0.5;
+  for (let i = 0; i <= 160; i++) {
+    const u = i / 160, x = m + u * (W - 2 * m), p = 0.45 + 0.25 * Math.sin(u * Math.PI);
+    const y = H / 2 - amp * Math.sin(u * Math.PI * 4) + 1.4 * Math.sin(i / 3.2) + 1.2 * rnd();
+    if (!a) a = smoothStart(x, y, p, 0, (x, y) => [x, y]); else { filterStep(a, x, y, p, i * 8); pushFiltered(a); }
+    a.raw = [x, y, p, i * 8];
+  }
+  catchUp(a);
+  const P = new Path2D();
+  for (let i = 0; i < a.pts.length / 3; i++) addPiece(P, a.pts, i, w, k === 'hl');
+  g.globalAlpha = k === 'hl' ? hlAlpha() : 1; g.fillStyle = colorOf(S.color[k]); g.fill(P);
 }
 function openSizeMenu(k, btn) {
   const m = $('#sizeMenu');
   const was = !m.classList.contains('hidden'); closeMenus(); if (was) return;
-  sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); showSize();
-  m.classList.remove('hidden');
+  sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth();
+  m.classList.remove('hidden'); showSize();
   const r = btn.getBoundingClientRect();
   m.style.top = (r.bottom + 8) + 'px';
   m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
@@ -1983,6 +2057,24 @@ $('#szRange').oninput = () => {
   const k = sizeKind, v = tToSize(k, +$('#szRange').value);
   S.presets[k][S.sizeIdx[k]] = v; S.size[k] = v;
   store.set('presets', S.presets); showSize(); renderSizes();
+};
+// Glättung: vier Voreinstellungen (Knöpfe) für Stift und Textmarker, der Regler stellt die gewählte ein (wie bei der
+// Strichstärke); alles bleibt gespeichert. Neue Striche werden so geschrieben, alte bleiben, wie sie sind.
+function renderSmooth() {
+  const box = $('#smPresets'); box.innerHTML = '';
+  S.smoothPresets.forEach((v, i) => {
+    const b = document.createElement('button'); b.className = i === S.smoothIdx ? 'on' : '';
+    b.textContent = fmtSmooth(v); b.title = 'Glättung ' + fmtSmooth(v);
+    b.onclick = () => setSmooth(i);
+    box.appendChild(b);
+  });
+  $('#smRange').value = Math.round(S.smooth * 100);
+}
+function setSmooth(i) { S.smoothIdx = i; S.smooth = S.smoothPresets[i]; store.set('smoothIdx', i); renderSmooth(); showSize(); }
+$('#smRange').oninput = () => {
+  const v = +$('#smRange').value / 100;
+  S.smoothPresets[S.smoothIdx] = v; S.smooth = v; store.set('smoothPresets', S.smoothPresets);
+  const b = $('#smPresets').children[S.smoothIdx]; b.textContent = fmtSmooth(v); b.title = 'Glättung ' + fmtSmooth(v); showSize();
 };
 $$('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 // Formen: Antippen wählt das Werkzeug und öffnet die Auswahl, nochmal Antippen schließt sie

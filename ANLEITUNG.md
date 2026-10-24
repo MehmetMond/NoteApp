@@ -1,5 +1,8 @@
 # Notizen für das Surface Pro 11 (Version 1.5.1)
 
+## Neu (zuerst in der Browser-Version)
+- **Glättung beim Stift:** Die gewählte Strichstärke nochmal antippen, dann gibt es unter der Dicke die **Glättung** mit fünf Voreinstellungen: **Aus** (die Linie genau so, wie der Stift sie zeichnet), **25 %**, **50 %** (wie bisher, voreingestellt), **75 %** (deutlich ruhiger) und **100 %** (sehr ruhig). Die Glättung richtet sich nach dem Tempo: Wer langsam schreibt, wo Zittern auffällt, bekommt mehr davon weggenommen; schnell geschriebene Linien folgen dem Stift fast ohne Verzögerung, so bleiben auch bei 100 % die Buchstaben in Form. Der Regler darunter stellt die gewählte Voreinstellung fein ein, die Vorschau zeigt die Wirkung an einer Probelinie. Gilt für Stift und Textmarker und bleibt gespeichert; wirkt auf neue Striche, schon geschriebene bleiben, wie sie sind.
+
 ## Neu in 1.5.1: Animationen
 - **Animationen auf der Startseite:** Ein Buch fliegt beim Öffnen in die Mitte und schlägt wie ein echtes dickes Buch in der Mitte auf (die Seiten wölben sich in die Falz, der Rücken hält die Deckel zusammen, außen sieht man den Schnitt), dann gibt es den Blick auf seine Seiten frei; beim Zurückgehen klappt es zu und stellt sich wieder ins Regal. Ein neues Buch fliegt aus dem Dialog an seinen Platz im Regal und geht dann auf. Ist im System „Bewegung reduzieren“ eingeschaltet, wird ohne Animation umgeschaltet.
 - **Tab-Symbol** in der Browser-Version: im Browser-Tab steht jetzt das Symbol der App statt eines grauen Felds.
@@ -55,6 +58,7 @@
 |---|---|
 | Schreiben | Surface Pen (druckempfindlich) |
 | Strichstärke | Punkte in der Leiste; die gewählte nochmal antippen für den Schieberegler |
+| Glättung | Gewählte Strichstärke nochmal antippen: Aus, 25, 50 (wie bisher), 75 oder 100 %, Feineinstellung mit dem Regler |
 | Formen und Graphen | Formen-Knopf (F), dann aufziehen; nochmal antippen öffnet die Auswahl |
 | Am Raster ausrichten | Magnet-Knopf (G) an/aus |
 | Radieren | Radierer-Ende des Stifts oder die Taste am Stift gedrückt halten, oder Radierer-Werkzeug |
