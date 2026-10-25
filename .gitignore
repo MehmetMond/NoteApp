@@ -3,3 +3,4 @@ electron/app/
 electron/node_modules/
 electron/dist/
 node_modules/
+__pycache__/

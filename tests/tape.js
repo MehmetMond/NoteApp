@@ -86,7 +86,8 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   await p.keyboard.press('p'); await draw(line(300, 620, 560));
   await p.keyboard.press('m'); await draw(line(290, 630, 560));
   await p.waitForTimeout(300);
-  res.ink = await p.evaluate(() => { const [x, y] = toScreen(460, 560); return Array.from(cvMain.getContext('2d').getImageData(Math.round(x * DPR), Math.round(y * DPR), 1, 1).data.slice(0, 3)); });
+  res.ink = await p.evaluate(() => { const [x, y] = toScreen(460, 560), r = mainRange(S.level, PADD > 0 && S.view.z === S.level);   // cvMain hat einen Rand
+    return Array.from(cvMain.getContext('2d').getImageData(Math.round(x * DPR) + r.txD - Math.round(S.view.tx * DPR), Math.round(y * DPR) + r.tyD - Math.round(S.view.ty * DPR), 1, 1).data.slice(0, 3)); });
   // (worldToScreen: die Seite beginnt bei der Ansicht; Punkt mitten auf der Schrift)
   check(res.ink[2] > 210, 'Schrift über dem Textmarker bleibt weiß (Blau ' + res.ink[2] + ')');
   await p.screenshot({ path: path.join(__dirname, 'tape_hl_dark.png'), clip: { x: 240, y: 130, width: 480, height: 480 } });

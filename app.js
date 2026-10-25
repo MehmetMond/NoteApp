@@ -596,20 +596,35 @@ function renderTile(L, i, j) {
   tiles.set(key, t);
   return t;
 }
+// Kacheln auf dem Bildschirm (Gerätepixel des Bildschirms, so groß wie cvLive)
 function tileRange(L) {
   const k = S.view.z / L, txD = Math.round(S.view.tx * DPR), tyD = Math.round(S.view.ty * DPR);
-  const W = cvMain.width, H = cvMain.height;
+  const W = cvLive.width, H = cvLive.height;
   return { k, txD, tyD, i0: Math.floor(-txD / k / T), i1: Math.floor((W - txD) / k / T), j0: Math.floor(-tyD / k / T), j1: Math.floor((H - tyD) / k / T) };
 }
-// Was zuletzt auf cvMain zu sehen ist: Ansicht (shownSig) und je Kachelplatz die Kachel mit ihrem Stand. Bleibt die
-// Ansicht gleich (Schreiben, Radieren, Rückgängig …), malt draw() nur die Plätze neu, deren Kachel sich geändert hat,
-// statt jedes Mal den ganzen Bildschirm: spart Grafikarbeit und Akku
+/* cvMain ist an jeder Seite PADD Gerätepixel größer als der Bildschirm und zeigt die Kacheln so, wie der Bildschirm sie
+   bei der Ansicht (orgX, orgY) zeigte (Verschiebung in Gerätepixeln). Ändert sich nur die Verschiebung, schiebt der
+   Compositor die Leinwand (transform) um ganze Gerätepixel, statt dass sie bei jedem Bild neu gemalt wird: beim
+   Verschieben etwa halb so viel Grafikarbeit, die Pixel sind dieselben. Neu gemalt wird erst, wenn der Rand nicht mehr
+   reicht. Beim Zoomen (Kacheln skaliert) ist die Leinwand nur im Bildschirm gültig und folgt jedem Bild. */
+let PADD = 0, PADC = 0;   // Rand in Geräte- und CSS-Pixeln; 0 = ohne Rand (wenn er nicht auf ganze Pixel fällt)
+let orgX = 0, orgY = 0;
+// Bereich von cvMain, der für Ebene L gemalt wird (0 … x1, 0 … y1 in Leinwandpixeln), mit den Kacheln darin.
+// wide: mit Rand (Kacheln unskaliert); sonst nur der Bildschirm, oben links in der Leinwand: dann sind es genau die
+// Zeichenbefehle wie ohne Rand (skaliert gezeichnete Kacheln rundet die GPU sonst an anderer Stelle minimal anders)
+function mainRange(L, wide) {
+  const k = S.view.z / L, off = wide ? PADD : 0, txD = orgX + off, tyD = orgY + off;
+  const x1 = wide ? cvMain.width : cvLive.width, y1 = wide ? cvMain.height : cvLive.height;
+  return { k, off, txD, tyD, x1, y1, i0: Math.floor(-txD / k / T), i1: Math.floor((x1 - txD) / k / T), j0: Math.floor(-tyD / k / T), j1: Math.floor((y1 - tyD) / k / T) };
+}
+// Was zuletzt auf cvMain steht: Ursprung und Ansicht (shownSig) und je Kachelplatz die Kachel mit ihrem Stand. Bleibt
+// beides gleich (Schreiben, Radieren, Rückgängig, Verschieben im Rand …), malt draw() nur die Plätze neu, deren Kachel
+// sich geändert hat oder neu da ist, statt jedes Mal den ganzen Bildschirm: spart Grafikarbeit und Akku
 let shownSig = '';
 const shownSlots = new Map();
 cvMain.addEventListener('contextrestored', () => { shownSig = ''; requestDraw(); });
-// cur: Ebene L ist die aktuelle (merkt sich die Plätze); only: nur geänderte Plätze malen
-function drawLevel(ctx, L, cur, only) {
-  const r = tileRange(L);
+// cur: Ebene L ist die aktuelle (merkt sich die Plätze); only: nur geänderte Plätze malen; r: Bereich (mainRange)
+function drawLevel(ctx, L, cur, only, r) {
   if ((r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400) return;
   for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) {
     const key = tkey(L, i, j), fresh = tiles.get(key), t = fresh || stale.get(key); if (!t) continue;
@@ -675,12 +690,15 @@ function requestLive() { if (!liveQ) { liveQ = true; requestAnimationFrame(drawL
 function draw() {
   drawQ = false; if (!S.note) return;
   frameNo++;
-  const ctx = ctxMain, L = S.level;
-  const r = tileRange(L), missing = [];
+  const ctx = ctxMain, L = S.level, txD = Math.round(S.view.tx * DPR), tyD = Math.round(S.view.ty * DPR);
+  // Ursprung behalten, solange der Bildschirm (Kacheln unskaliert) ganz im Rand liegt; sonst hierher legen
+  const wide = PADD > 0 && S.view.z === L;
+  if (!wide || Math.abs(txD - orgX) > PADD || Math.abs(tyD - orgY) > PADD) { orgX = txD; orgY = tyD; }
+  const r = mainRange(L, wide), sr = tileRange(L), missing = [];
   let have = 0;
   for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) if (!tiles.has(tkey(L, i, j))) missing.push([i, j]); else have++;
   if (missing.length) {
-    const ci = (cvMain.width / 2 - r.txD) / r.k / T - 0.5, cj = (cvMain.height / 2 - r.tyD) / r.k / T - 0.5;
+    const ci = (cvLive.width / 2 - sr.txD) / sr.k / T - 0.5, cj = (cvLive.height / 2 - sr.tyD) / sr.k / T - 0.5;
     missing.sort((a, b) => Math.hypot(a[0] - ci, a[1] - cj) - Math.hypot(b[0] - ci, b[1] - cj));
     // Geänderte Kacheln (mit Platzhalter) zuerst und gleich alle: die Änderung erscheint in einem Bild, nicht stückweise
     // (höchstens 150 ms, der Rest bleibt solange Platzhalter)
@@ -699,19 +717,27 @@ function draw() {
   // zeigten sie sonst einen alten Stand)
   for (const [k, t] of stale) {
     const [, si, sj] = k.split(':').map(Number);
-    if (t.L !== L || si < r.i0 || si > r.i1 || sj < r.j0 || sj > r.j1) { stale.delete(k); tilePool.push(t); }
+    if (t.L !== L || si < r.i0 || si > r.i1 || sj < r.j0 || sj > r.j1) { stale.delete(k); tilePool.push(t); }   // r: mit Rand
   }
-  // Papier (und die vorige Zoomstufe) nur dort nötig, wo eine Kachel ganz fehlt; sonst decken die Kacheln alles ab
-  const gaps = (r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400 || missing.some(([i, j]) => !stale.has(tkey(L, i, j)));
-  const sig = [L, S.view.z, r.txD, r.tyD, cvMain.width, cvMain.height].join('|'), only = !gaps && sig === shownSig;
+  // Papier (und die vorige Zoomstufe) nur dort nötig, wo eine Kachel ganz fehlt; sonst decken die Kacheln alles ab.
+  // Fehlt eine nur im Rand, bekommt der Platz beim ganzen Malen Papier und später seine Kachel (nur geänderte Plätze);
+  // fehlt eine auf dem Bildschirm, wird wie bisher jedes Bild ganz gemalt, bis sie da ist
+  const many = (r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400, gap = ([i, j]) => !stale.has(tkey(L, i, j));
+  const seen = ([i, j]) => i >= sr.i0 && i <= sr.i1 && j >= sr.j0 && j <= sr.j1;
+  const gaps = many || missing.some(q => gap(q) && seen(q)), anyGaps = many || missing.some(gap);
+  const sig = [L, S.view.z, r.txD, r.tyD, wide, cvMain.width, cvMain.height].join('|'), only = !gaps && sig === shownSig;
   if (!only) {
     shownSlots.clear(); shownSig = gaps ? '' : sig;
-    if (gaps) {
-      fillBg(ctx, S.view.z, r.txD, r.tyD, cvMain.width, cvMain.height);
-      if (fallbackL != null && fallbackL !== L) drawLevel(ctx, fallbackL, false);
+    if (anyGaps) {
+      fillBg(ctx, S.view.z, r.txD, r.tyD, r.x1, r.y1);   // beim Zoomen nur der Bildschirm
+      if (fallbackL != null && fallbackL !== L) drawLevel(ctx, fallbackL, false, false, mainRange(fallbackL, wide));
     }
   }
-  drawLevel(ctx, L, true, only);
+  drawLevel(ctx, L, true, only, r);
+  // Leinwand an die Ansicht schieben (ganze Gerätepixel; die Leinwand liegt um den Rand nach oben links versetzt)
+  const dx = txD - orgX + PADD - r.off, dy = tyD - orgY + PADD - r.off;
+  const mt = dx || dy ? `translate(${dx / DPR}px, ${dy / DPR}px)` : '';   // so, wie der Browser es zurückgibt
+  if (cvMain.style.transform !== mt) cvMain.style.transform = mt;
   if (missing.length) requestDraw();
   else { if (fallbackL != null && !gesture && !wheelT) fallbackL = null; schedulePrefetch(); }
   // älteste Kacheln verwerfen
@@ -737,21 +763,80 @@ function schedulePrefetch() {
     if (ring.length) schedulePrefetch();
   }, { timeout: 1000 });
 }
-// Live-Ebene nur leeren, wenn etwas darauf ist: jedes Leeren lässt den ganzen Bildschirm neu zusammensetzen
-// (z. B. bei jedem Bild beim Verschieben mit der Hand)
-let liveDirty = true;
-function liveClear() { if (!liveDirty) return; liveDirty = false; ctxLive.setTransform(1, 0, 0, 1, 0, 0); ctxLive.clearRect(0, 0, cvLive.width, cvLive.height); }
-function liveStyle(a) {
-  cvLive.style.opacity = a && a.hl ? hlAlpha() : '';
-  cvLive.style.mixBlendMode = a && a.hl && !S.dark ? 'multiply' : '';
+// Die Live-Ebene merkt sich, wo etwas auf ihr steht (liveBB, Rechteck in Gerätepixeln; null = leer), und leert nur
+// dieses Rechteck. Leeren kostet auf dem Surface (Adreno) Grafikzeit je Fläche, den ganzen Bildschirm etwa 7 ms – beim
+// Radieren, Lasso, Tape und Verschieben einer Auswahl bei jedem Bild. clearRect auf einem Teil ist dort so teuer wie auf
+// allem; Übermalen mit „destination-out“ auf ganzen Pixeln ergibt genau dasselbe (durchsichtig) und kostet nur die Fläche.
+// Wer auf ctxLive zeichnet, meldet den Bereich mit liveMark (Welt) oder liveMarkDev (Gerätepixel), lieber zu groß.
+let liveBB = null;
+function liveMarkDev(x0, y0, x1, y1) {
+  const b = liveBB;
+  liveBB = b ? [Math.min(b[0], x0), Math.min(b[1], y0), Math.max(b[2], x1), Math.max(b[3], y1)] : [x0, y0, x1, y1];
+  liveVis();
 }
-function liveWorld() { liveDirty = true; const { tx, ty, z } = S.view; ctxLive.setTransform(DPR * z, 0, 0, DPR * z, DPR * tx, DPR * ty); }
+// Rechteck in Weltkoordinaten, dazu m Gerätepixel Rand (Kantenglättung)
+function liveMark(x0, y0, x1, y1, m = 3) {
+  const { tx, ty, z } = S.view, k = z * DPR;
+  liveMarkDev(x0 * k + tx * DPR - m, y0 * k + ty * DPR - m, x1 * k + tx * DPR + m, y1 * k + ty * DPR + m);
+}
+function liveClear() {
+  const b = liveBB; if (!b) return; liveBB = null;
+  const W = cvLive.width, H = cvLive.height, g = ctxLive;
+  const x0 = Math.max(0, Math.floor(b[0])), y0 = Math.max(0, Math.floor(b[1])), x1 = Math.min(W, Math.ceil(b[2])), y1 = Math.min(H, Math.ceil(b[3]));
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  if (x1 > x0 && y1 > y0) {
+    if (x0 === 0 && y0 === 0 && x1 === W && y1 === H) g.clearRect(0, 0, W, H);
+    else {
+      g.save(); g.globalCompositeOperation = 'destination-out'; g.globalAlpha = 1; g.fillStyle = '#000'; g.shadowColor = 'transparent'; g.filter = 'none';
+      g.fillRect(x0, y0, x1 - x0, y1 - y0); g.restore();
+    }
+  }
+  liveVis();
+}
+/* Ist die Live-Ebene leer und schwebt kein Stift (und keine Maus) über der Fläche, ist sie ausgeblendet: opacity 0, sie
+   bekommt weiter alle Eingaben. Sonst setzt der Compositor die durchsichtige Fläche über der ganzen Notiz bei jedem Bild
+   mit ein, beim Verschieben mit dem Finger etwa ein Drittel der Grafikzeit. Schwebt ein Stift, bleibt sie sichtbar: der
+   erste Punkt eines Strichs erscheint ohne Verzögerung (das Einblenden bräuchte ein Bild). Ein Stift gilt nach dem
+   Verlassen noch 1,5 s als da, eine Maus, solange sie sich in den letzten 10 s bewegt hat; mit dem Finger zeichnen:
+   immer sichtbar. */
+let liveOpacity = '';            // Deckkraft beim Schreiben (Textmarker)
+const hovers = new Map();        // pointerId -> Zeitgeber fürs Vergessen (0: ist da)
+function liveVis() {
+  const o = liveBB || action || hovers.size || S.fingerDraw ? liveOpacity : '0';
+  if (cvLive.style.opacity !== o) cvLive.style.opacity = o;
+}
+function hoverIn(e) {
+  if (e.pointerType === 'touch' || (e.pointerType === 'mouse' && performance.now() < penActiveUntil)) return;   // vom Stift ausgelöste Mausbewegung
+  const t = hovers.get(e.pointerId), mouse = e.pointerType === 'mouse';
+  if (t === 0 && !mouse) return;
+  clearTimeout(t);
+  hovers.set(e.pointerId, mouse ? setTimeout(() => forget(e.pointerId), 10000) : 0);
+  liveVis();
+}
+function hoverOut(e) {
+  if (!hovers.has(e.pointerId)) return;
+  clearTimeout(hovers.get(e.pointerId)); hovers.set(e.pointerId, setTimeout(() => forget(e.pointerId), 1500));
+}
+function forget(id) { hovers.delete(id); liveVis(); }
+function liveStyle(a) {
+  liveOpacity = a && a.hl ? String(hlAlpha()) : '';
+  cvLive.style.mixBlendMode = a && a.hl && !S.dark ? 'multiply' : '';
+  liveVis();
+}
+function liveWorld() { const { tx, ty, z } = S.view; ctxLive.setTransform(DPR * z, 0, 0, DPR * z, DPR * tx, DPR * ty); }
+// Ausdehnung von Punkten (x, y, Druck) mit Rand m in Weltkoordinaten, ab Punkt i0
+function markPts(pts, m, i0 = 0) {
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  for (let i = i0 * 3; i < pts.length; i += 3) { const x = pts[i], y = pts[i + 1]; if (x < a) a = x; if (y < b) b = y; if (x > c) c = x; if (y > d) d = y; }
+  if (a <= c) liveMark(a - m, b - m, c + m, d + m);
+}
 function drawLive() {
   liveQ = false;
   if (action && action.kind === 'draw') {   // der Strich wird direkt gezeichnet; Tape und Geraden hier jedes Mal ganz
     const a = action; if (!a.redraw) return;
     liveClear(); liveWorld();
     const pts = a.straight ? straightPts(a) : a.pts;
+    markPts(pts, a.tape ? a.w * 1.5 : a.w);   // Tape: mit Zacken und Schatten
     if (a.tape) drawTape(ctxLive, { pts, w: a.w, c: a.c, tp: a.tp, live: true }, DPR * S.view.z);
     else { ctxLive.fillStyle = colorOf(a.c); ctxLive.fill(buildPath(pts, a.w, a.hl)); }
     return;
@@ -762,14 +847,16 @@ function drawLive() {
   const ctx = ctxLive, z = S.view.z, blue = S.dark ? '#8fb0ff' : '#2f6fed';
   if (action && action.kind === 'shape') liveShape(action);
   if (action && action.kind === 'lasso' && action.pts.length > 2) {
-    ctx.beginPath(); ctx.moveTo(action.pts[0], action.pts[1]);
-    for (let i = 2; i < action.pts.length; i += 2) ctx.lineTo(action.pts[i], action.pts[i + 1]);
-    ctx.closePath();
+    const p = action.pts; let x0 = p[0], y0 = p[1], x1 = x0, y1 = y0;
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]);
+    for (let i = 2; i < p.length; i += 2) { ctx.lineTo(p[i], p[i + 1]); x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); y0 = Math.min(y0, p[i + 1]); y1 = Math.max(y1, p[i + 1]); }
+    ctx.closePath(); liveMark(x0 - 2 / z, y0 - 2 / z, x1 + 2 / z, y1 + 2 / z);
     ctx.fillStyle = 'rgba(80,130,255,.08)'; ctx.fill();
     ctx.setLineDash([6 / z, 5 / z]); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = blue; ctx.stroke(); ctx.setLineDash([]);
   }
   if (action && action.kind === 'erase' && action.at) {
-    ctx.beginPath(); ctx.arc(action.at[0], action.at[1], ERASE_R / z, 0, 6.2832);
+    const [x, y] = action.at, r = (ERASE_R + 1) / z; liveMark(x - r, y - r, x + r, y + r);
+    ctx.beginPath(); ctx.arc(x, y, ERASE_R / z, 0, 6.2832);
     ctx.lineWidth = 1 / z; ctx.strokeStyle = S.dark ? '#aaa' : '#777'; ctx.stroke();
   }
   if (S.sel) {
@@ -779,37 +866,55 @@ function drawLive() {
       const a = action;
       if (a.bmp) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        if (a.kind === 'move') ctx.drawImage(a.bmp.c, (a.bmp.sx + a.dx * z) * DPR, (a.bmp.sy + a.dy * z) * DPR);
-        else { const [ax, ay] = toScreen(...a.anchor); ctx.drawImage(a.bmp.c, (ax + (a.bmp.sx - ax) * a.s) * DPR, (ay + (a.bmp.sy - ay) * a.s) * DPR, a.bmp.c.width * a.s, a.bmp.c.height * a.s); }
+        let x, y, w = a.bmp.c.width, h = a.bmp.c.height;
+        if (a.kind === 'move') { x = (a.bmp.sx + a.dx * z) * DPR; y = (a.bmp.sy + a.dy * z) * DPR; ctx.drawImage(a.bmp.c, x, y); }
+        else { const [ax, ay] = toScreen(...a.anchor); x = (ax + (a.bmp.sx - ax) * a.s) * DPR; y = (ay + (a.bmp.sy - ay) * a.s) * DPR; w *= a.s; h *= a.s; ctx.drawImage(a.bmp.c, x, y, w, h); }
+        liveMarkDev(x - 2, y - 2, x + w + 2, y + h + 2);
         liveWorld();
       } else {
         ctx.save();
-        if (a.kind === 'move') ctx.translate(a.dx, a.dy);
-        else { const [ax, ay] = a.anchor; ctx.translate(ax, ay); ctx.scale(a.s, a.s); ctx.translate(-ax, -ay); }
+        if (a.kind === 'move') { ctx.translate(a.dx, a.dy); liveMark(a0 + a.dx, b0 + a.dy, a1 + a.dx, b1 + a.dy); }
+        else {
+          const [ax, ay] = a.anchor, f = v => v * a.s; ctx.translate(ax, ay); ctx.scale(a.s, a.s); ctx.translate(-ax, -ay);
+          liveMark(ax + f(a0 - ax), ay + f(b0 - ay), ax + f(a1 - ax), ay + f(b1 - ay));
+        }
         for (const it of paintOrder()) if (S.sel.ids.has(it.id)) drawItem(ctx, it, DPR * z * (a.s || 1));
         ctx.restore();
       }
       if (a.kind === 'move') { a0 += a.dx; a1 += a.dx; b0 += a.dy; b1 += a.dy; }
       else { const [ax, ay] = a.anchor; a1 = ax + (a1 - ax) * a.s; b1 = ay + (b1 - ay) * a.s; }
     }
+    const m = 11 / z;   // Griff: Radius 9, Rand 2
+    liveMark(Math.min(a0, a1) - m, Math.min(b0, b1) - m, Math.max(a0, a1) + m, Math.max(b0, b1) + m);
     ctx.setLineDash([6 / z, 5 / z]); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = blue;
     ctx.strokeRect(a0, b0, a1 - a0, b1 - b0); ctx.setLineDash([]);
     ctx.beginPath(); ctx.arc(a1, b1, 9 / z, 0, 6.2832); ctx.fillStyle = blue; ctx.fill();
     ctx.lineWidth = 2 / z; ctx.strokeStyle = '#fff'; ctx.stroke();
   }
 }
+// Rand von cvMain: etwa 384 Gerätepixel, so gewählt, dass er in CSS- und in Gerätepixeln ganz aufgeht (sonst läge die
+// Leinwand zwischen den Pixeln und würde unscharf); [CSS, Gerät], [0, 0] = ohne Rand
+function padFor(dpr) {
+  for (let c = Math.round(384 / dpr); c >= 64; c--) { const d = c * dpr; if (Math.abs(d - Math.round(d)) < 1e-6) return [c, Math.round(d)]; }
+  return [0, 0];
+}
 function resize() {
   const oldDPR = DPR;
   DPR = window.devicePixelRatio || 1;
   const r = $('#stage').getBoundingClientRect(); VW = r.width; VH = r.height;
   const w = Math.round(VW * DPR), h = Math.round(VH * DPR);
-  if (cvMain.width !== w || cvMain.height !== h) {
-    for (const c of [cvMain, cvLive]) { c.width = w; c.height = h; }
+  [PADC, PADD] = padFor(DPR);
+  if (cvLive.width !== w || cvLive.height !== h) {
+    cvLive.width = w; cvLive.height = h;
+    liveBB = null;   // neue Größe: die Live-Ebene ist leer
     if (action && action.kind === 'draw') { action.noComposite = true; endAction(false); }
   }
+  if (cvMain.width !== w + 2 * PADD || cvMain.height !== h + 2 * PADD) { cvMain.width = w + 2 * PADD; cvMain.height = h + 2 * PADD; shownSig = ''; }
+  const ms = cvMain.style; ms.left = ms.top = -PADC + 'px'; ms.width = VW + 2 * PADC + 'px'; ms.height = VH + 2 * PADC + 'px';
   if (oldDPR !== DPR) { clearTiles(); patCache.clear(); }
   closeMenus();
   if (S.note) { S.view.tx = snap(S.view.tx); S.view.ty = snap(S.view.ty); draw(); drawLive(); }
+  liveVis();
 }
 new ResizeObserver(resize).observe($('#stage'));
 (function watchDPR() {
@@ -1294,9 +1399,9 @@ function liveStampBitmap(a, xf) {
     r.strokes.forEach((st, i) => fillStroke(cx, st, d.paths[i]));
     d.bmp = { c, k: kk, fx, fy, dark: S.dark, t: performance.now(), cost: performance.now() - now, pend: false };
   }
-  const b = d.bmp, q = k / b.k;
-  ctxLive.setTransform(1, 0, 0, 1, 0, 0); liveDirty = true;
-  ctxLive.drawImage(b.c, ox - b.fx * q, oy - b.fy * q, b.c.width * q, b.c.height * q);
+  const b = d.bmp, q = k / b.k, x = ox - b.fx * q, y = oy - b.fy * q, w = b.c.width * q, h = b.c.height * q;
+  ctxLive.setTransform(1, 0, 0, 1, 0, 0); liveMarkDev(x - 2, y - 2, x + w + 2, y + h + 2);
+  ctxLive.drawImage(b.c, x, y, w, h);
   liveWorld();
 }
 // Ruht der Stift, zeigt die Vorschau einer großen Form die genaue Geometrie (wie später in den Kacheln)
@@ -1317,7 +1422,8 @@ function liveShape(a) {
     if (!a.rest) { liveStampBitmap(a, xf); if (!a.restT) a.restT = setTimeout(() => stampRest(a), 190); return; }
     g = exactStamp(a, g); xf = null;
   }
-  const ctx = ctxLive;
+  const ctx = ctxLive, cb = contentBox(g.strokes);
+  liveMark(cb[0], cb[1], cb[2], cb[3], 5);   // die Rechtecke mit Kachelpixeln liegen höchstens 3 Gerätepixel um die Striche
   if (S.view.z !== S.level) {   // mitten im Zoomen
     if (xf) ctx.transform(xf[0], 0, 0, xf[0], xf[1], xf[2]);
     g.strokes.forEach((k, n) => fillStroke(ctx, k, g.paths[n]));
@@ -1451,8 +1557,10 @@ function catchUp(a) {
 function settleStroke(a) { if (a.raw) { catchUp(a); livePiece(a); } }
 function livePiece(a) {
   const P = new Path2D(), n = a.pts.length / 3;
+  if (a.drawn >= n) return;
   for (let i = a.drawn; i < n; i++) addPiece(P, a.pts, i, a.w, a.hl);
-  a.drawn = n; liveDirty = true;
+  markPts(a.pts, a.w, Math.max(0, a.drawn - 1));   // jedes Stück reicht bis zum vorigen Punkt; Radius höchstens 0,775 · w
+  a.drawn = n;
   ctxLive.fill(P);
 }
 
@@ -1578,6 +1686,7 @@ function commitLive(list, noComposite, sync) {
 function endAction(cancel) {
   const a = action; action = null;
   if (!a) return;
+  liveVis();
   if (a.kind === 'draw') {
     if (cancel) { clearTimeout(a.holdT); liveClear(); liveStyle(null); return; }
     finishStroke(a); return;
@@ -1666,6 +1775,7 @@ function hoverDot(e) {
 }
 
 cvLive.addEventListener('pointerdown', e => {
+  hoverIn(e);
   penDot.style.display = '';
   if (e.pointerType === 'pen') { penLast = true; if (!spaceDown) cvLive.style.cursor = toolCursor(S.tool); }
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
@@ -1696,6 +1806,7 @@ cvLive.addEventListener('pointermove', e => {
     penActiveUntil = Math.max(penActiveUntil, performance.now() + (action ? 600 : 300));
     if (gesture && !action) penArrived();
   }
+  hoverIn(e);
   if (e.pointerType === 'touch' && touches.has(e.pointerId)) { const [x, y] = localXY(e); touches.set(e.pointerId, { x, y }); }   // für eine zweite Hand: aktuelle Position
   if (!action && e.pointerType !== 'touch') hoverDot(e);
   if (action && action.id === e.pointerId) {
@@ -1727,7 +1838,8 @@ function pointerEnd(e) {
 }
 cvLive.addEventListener('pointerup', pointerEnd);
 cvLive.addEventListener('pointercancel', pointerEnd);
-cvLive.addEventListener('pointerleave', () => { penDot.style.display = ''; });
+cvLive.addEventListener('pointerleave', e => { penDot.style.display = ''; hoverOut(e); });
+cvLive.addEventListener('pointercancel', hoverOut);
 cvLive.addEventListener('lostpointercapture', e => { if (action && action.id === e.pointerId) endAction(false); });
 cvLive.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('blur', () => {
@@ -2024,7 +2136,7 @@ $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.tog
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
 $('#bMore').onclick = () => { $('#mFit').textContent = paperSize() ? 'Ganzes Blatt anzeigen' : 'Alles anzeigen'; $('#mFinger').textContent = 'Mit dem Finger zeichnen: ' + (S.fingerDraw ? 'an' : 'aus'); openMenu($('#moreMenu'), $('#bMore')); };
-$('#mFinger').onclick = () => { S.fingerDraw = !S.fingerDraw; store.set('fingerDraw', S.fingerDraw); closeMenus(); toast(S.fingerDraw ? 'Ein Finger zeichnet jetzt, zwei Finger verschieben und zoomen' : 'Finger verschieben und zoomen nur noch', 2600); };
+$('#mFinger').onclick = () => { S.fingerDraw = !S.fingerDraw; store.set('fingerDraw', S.fingerDraw); liveVis(); closeMenus(); toast(S.fingerDraw ? 'Ein Finger zeichnet jetzt, zwei Finger verschieben und zoomen' : 'Finger verschieben und zoomen nur noch', 2600); };
 $('#mFit').onclick = () => { closeMenus(); fitAll(); };
 $('#mPng').onclick = () => { closeMenus(); exportPNG(); };
 $('#mPdf').onclick = () => { closeMenus(); exportPDF(); };
@@ -2152,7 +2264,13 @@ function insertImages(files) {
   });
 }
 let pdfWorker = null;
+// pdf.js liegt als Text in der Seite und wird erst beim ersten PDF ausgeführt: spart bei jedem Start etwa 75 ms
+function loadPdfJs() {
+  if (window.pdfjsLib) return;
+  const s = document.createElement('script'); s.textContent = $('#pdfjsSrc').textContent; document.head.appendChild(s);
+}
 function getPdfWorker() {
+  loadPdfJs();
   if (pdfWorker) return pdfWorker;
   const url = URL.createObjectURL(new Blob([$('#pdfWorkerSrc').textContent], { type: 'text/javascript' }));
   pdfjsLib.GlobalWorkerOptions.workerSrc = url;
