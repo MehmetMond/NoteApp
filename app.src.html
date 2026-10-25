@@ -1000,7 +1000,9 @@ function toggleTapeAt(x, y) { const t = tapeAt(x, y); if (t) setTapes(new Set([t
    der gerade geschrieben wird, sowie Lasso und Auswahl. */
 const cvMain = $('#cvMain'), cvLive = $('#cvLive'), penDot = $('#penDot');
 const ctxMain = cvMain.getContext('2d', { alpha: false });
-const ctxLive = cvLive.getContext('2d', { desynchronized: true });
+// Wenig Verzögerung beim Schreiben nur unter Windows (Surface): Laut Chrome darf über so einer durchsichtigen Fläche
+// nichts liegen, hier liegt die Leiste darüber. Auf Android (Pixel 8) war damit die ganze Notiz schwarz, nur die Leiste zu sehen
+const ctxLive = cvLive.getContext('2d', { desynchronized: /Windows/.test(navigator.userAgent) });
 let VW = 0, VH = 0, DPR = 1;
 const T = 512, MAX_TILES = 110;
 const tiles = new Map();
