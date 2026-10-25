@@ -571,9 +571,10 @@ function invalidateBox(b) {
   }
   requestDraw();
 }
+// v zählt jedes Neuzeichnen der Kachel: daran sieht draw(), welche Plätze auf dem Bildschirm neu gemalt werden müssen
 function newTile() {
   const c = document.createElement('canvas'); c.width = c.height = T;
-  return { c, ctx: c.getContext('2d', { alpha: false }) };
+  return { c, ctx: c.getContext('2d', { alpha: false }), v: 0 };
 }
 function hiddenIds() {
   if (action && action.kind === 'erase') return action.removed;
@@ -582,7 +583,7 @@ function hiddenIds() {
 }
 function renderTile(L, i, j) {
   const t = tilePool.pop() || newTile(), s = L * DPR, ctx = t.ctx;
-  t.L = L; t.wb = [i * T / s, j * T / s, (i + 1) * T / s, (j + 1) * T / s];
+  t.L = L; t.wb = [i * T / s, j * T / s, (i + 1) * T / s, (j + 1) * T / s]; t.v++;
   fillBg(ctx, L, -i * T, -j * T, T, T);
   ctx.setTransform(s, 0, 0, s, -i * T, -j * T);
   const hid = hiddenIds();
@@ -600,12 +601,24 @@ function tileRange(L) {
   const W = cvMain.width, H = cvMain.height;
   return { k, txD, tyD, i0: Math.floor(-txD / k / T), i1: Math.floor((W - txD) / k / T), j0: Math.floor(-tyD / k / T), j1: Math.floor((H - tyD) / k / T) };
 }
-function drawLevel(ctx, L, touch) {
+// Was zuletzt auf cvMain zu sehen ist: Ansicht (shownSig) und je Kachelplatz die Kachel mit ihrem Stand. Bleibt die
+// Ansicht gleich (Schreiben, Radieren, Rückgängig …), malt draw() nur die Plätze neu, deren Kachel sich geändert hat,
+// statt jedes Mal den ganzen Bildschirm: spart Grafikarbeit und Akku
+let shownSig = '';
+const shownSlots = new Map();
+cvMain.addEventListener('contextrestored', () => { shownSig = ''; requestDraw(); });
+// cur: Ebene L ist die aktuelle (merkt sich die Plätze); only: nur geänderte Plätze malen
+function drawLevel(ctx, L, cur, only) {
   const r = tileRange(L);
   if ((r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400) return;
   for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) {
     const key = tkey(L, i, j), fresh = tiles.get(key), t = fresh || stale.get(key); if (!t) continue;
-    if (touch && fresh) { tiles.delete(key); tiles.set(key, t); }
+    if (cur && fresh) { tiles.delete(key); tiles.set(key, t); }
+    if (cur) {
+      const was = shownSlots.get(key);
+      if (only && was && was.t === t && was.v === t.v) continue;
+      shownSlots.set(key, { t, v: t.v });
+    }
     const x0 = Math.floor(i * T * r.k + r.txD), x1 = Math.floor((i + 1) * T * r.k + r.txD);
     const y0 = Math.floor(j * T * r.k + r.tyD), y1 = Math.floor((j + 1) * T * r.k + r.tyD);
     if (r.k === 1) ctx.drawImage(t.c, x0, y0); else ctx.drawImage(t.c, x0, y0, x1 - x0, y1 - y0);
@@ -663,7 +676,6 @@ function draw() {
   drawQ = false; if (!S.note) return;
   frameNo++;
   const ctx = ctxMain, L = S.level;
-  fillBg(ctx, S.view.z, Math.round(S.view.tx * DPR), Math.round(S.view.ty * DPR), cvMain.width, cvMain.height);
   const r = tileRange(L), missing = [];
   let have = 0;
   for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) if (!tiles.has(tkey(L, i, j))) missing.push([i, j]); else have++;
@@ -689,14 +701,23 @@ function draw() {
     const [, si, sj] = k.split(':').map(Number);
     if (t.L !== L || si < r.i0 || si > r.i1 || sj < r.j0 || sj > r.j1) { stale.delete(k); tilePool.push(t); }
   }
-  if (missing.length && fallbackL != null && fallbackL !== L) drawLevel(ctx, fallbackL, false);
-  drawLevel(ctx, L, true);
+  // Papier (und die vorige Zoomstufe) nur dort nötig, wo eine Kachel ganz fehlt; sonst decken die Kacheln alles ab
+  const gaps = (r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400 || missing.some(([i, j]) => !stale.has(tkey(L, i, j)));
+  const sig = [L, S.view.z, r.txD, r.tyD, cvMain.width, cvMain.height].join('|'), only = !gaps && sig === shownSig;
+  if (!only) {
+    shownSlots.clear(); shownSig = gaps ? '' : sig;
+    if (gaps) {
+      fillBg(ctx, S.view.z, r.txD, r.tyD, cvMain.width, cvMain.height);
+      if (fallbackL != null && fallbackL !== L) drawLevel(ctx, fallbackL, false);
+    }
+  }
+  drawLevel(ctx, L, true, only);
   if (missing.length) requestDraw();
   else { if (fallbackL != null && !gesture && !wheelT) fallbackL = null; schedulePrefetch(); }
   // älteste Kacheln verwerfen
   for (const [k, t] of tiles) { if (tiles.size <= MAX_TILES) break; tiles.delete(k); tilePool.push(t); }
   if (tilePool.length > 40) tilePool.length = 40;
-  $('#zoom').textContent = Math.round(S.view.z * 100) + ' %';
+  const zt = Math.round(S.view.z * 100) + ' %', ze = $('#zoom'); if (ze.textContent !== zt) ze.textContent = zt;
   if (paperSize()) { const t = (currentSheet() + 1) + ' / ' + sheetCount(), el = $('#sheetNo'); if (el.textContent !== t) el.textContent = t; }
   placeSelbar();
   if (action && action.kind === 'shape') requestLive();   // Formvorschau enthält Kachelpixel: mitziehen
@@ -716,12 +737,15 @@ function schedulePrefetch() {
     if (ring.length) schedulePrefetch();
   }, { timeout: 1000 });
 }
-function liveClear() { ctxLive.setTransform(1, 0, 0, 1, 0, 0); ctxLive.clearRect(0, 0, cvLive.width, cvLive.height); }
+// Live-Ebene nur leeren, wenn etwas darauf ist: jedes Leeren lässt den ganzen Bildschirm neu zusammensetzen
+// (z. B. bei jedem Bild beim Verschieben mit der Hand)
+let liveDirty = true;
+function liveClear() { if (!liveDirty) return; liveDirty = false; ctxLive.setTransform(1, 0, 0, 1, 0, 0); ctxLive.clearRect(0, 0, cvLive.width, cvLive.height); }
 function liveStyle(a) {
   cvLive.style.opacity = a && a.hl ? hlAlpha() : '';
   cvLive.style.mixBlendMode = a && a.hl && !S.dark ? 'multiply' : '';
 }
-function liveWorld() { const { tx, ty, z } = S.view; ctxLive.setTransform(DPR * z, 0, 0, DPR * z, DPR * tx, DPR * ty); }
+function liveWorld() { liveDirty = true; const { tx, ty, z } = S.view; ctxLive.setTransform(DPR * z, 0, 0, DPR * z, DPR * tx, DPR * ty); }
 function drawLive() {
   liveQ = false;
   if (action && action.kind === 'draw') {   // der Strich wird direkt gezeichnet; Tape und Geraden hier jedes Mal ganz
@@ -732,7 +756,9 @@ function drawLive() {
     else { ctxLive.fillStyle = colorOf(a.c); ctxLive.fill(buildPath(pts, a.w, a.hl)); }
     return;
   }
-  liveClear(); liveWorld();
+  liveClear();
+  if (!S.sel && !(action && (action.kind === 'shape' || action.kind === 'lasso' || action.kind === 'erase'))) return;
+  liveWorld();
   const ctx = ctxLive, z = S.view.z, blue = S.dark ? '#8fb0ff' : '#2f6fed';
   if (action && action.kind === 'shape') liveShape(action);
   if (action && action.kind === 'lasso' && action.pts.length > 2) {
@@ -882,7 +908,9 @@ function stepHistory(from, to) {
 }
 function undo() { stepHistory(S.undo, S.redo); }
 function redo() { stepHistory(S.redo, S.undo); }
-function updateUndo() { $('#bUndo').disabled = !S.undo.length; $('#bRedo').disabled = !S.redo.length; }
+function updateUndo() {
+  for (const [id, off] of [['#bUndo', !S.undo.length], ['#bRedo', !S.redo.length]]) { const b = $(id); if (b.disabled !== off) b.disabled = off; }
+}
 // Reihenfolge: neue Striche ans Ende, Bilder direkt über die vorhandenen Bilder (also unter die Schrift)
 function appendItems(list, added) {
   const base = list.length ? list[list.length - 1].o : 0;
@@ -1267,7 +1295,7 @@ function liveStampBitmap(a, xf) {
     d.bmp = { c, k: kk, fx, fy, dark: S.dark, t: performance.now(), cost: performance.now() - now, pend: false };
   }
   const b = d.bmp, q = k / b.k;
-  ctxLive.setTransform(1, 0, 0, 1, 0, 0);
+  ctxLive.setTransform(1, 0, 0, 1, 0, 0); liveDirty = true;
   ctxLive.drawImage(b.c, ox - b.fx * q, oy - b.fy * q, b.c.width * q, b.c.height * q);
   liveWorld();
 }
@@ -1352,7 +1380,7 @@ const touches = new Map();   // aktive Finger
 let gesture = null, penActiveUntil = 0, spaceDown = false;
 
 function capture(e) { try { cvLive.setPointerCapture(e.pointerId); } catch (err) {} }
-function localXY(e) { const r = cvLive.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function localXY(e, r = cvLive.getBoundingClientRect()) { return [e.clientX - r.left, e.clientY - r.top]; }
 function pressureOf(e) { return e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : 0.5; }
 
 // Eingabefilter: glättet die Stiftposition schon beim Schreiben, so stark wie eingestellt (S.smooth).
@@ -1424,7 +1452,7 @@ function settleStroke(a) { if (a.raw) { catchUp(a); livePiece(a); } }
 function livePiece(a) {
   const P = new Path2D(), n = a.pts.length / 3;
   for (let i = a.drawn; i < n; i++) addPiece(P, a.pts, i, a.w, a.hl);
-  a.drawn = n;
+  a.drawn = n; liveDirty = true;
   ctxLive.fill(P);
 }
 
@@ -1474,9 +1502,9 @@ function beginTransform(a) {
 function moveAction(e) {
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
   const list = evs.length ? evs : [e];
-  const a = action;
+  const a = action, rc = cvLive.getBoundingClientRect();   // einmal für alle Teilereignisse
   for (const ev of list) {
-    const [sx, sy] = localXY(ev);
+    const [sx, sy] = localXY(ev, rc);
     if (a.kind === 'draw') { strokeInput(a, sx, sy, pressureOf(ev), ev.timeStamp); continue; }
     const [wx, wy] = toWorld(sx, sy);
     if (a.kind === 'pan') setView(a.tx + sx - a.sx, a.ty + sy - a.sy, S.view.z);
@@ -1503,7 +1531,7 @@ function moveAction(e) {
   if (a.kind !== 'draw') requestLive();
 }
 function deferLiveClear() {
-  requestAnimationFrame(() => requestAnimationFrame(() => { if (!action || action.kind !== 'draw') { if (!action) liveStyle(null); liveClear(); drawLive(); } }));
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (!action || action.kind !== 'draw') { if (!action) liveStyle(null); drawLive(); } }));   // drawLive leert selbst
 }
 // Textmarker und Tape: Kacheln neu zeichnen statt die Live-Ebene übernehmen (Textmarker liegt unter der Schrift)
 function finishStroke(a) {
@@ -1538,7 +1566,7 @@ function commitLive(list, noComposite, sync) {
       if (!boxHit(t.wb, bb)) continue;
       if (t.L !== S.level) { tiles.delete(k); tilePool.push(t); continue; }
       const i = Math.round(t.wb[0] * S.level * DPR / T), j = Math.round(t.wb[1] * S.level * DPR / T);
-      const g = t.ctx; g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+      const g = t.ctx; g.save(); g.setTransform(1, 0, 0, 1, 0, 0); t.v++;
       if (hl) { g.globalAlpha = hlAlpha(); if (!S.dark) g.globalCompositeOperation = 'multiply'; }
       g.drawImage(cvLive, i * T + txD, j * T + tyD, T, T, 0, 0, T, T);
       g.restore();
@@ -1625,8 +1653,10 @@ function hoverDot(e) {
   const k = S.tool;
   const on = penLast && !action && !spaceDown && !(e.buttons & 34) && inkTool(k);
   if (on) {
-    const d = Math.max(3, S.size[k] * S.view.z), [sx, sy] = localXY(e), st = penDot.style;
-    st.width = st.height = d + 'px'; st.background = colorOf(S.color[k]);
+    // beim Schweben ändert sich meist nur die Lage: nur transform setzen, das verschiebt der Compositor ohne Neuzeichnen
+    const d = Math.max(3, S.size[k] * S.view.z), [sx, sy] = localXY(e), st = penDot.style, px = d + 'px', c = colorOf(S.color[k]);
+    if (st.width !== px) st.width = st.height = px;
+    if (penDot.dataset.c !== c) { penDot.dataset.c = c; st.background = c; }
     st.transform = `translate(${sx - d / 2}px,${sy - d / 2}px)`;
   }
   const disp = on ? 'block' : '';
