@@ -1047,12 +1047,24 @@ let VW = 0, VH = 0, DPR = 1;
 const T = 512, MAX_TILES = 110;
 const tiles = new Map();
 const tilePool = [];
+// Platzhalter: nach einer Änderung (Radieren, Rückgängig, Tape aufdecken …) bleibt die alte Kachel sichtbar, bis die
+// neue gezeichnet ist. Ohne sie zeigte die Stelle so lange nur leeres Papier: weiße Rechtecke flackerten auf (vor allem
+// über PDF-Seiten, deren Kacheln teuer sind)
+const stale = new Map();
 let fallbackL = null;
 const tkey = (L, i, j) => L + ':' + i + ':' + j;
-function clearTiles() { for (const t of tiles.values()) tilePool.push(t); tiles.clear(); fallbackL = null; requestDraw(); }
+function clearTiles() {
+  for (const t of tiles.values()) tilePool.push(t); for (const t of stale.values()) tilePool.push(t);
+  tiles.clear(); stale.clear(); fallbackL = null; requestDraw();
+}
 function invalidateBox(b) {
   if (!b) return;
-  for (const [k, t] of tiles) if (boxHit(t.wb, b)) { tiles.delete(k); tilePool.push(t); }
+  for (const [k, t] of tiles) if (boxHit(t.wb, b)) {
+    tiles.delete(k);
+    if (t.L !== S.level) { tilePool.push(t); continue; }
+    const old = stale.get(k); if (old) tilePool.push(old);
+    stale.set(k, t);
+  }
   requestDraw();
 }
 function newTile() {
@@ -1074,7 +1086,9 @@ function renderTile(L, i, j) {
     if (hid && hid.has(it.id)) continue;
     if (boxHit(itemBox(it), t.wb)) drawItem(ctx, it, s);
   }
-  tiles.set(tkey(L, i, j), t);
+  const key = tkey(L, i, j), old = stale.get(key);
+  if (old) { stale.delete(key); tilePool.push(old); }   // Platzhalter hat ausgedient
+  tiles.set(key, t);
   return t;
 }
 function tileRange(L) {
@@ -1086,8 +1100,8 @@ function drawLevel(ctx, L, touch) {
   const r = tileRange(L);
   if ((r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400) return;
   for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) {
-    const key = tkey(L, i, j), t = tiles.get(key); if (!t) continue;
-    if (touch) { tiles.delete(key); tiles.set(key, t); }
+    const key = tkey(L, i, j), fresh = tiles.get(key), t = fresh || stale.get(key); if (!t) continue;
+    if (touch && fresh) { tiles.delete(key); tiles.set(key, t); }
     const x0 = Math.floor(i * T * r.k + r.txD), x1 = Math.floor((i + 1) * T * r.k + r.txD);
     const y0 = Math.floor(j * T * r.k + r.tyD), y1 = Math.floor((j + 1) * T * r.k + r.tyD);
     if (r.k === 1) ctx.drawImage(t.c, x0, y0); else ctx.drawImage(t.c, x0, y0, x1 - x0, y1 - y0);
@@ -1152,11 +1166,24 @@ function draw() {
   if (missing.length) {
     const ci = (cvMain.width / 2 - r.txD) / r.k / T - 0.5, cj = (cvMain.height / 2 - r.tyD) / r.k / T - 0.5;
     missing.sort((a, b) => Math.hypot(a[0] - ci, a[1] - cj) - Math.hypot(b[0] - ci, b[1] - cj));
+    // Geänderte Kacheln (mit Platzhalter) zuerst und gleich alle: die Änderung erscheint in einem Bild, nicht stückweise
+    // (höchstens 150 ms, der Rest bleibt solange Platzhalter)
+    const t00 = performance.now();
+    for (let k = 0; k < missing.length;) {
+      const [i, j] = missing[k];
+      if (stale.has(tkey(L, i, j)) && performance.now() - t00 < 150) { renderTile(L, i, j); missing.splice(k, 1); } else k++;
+    }
     // Beim Öffnen alles sofort zeichnen, beim Verschieben/Zoomen nur wenige ms pro Bild (Rest folgt)
     const first = have === 0 && fallbackL == null;
     const t0 = performance.now(), budget = first ? 250 : 7, maxN = first ? Infinity : (gesture || wheelT ? 3 : 8);
     let done = 0;
     while (missing.length && done < maxN && performance.now() - t0 < budget) { const [i, j] = missing.shift(); renderTile(L, i, j); done++; }
+  }
+  // Platzhalter außerhalb des Bilds oder einer anderen Zoomstufe werden nicht mehr gebraucht (beim Zurückscrollen
+  // zeigten sie sonst einen alten Stand)
+  for (const [k, t] of stale) {
+    const [, si, sj] = k.split(':').map(Number);
+    if (t.L !== L || si < r.i0 || si > r.i1 || sj < r.j0 || sj > r.j1) { stale.delete(k); tilePool.push(t); }
   }
   if (missing.length && fallbackL != null && fallbackL !== L) drawLevel(ctx, fallbackL, false);
   drawLevel(ctx, L, true);
