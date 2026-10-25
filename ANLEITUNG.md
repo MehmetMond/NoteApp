@@ -1,8 +1,9 @@
-# Notizen für das Surface Pro 11 (Version 1.5.2)
+# Notizen für das Surface Pro 11 (Version 1.5.3)
 
-## Neu (zuerst in der Browser-Version)
-- **Tape** (Knopf neben dem Textmarker, Taste T), wie bei Goodnotes: Über Text oder Bilder ziehen deckt sie ab, wie mit Washi-Tape. **Antippen** deckt auf (das Tape bleibt als blasser, gestrichelter Umriss), nochmal antippen deckt wieder ab, auch mit dem Finger. Was auf ein abgedecktes Tape geschrieben wird, gehört zum Tape und verschwindet beim Aufdecken mit: Antwort daraufschreiben, aufdecken, vergleichen. Am Ende kurz halten macht das Tape gerade (weiterziehen dreht es). Im Menü (gewählte Dicke nochmal antippen): Muster Uni, Streifen, Punkte oder Karo, „Immer gerade“ und **Alle aufdecken / Alle abdecken** für die ganze Seite. Radieren nimmt das Tape mit dem, was darauf steht; das Lasso wählt beides zusammen.
+## Neu in 1.5.3: Tape und Textmarker
+- **Tape** (Knopf neben dem Textmarker, Taste T), wie bei Goodnotes: Über Text oder Bilder ziehen deckt sie ab, wie mit Washi-Tape, das mit einem leichten Schatten auf dem Papier liegt. **Antippen** deckt auf (das Tape bleibt als blasser, gestrichelter Umriss), nochmal antippen deckt wieder ab, auch mit dem Finger. Was auf ein abgedecktes Tape geschrieben wird, gehört zum Tape und verschwindet beim Aufdecken mit: Antwort daraufschreiben, aufdecken, vergleichen. Am Ende kurz halten macht das Tape gerade (weiterziehen dreht es). Im Menü (gewählte Dicke nochmal antippen): Muster Uni, Streifen, Punkte oder Karo, „Immer gerade“ und **Alle aufdecken / Alle abdecken** für die ganze Seite. Radieren nimmt das Tape mit dem, was darauf steht; das Lasso wählt beides zusammen.
 - **Textmarker:** Er liegt jetzt unter der Schrift wie auf Papier, die Schrift bleibt klar und wird nicht eingefärbt (vor allem im Darkmode). Am Ende kurz halten macht die Linie gerade; im Menü gibt es „Immer gerade“. Fast waagerechte Linien werden genau waagerecht.
+- Beim Radieren flackern keine weißen Flächen mehr auf (vor allem über PDF-Seiten): Die Seite bleibt sichtbar, bis die Änderung fertig gezeichnet ist.
 
 ## Neu in 1.5.2: Glättung beim Stift
 - **Glättung beim Stift:** Die gewählte Strichstärke nochmal antippen, dann gibt es unter der Dicke die **Glättung** mit fünf Voreinstellungen: **Aus** (die Linie genau so, wie der Stift sie zeichnet), **25 %**, **50 %** (wie bisher, voreingestellt), **75 %** (deutlich ruhiger) und **100 %** (sehr ruhig). Die Glättung richtet sich nach dem Tempo: Wer langsam schreibt, wo Zittern auffällt, bekommt mehr davon weggenommen; schnell geschriebene Linien folgen dem Stift fast ohne Verzögerung, so bleiben auch bei 100 % die Buchstaben in Form. Der Regler darunter stellt die gewählte Voreinstellung fein ein, die Vorschau zeigt die Wirkung an einer Probelinie. Gilt für Stift und Textmarker und bleibt gespeichert; wirkt auf neue Striche, schon geschriebene bleiben, wie sie sind.
@@ -37,13 +38,13 @@
 - Ältere Striche behalten ihre Dicke. Wer sie angleichen will: mit dem Lasso markieren, Dicke wählen, **Dicke übernehmen** antippen.
 
 ## Starten ohne Installation (empfohlen)
-1. `Notizen-1.5.2-arm64-ohne-Installation.zip` auf das Surface laden, rechtsklicken und **Alle extrahieren** wählen.
+1. `Notizen-1.5.3-arm64-ohne-Installation.zip` auf das Surface laden, rechtsklicken und **Alle extrahieren** wählen.
 2. Im entpackten Ordner `Notizen\Notizen.exe` starten. Für eine Verknüpfung: rechtsklicken, **Weitere Optionen anzeigen**, **Senden an**, **Desktop (Verknüpfung erstellen)**.
 3. Beim Wechsel von einer älteren Version das Programm schließen und den alten Ordner `Notizen` durch den neuen ersetzen. Die Notizen bleiben erhalten, sie liegen getrennt unter `%APPDATA%\Notizen`.
 4. Hinweis: Nach dem ersten Start von 1.4 kann eine ältere Version die Notizen nicht mehr öffnen. Wer sicher gehen will, tippt vorher in der alten Version auf **Sichern**.
 
 ## Installieren (alternativ)
-1. `Notizen-1.5.2-arm64.zip` entpacken und `Notizen-Setup-1.5.2-arm64.exe` doppelklicken.
+1. `Notizen-1.5.3-arm64.zip` entpacken und `Notizen-Setup-1.5.3-arm64.exe` doppelklicken.
 2. Windows zeigt beim ersten Mal „Der Computer wurde durch Windows geschützt“, weil das Programm nicht signiert ist. Auf **Weitere Informationen** und dann **Trotzdem ausführen** klicken.
 3. Neue Versionen einfach über die alte installieren, die Notizen bleiben erhalten.
 
