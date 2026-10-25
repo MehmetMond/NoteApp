@@ -1,7 +1,7 @@
 {
   "name": "notizen",
   "productName": "Notizen",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "Handschriftliche Notizen mit unendlicher Arbeitsfläche",
   "author": "Baerda",
   "main": "main.js",

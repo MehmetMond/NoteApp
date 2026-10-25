@@ -1,4 +1,10 @@
-# Notizen für das Surface Pro 11 (Version 1.5.4)
+# Notizen für das Surface Pro 11 (Version 1.5.5)
+
+## Neu in 1.5.5: noch weniger Akkuverbrauch
+- Verschieben der Seite mit dem Finger braucht etwa 60 % weniger Grafikarbeit (mit Mausrad oder Hand ebenfalls weniger): Die Seite wird nur noch verschoben und erst neu gemalt, wenn ein neues Stück ins Bild kommt.
+- Radieren, Lasso, Auswahl verschieben und Tape: 35 bis 45 % weniger Grafikarbeit, weil nur noch die Stelle unter Radierer, Lasso oder Auswahl neu gemalt wird. Zoomen: etwa 13 % weniger.
+- Der Start ist etwas schneller: Der PDF-Teil wird erst beim ersten PDF-Import geladen.
+- Aussehen, Schreiben und Stift bleiben genau wie vorher.
 
 ## Neu in 1.5.4: weniger Akkuverbrauch
 - Nach einem Strich, beim Radieren, Rückgängig oder Tape-Antippen wird nur noch die Stelle neu gemalt, die sich geändert hat, nicht mehr der ganze Bildschirm (beim Schreiben etwa 98 % weniger Grafikarbeit, beim Verschieben etwa 60 % weniger).
@@ -43,13 +49,13 @@
 - Ältere Striche behalten ihre Dicke. Wer sie angleichen will: mit dem Lasso markieren, Dicke wählen, **Dicke übernehmen** antippen.
 
 ## Starten ohne Installation (empfohlen)
-1. `Notizen-1.5.4-arm64-ohne-Installation.zip` auf das Surface laden, rechtsklicken und **Alle extrahieren** wählen.
+1. `Notizen-1.5.5-arm64-ohne-Installation.zip` auf das Surface laden, rechtsklicken und **Alle extrahieren** wählen.
 2. Im entpackten Ordner `Notizen\Notizen.exe` starten. Für eine Verknüpfung: rechtsklicken, **Weitere Optionen anzeigen**, **Senden an**, **Desktop (Verknüpfung erstellen)**.
 3. Beim Wechsel von einer älteren Version das Programm schließen und den alten Ordner `Notizen` durch den neuen ersetzen. Die Notizen bleiben erhalten, sie liegen getrennt unter `%APPDATA%\Notizen`.
 4. Hinweis: Nach dem ersten Start von 1.4 kann eine ältere Version die Notizen nicht mehr öffnen. Wer sicher gehen will, tippt vorher in der alten Version auf **Sichern**.
 
 ## Installieren (alternativ)
-1. `Notizen-1.5.4-arm64.zip` entpacken und `Notizen-Setup-1.5.4-arm64.exe` doppelklicken.
+1. `Notizen-1.5.5-arm64.zip` entpacken und `Notizen-Setup-1.5.5-arm64.exe` doppelklicken.
 2. Windows zeigt beim ersten Mal „Der Computer wurde durch Windows geschützt“, weil das Programm nicht signiert ist. Auf **Weitere Informationen** und dann **Trotzdem ausführen** klicken.
 3. Neue Versionen einfach über die alte installieren, die Notizen bleiben erhalten.
 
