@@ -1,6 +1,6 @@
-# Notizen für das Surface Pro 11 (Version 1.5.5)
+# Notizen für das Surface Pro 11 (Version 1.5.6)
 
-## Neu (zuerst in der Browser-Version)
+## Neu in 1.5.6: Lasso mit der Stifttaste
 - **Taste am Stift = Lasso** (wie in OneNote): Taste gedrückt halten und einen Kreis um Schrift oder Bilder ziehen, mit der Taste antippen wählt einen Strich. Danach verschiebt der Stift die Auswahl, wenn man darin zieht (auch ohne Taste), am blauen Punkt skaliert er sie; daneben schreibt er normal weiter und die Auswahl verschwindet. Das Werkzeug bleibt dabei der Stift. Radieren geht weiter mit dem Radierer-Ende des Stifts.
 - Das erste Öffnen eines Buchs nach dem Programmstart ruckelt nicht mehr: Die App wärmt die Animation kurz nach dem Start unsichtbar vor.
 
@@ -53,13 +53,13 @@
 - Ältere Striche behalten ihre Dicke. Wer sie angleichen will: mit dem Lasso markieren, Dicke wählen, **Dicke übernehmen** antippen.
 
 ## Starten ohne Installation (empfohlen)
-1. `Notizen-1.5.5-arm64-ohne-Installation.zip` auf das Surface laden, rechtsklicken und **Alle extrahieren** wählen.
+1. `Notizen-1.5.6-arm64-ohne-Installation.zip` auf das Surface laden, rechtsklicken und **Alle extrahieren** wählen.
 2. Im entpackten Ordner `Notizen\Notizen.exe` starten. Für eine Verknüpfung: rechtsklicken, **Weitere Optionen anzeigen**, **Senden an**, **Desktop (Verknüpfung erstellen)**.
 3. Beim Wechsel von einer älteren Version das Programm schließen und den alten Ordner `Notizen` durch den neuen ersetzen. Die Notizen bleiben erhalten, sie liegen getrennt unter `%APPDATA%\Notizen`.
 4. Hinweis: Nach dem ersten Start von 1.4 kann eine ältere Version die Notizen nicht mehr öffnen. Wer sicher gehen will, tippt vorher in der alten Version auf **Sichern**.
 
 ## Installieren (alternativ)
-1. `Notizen-1.5.5-arm64.zip` entpacken und `Notizen-Setup-1.5.5-arm64.exe` doppelklicken.
+1. `Notizen-1.5.6-arm64.zip` entpacken und `Notizen-Setup-1.5.6-arm64.exe` doppelklicken.
 2. Windows zeigt beim ersten Mal „Der Computer wurde durch Windows geschützt“, weil das Programm nicht signiert ist. Auf **Weitere Informationen** und dann **Trotzdem ausführen** klicken.
 3. Neue Versionen einfach über die alte installieren, die Notizen bleiben erhalten.
 
