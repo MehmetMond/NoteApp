@@ -1564,10 +1564,22 @@ function livePiece(a) {
   ctxLive.fill(P);
 }
 
+// Stift: das Radierer-Ende radiert, die Taste am Stift wählt mit dem Lasso aus (wie in OneNote). In einer Auswahl
+// verschiebt der Stift sie auch ohne Taste, am Griff skaliert er sie; daneben verschwindet sie und es wird geschrieben
+const penErase = e => e.pointerType === 'pen' && (e.button === 5 || (e.buttons & 32));
+const penButton = e => e.pointerType === 'pen' && !penErase(e) && (e.button === 2 || (e.buttons & 2));
+// Wo ein Punkt die Auswahl trifft: 'scale' am Griff, 'move' darin (mit etwas Rand), sonst null
+function selHit(sx, sy, wx, wy) {
+  if (!S.sel) return null;
+  const b = S.sel.bb, [hx, hy] = toScreen(b[2], b[3]), m = 6 / S.view.z;
+  if (Math.hypot(sx - hx, sy - hy) < 22) return 'scale';
+  return wx >= b[0] - m && wx <= b[2] + m && wy >= b[1] - m && wy <= b[3] + m ? 'move' : null;
+}
 function startAction(e) {
   const [sx, sy] = localXY(e), [wx, wy] = toWorld(sx, sy);
   let tool = S.tool;
-  if (e.pointerType === 'pen' && (e.button === 5 || (e.buttons & 32) || e.button === 2)) tool = 'eraser';
+  if (penErase(e)) tool = 'eraser';
+  else if (penButton(e) || (e.pointerType === 'pen' && tool !== 'hand' && selHit(sx, sy, wx, wy))) tool = 'lasso';
   if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || spaceDown)) tool = 'hand';
   if (tool === 'hand') { action = { kind: 'pan', id: e.pointerId, sx, sy, tx: S.view.tx, ty: S.view.ty, touch: e.pointerType === 'touch' }; return; }
   if (tool !== 'lasso' && S.sel) clearSel();
@@ -1590,11 +1602,10 @@ function startAction(e) {
     action = { kind: 'erase', id: e.pointerId, removed: new Set(), at: [wx, wy] }; eraseAt(wx, wy); requestLive();
   } else if (tool === 'lasso') {
     if (S.sel) {
-      const b = S.sel.bb, [hx, hy] = toScreen(b[2], b[3]);
-      if (Math.hypot(sx - hx, sy - hy) < 22) { const gb = S.snap ? geoBox(S.items.filter(it => S.sel.ids.has(it.id))) : b;   // mit Raster: an der geometrischen Ecke, die bleibt auf dem Raster
+      const h = selHit(sx, sy, wx, wy);
+      if (h === 'scale') { const gb = S.snap ? geoBox(S.items.filter(it => S.sel.ids.has(it.id))) : S.sel.bb;   // mit Raster: an der geometrischen Ecke, die bleibt auf dem Raster
         beginTransform({ kind: 'scale', id: e.pointerId, anchor: [gb[0], gb[1]], s: 1, p0: [wx, wy] }); return; }
-      const m = 6 / S.view.z;
-      if (wx >= b[0] - m && wx <= b[2] + m && wy >= b[1] - m && wy <= b[3] + m) { beginTransform({ kind: 'move', id: e.pointerId, wx, wy, sx, sy, dx: 0, dy: 0, moved: false }); return; }
+      if (h === 'move') { beginTransform({ kind: 'move', id: e.pointerId, wx, wy, sx, sy, dx: 0, dy: 0, moved: false }); return; }
       clearSel();
     }
     action = { kind: 'lasso', id: e.pointerId, pts: [wx, wy], last: [sx, sy] };
@@ -1759,18 +1770,21 @@ function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default
 function hoverDot(e) {
   if (e.pointerType === 'mouse' && performance.now() < penActiveUntil) return;   // vom Stift ausgelöste Mausbewegung
   penLast = e.pointerType === 'pen';
-  const k = S.tool;
-  const on = penLast && !action && !spaceDown && !(e.buttons & 34) && inkTool(k);
+  const k = S.tool, [sx, sy] = localXY(e);
+  // über einer Auswahl (z. B. mit der Stifttaste gemacht) zeigt der Zeiger, dass der Stift sie verschiebt bzw. skaliert
+  const sh = penLast && !action && k !== 'hand' && k !== 'lasso' && !(e.buttons & 34) ? selHit(sx, sy, ...toWorld(sx, sy)) : null;
+  const on = penLast && !action && !spaceDown && !(e.buttons & 34) && inkTool(k) && !sh;
   if (on) {
     // beim Schweben ändert sich meist nur die Lage: nur transform setzen, das verschiebt der Compositor ohne Neuzeichnen
-    const d = Math.max(3, S.size[k] * S.view.z), [sx, sy] = localXY(e), st = penDot.style, px = d + 'px', c = colorOf(S.color[k]);
+    const d = Math.max(3, S.size[k] * S.view.z), st = penDot.style, px = d + 'px', c = colorOf(S.color[k]);
     if (st.width !== px) st.width = st.height = px;
     if (penDot.dataset.c !== c) { penDot.dataset.c = c; st.background = c; }
     st.transform = `translate(${sx - d / 2}px,${sy - d / 2}px)`;
   }
   const disp = on ? 'block' : '';
   if (penDot.style.display !== disp) penDot.style.display = disp;
-  const cur = on ? 'none' : penLast && (e.buttons & 34) ? 'crosshair' : toolCursor(k);   // Stifttaste gedrückt: radiert
+  const cur = on ? 'none' : sh ? (sh === 'scale' ? 'nwse-resize' : 'move')
+    : penLast && (e.buttons & 32) ? 'crosshair' : penLast && (e.buttons & 2) ? toolCursor('lasso') : toolCursor(k);   // Radierer-Ende: radiert, Stifttaste: Lasso
   if (!action && !spaceDown && cvLive.style.cursor !== cur) cvLive.style.cursor = cur;
 }
 

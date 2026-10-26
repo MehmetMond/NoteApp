@@ -1,5 +1,8 @@
 # Notizen für das Surface Pro 11 (Version 1.5.5)
 
+## Neu (zuerst in der Browser-Version)
+- **Taste am Stift = Lasso** (wie in OneNote): Taste gedrückt halten und einen Kreis um Schrift oder Bilder ziehen, mit der Taste antippen wählt einen Strich. Danach verschiebt der Stift die Auswahl, wenn man darin zieht (auch ohne Taste), am blauen Punkt skaliert er sie; daneben schreibt er normal weiter und die Auswahl verschwindet. Das Werkzeug bleibt dabei der Stift. Radieren geht weiter mit dem Radierer-Ende des Stifts.
+
 ## Neu in 1.5.5: noch weniger Akkuverbrauch
 - Verschieben der Seite mit dem Finger braucht etwa 60 % weniger Grafikarbeit (mit Mausrad oder Hand ebenfalls weniger): Die Seite wird nur noch verschoben und erst neu gemalt, wenn ein neues Stück ins Bild kommt.
 - Radieren, Lasso, Auswahl verschieben und Tape: 35 bis 45 % weniger Grafikarbeit, weil nur noch die Stelle unter Radierer, Lasso oder Auswahl neu gemalt wird. Zoomen: etwa 13 % weniger.
@@ -80,11 +83,11 @@
 | Gerader Textmarker | Am Ende kurz halten, oder im Menü des Textmarkers „Immer gerade“ |
 | Formen und Graphen | Formen-Knopf (F), dann aufziehen; nochmal antippen öffnet die Auswahl |
 | Am Raster ausrichten | Magnet-Knopf (G) an/aus |
-| Radieren | Radierer-Ende des Stifts oder die Taste am Stift gedrückt halten, oder Radierer-Werkzeug |
+| Radieren | Radierer-Ende des Stifts, oder Radierer-Werkzeug |
 | Verschieben | Ein Finger ziehen |
 | Zoomen | Zwei Finger auseinander/zusammen |
 | Rückgängig | Mit zwei Fingern kurz tippen, oder Strg+Z |
-| Auswählen | Lasso-Werkzeug: Kreis um Schrift oder Bilder ziehen, dann verschieben, über den blauen Punkt skalieren, löschen, duplizieren, umfärben, Dicke angleichen oder als eigene Form speichern |
+| Auswählen | Lasso-Werkzeug oder die Taste am Stift gedrückt halten: Kreis um Schrift oder Bilder ziehen (mit der Taste antippen wählt einen Strich), dann verschieben, über den blauen Punkt skalieren, löschen, duplizieren, umfärben, Dicke angleichen oder als eigene Form speichern |
 | Bild einfügen | Bild-Knopf, Strg+V oder Datei ins Fenster ziehen |
 | PDF einfügen | PDF-Knopf oder PDF ins Fenster ziehen, jede Seite wird zum Beschriften eingefügt (auf DIN-Seiten: eine PDF-Seite pro Blatt, bei A3 quer links) |
 | Seitenformat | Beim Anlegen einer Seite: Unendlich, DIN A4 oder DIN A3, hoch oder quer |
