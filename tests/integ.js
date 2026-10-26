@@ -30,7 +30,7 @@ const check = (name, ok, detail) => { res.checks++; res[name] = detail === undef
     await pen('mouseReleased', x0 + 200, y0); await frames();
   }
   const pickShape = async k => {
-    await p.click('#bShape'); await p.waitForSelector('#shapeMenu:not(.hidden)');
+    await p.evaluate(() => { if (S.tool !== 'shape') setTool('shape'); openGroupMenu(); }); await p.waitForSelector('#shapeMenu:not(.hidden)');
     await p.click(`#shapeMenu [data-shape="${k}"]`); await frames();
   };
   const items = () => p.evaluate(() => S.items.map(s => ({ t: s.t, k: s.k || null, g: s.g || null, n: s.t === 's' ? s.pts.length / 3 : 0, pts: s.t === 's' ? Array.from(s.pts) : null })));
@@ -79,7 +79,7 @@ const check = (name, ok, detail) => { res.checks++; res[name] = detail === undef
   it = await items(); const rect = it[it.length - 1];
   check('rectSnapped28', rect.k === 'rect' && rect.pts.every((v, i) => i % 3 === 2 ? v === 0.5 : Math.abs(v / 28 - Math.round(v / 28)) < 1e-6), rect.pts);
   // Lasso-Tipp auf die x-Achse wählt den ganzen Graphen
-  await p.click('[data-tool=lasso]');
+  await p.evaluate(() => setTool('lasso'));
   const ax = await p.evaluate(() => { const s = S.items.find(i => i.k === 'axes2'); return toScreen(s.pts[0] + 30, s.pts[1]); });
   await drag(ax[0], ax[1], ax[0] + 1, ax[1], { steps: 1 }); await p.waitForTimeout(100);
   const sel = await p.evaluate(() => S.sel ? S.sel.ids.size : 0), nGraph = it.filter(s => s.k === 'axes2').length;
@@ -151,7 +151,7 @@ const check = (name, ok, detail) => { res.checks++; res[name] = detail === undef
   const restored = await items();
   check('restoredShapes', names.join() === 'Seite 1,Seite 2' && restored.length === n1 && restored.filter(s => s.k === 'axes2').every(s => s.g === [...gs][0]) && restored.some(s => s.k === 'rect'), { names, n: restored.length });
   // Lasso-Tipp nach der Wiederherstellung: Gruppe noch zusammen
-  await p.click('[data-tool=lasso]');
+  await p.evaluate(() => setTool('lasso'));
   const ax2 = await p.evaluate(() => { const s = S.items.find(i => i.k === 'axes2'); return toScreen(s.pts[0] + 30, s.pts[1]); });
   await drag(ax2[0], ax2[1], ax2[0] + 1, ax2[1], { steps: 1 }); await p.waitForTimeout(100);
   check('groupAfterRestore', (await p.evaluate(() => S.sel ? S.sel.ids.size : 0)) === nGraph);

@@ -75,7 +75,11 @@ function createWindow() {
   // F11 = Vollbild, F12 = Entwicklertools
   wc.on('before-input-event', (e, input) => {
     if (input.type !== 'keyDown') return;
-    if (input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); }
+    if (input.key === 'F11') {   // dasselbe Vollbild wie „⋯ → Vollbild“ in der Seite (Esc beendet es); geht das nicht, das Fenster selbst
+      e.preventDefault();
+      const self = () => win.setFullScreen(!win.isFullScreen());
+      wc.executeJavaScript('typeof toggleFullscreen === "function" && toggleFullscreen()', true).then(ok => { if (!ok) self(); }, self);
+    }
     if (input.key === 'F12') { wc.toggleDevTools(); e.preventDefault(); }
   });
   // Vor dem Schließen alles speichern (höchstens 4 s warten)

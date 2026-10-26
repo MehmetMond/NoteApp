@@ -1,5 +1,9 @@
 # Notizen für das Surface Pro 11 (Version 1.5.6)
 
+## Neu (zuerst in der Browser-Version)
+- **Leiste in einer Zeile:** Lasso, Tape und Formen teilen sich einen Knopf. Er zeigt das zuletzt gewählte der drei (kleine Ecke unten rechts); nochmal antippen öffnet die Auswahl, bei Formen mit den Formen darunter. Wird es eng, wird der Seitentitel gekürzt, erst im Hochformat bricht die Leiste um.
+- **Vollbild** im Menü „⋯“ (oder F11): ohne die Titelleiste „Notizen“ und ohne Taskleiste. Esc oder „Vollbild beenden“ holt beides zurück.
+
 ## Neu in 1.5.6: Lasso mit der Stifttaste
 - **Taste am Stift = Lasso** (wie in OneNote): Taste gedrückt halten und einen Kreis um Schrift oder Bilder ziehen, mit der Taste antippen wählt einen Strich. Danach verschiebt der Stift die Auswahl, wenn man darin zieht (auch ohne Taste), am blauen Punkt skaliert er sie; daneben schreibt er normal weiter und die Auswahl verschwindet. Das Werkzeug bleibt dabei der Stift. Radieren geht weiter mit dem Radierer-Ende des Stifts.
 - Das erste Öffnen eines Buchs nach dem Programmstart ruckelt nicht mehr: Die App wärmt die Animation kurz nach dem Start unsichtbar vor.
@@ -80,9 +84,10 @@
 | Schreiben | Surface Pen (druckempfindlich) |
 | Strichstärke | Punkte in der Leiste; die gewählte nochmal antippen für den Schieberegler |
 | Glättung | Gewählte Strichstärke nochmal antippen: Aus, 25, 50 (wie bisher), 75 oder 100 %, Feineinstellung mit dem Regler |
-| Tape | Tape-Knopf (T), über den Inhalt ziehen; antippen deckt auf oder ab; am Ende halten = gerade |
+| Lasso, Tape, Formen | Teilen sich einen Knopf (neben dem Textmarker): er zeigt das zuletzt gewählte, nochmal antippen öffnet die Auswahl der drei. Tasten L, T, F |
+| Tape | Tape (T), über den Inhalt ziehen; antippen deckt auf oder ab; am Ende halten = gerade |
 | Gerader Textmarker | Am Ende kurz halten, oder im Menü des Textmarkers „Immer gerade“ |
-| Formen und Graphen | Formen-Knopf (F), dann aufziehen; nochmal antippen öffnet die Auswahl |
+| Formen und Graphen | Formen (F), dann aufziehen; der Knopf nochmal angetippt öffnet die Auswahl der Formen |
 | Am Raster ausrichten | Magnet-Knopf (G) an/aus |
 | Radieren | Radierer-Ende des Stifts, oder Radierer-Werkzeug |
 | Verschieben | Ein Finger ziehen |
@@ -96,7 +101,7 @@
 | Exportieren | „⋯“: Als PDF exportieren oder Als Bild exportieren (PNG) |
 | Hintergrund | Punkte-Knopf: Punkte, Kariert, Liniert, Leer |
 | Darkmode | Mond-Knopf |
-| Vollbild | F11 |
+| Vollbild | „⋯“ → Vollbild oder F11 (ohne Titelleiste und Taskleiste), Esc beendet es |
 
 Der Handballen wird beim Schreiben ignoriert. Wer mit dem Finger zeichnen will, schaltet das unter „⋯“ ein.
 

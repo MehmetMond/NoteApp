@@ -81,8 +81,8 @@ const DEMO = {
   const geo = list => { const b = [Infinity, Infinity, -Infinity, -Infinity]; for (const s of list) for (let i = 0; i < s.pts.length; i += 3) { b[0] = Math.min(b[0], s.pts[i]); b[1] = Math.min(b[1], s.pts[i + 1]); b[2] = Math.max(b[2], s.pts[i]); b[3] = Math.max(b[3], s.pts[i + 1]); } return b; };
   const vis = sel => p.evaluate(s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }, sel);
   const shapesDB = () => p.evaluate(async () => (await dbShapesAll()).sort(byCreated).map(r => ({ id: r.id, name: r.name, created: r.created, w: r.w, h: r.h, f32: r.strokes.every(s => s.pts instanceof Float32Array), strokes: r.strokes.map(s => ({ c: s.c, w: s.w, hl: s.hl, pts: Array.from(s.pts) })) })));
-  const openMenu = async () => { if (!(await vis('#shapeMenu'))) await p.click('#bShape'); await p.waitForSelector('#shapeMenu:not(.hidden)'); };
-  const closeMenu = async () => { if (await vis('#shapeMenu')) await p.click('#bShape'); };
+  const openMenu = async () => { if (!(await vis('#shapeMenu'))) await p.evaluate(() => { if (S.tool !== 'shape') setTool('shape'); openGroupMenu(); }); await p.waitForSelector('#shapeMenu:not(.hidden)'); };
+  const closeMenu = async () => { if (await vis('#shapeMenu')) await p.click('#bGroup'); };
   const pickCustom = async id => { await openMenu(); await p.click(`#shapeMenu [data-shape="custom:${id}"]`); await frames(); };
   // Auswahl über die Oberfläche speichern (Knopf in der Auswahlleiste, Name im Dialog, Enter)
   async function saveSel(name) {
@@ -154,7 +154,7 @@ const DEMO = {
   check('drawn', drawn.filter(i => i.t === 's').length === 5 && drawn.filter(i => i.t === 'i').length === 1 && drawn.filter(i => i.hl).length === 1 && drawn.some(i => i.c === '#e53935'), drawn.map(i => [i.t, i.c, i.hl]));
 
   // ---------- 2. Lasso: Knopf „Als Form speichern“ nur mit Strichen ----------
-  await p.click('[data-tool=lasso]');
+  await p.evaluate(() => setTool('lasso'));
   await penPath([[250, 200], [490, 200], [490, 480], [250, 480], [250, 205]], { step: 5 });
   const sel1 = await p.evaluate(() => S.sel ? S.items.filter(i => S.sel.ids.has(i.id)).map(i => i.t) : []);
   check('lassoAll', sel1.filter(t => t === 's').length === 4 && sel1.filter(t => t === 'i').length === 1, sel1);
@@ -211,7 +211,7 @@ const DEMO = {
   check('menuLibrary', menu1.sections.join() === 'Formen,Graphen,Eigene Formen' && menu1.tiles.length === 1 && menu1.tiles[0][0] === 'custom:' + idHaus && menu1.tiles[0][1] === 'Haus'
     && menu1.canvas[0][0] === 112 && menu1.canvas[0][2] === 56 && menu1.del === 1 && menu1.hint === 'Ziehen zum Zeichnen · Umschalt: gerade/quadratisch' && menu1.tool === 'shape', menu1);
   await p.click(`#customGrid [data-shape="custom:${idHaus}"]`); await frames();
-  const picked = await p.evaluate(() => ({ menu: $('#shapeMenu').classList.contains('hidden'), shape: S.shape, pref: localStorage.getItem('notizen.shape'), title: $('#bShape').title, tool: S.tool, colors: $('#colors').style.opacity, sizes: $('#sizes').style.opacity }));
+  const picked = await p.evaluate(() => ({ menu: $('#shapeMenu').classList.contains('hidden'), shape: S.shape, pref: localStorage.getItem('notizen.shape'), title: $('#bGroup').title.split(' · ')[0], tool: S.tool, colors: $('#colors').style.opacity, sizes: $('#sizes').style.opacity }));
   check('pickCustom', picked.menu && picked.shape === 'custom:' + idHaus && picked.pref === JSON.stringify('custom:' + idHaus) && picked.title === 'Formen (F) – Haus' && picked.tool === 'shape' && picked.colors === '0.35' && picked.sizes === '0.35', picked);
   await openMenu();
   const menu2 = await p.evaluate(() => ({ on: $$('#shapeMenu [data-shape].on').map(b => b.dataset.shape), hint: $('#shapeMenu .mhint').textContent }));
@@ -262,7 +262,7 @@ const DEMO = {
   check('placedRepeatedly', stamps === 5 && await p.evaluate(id => S.shape === 'custom:' + id && S.tool === 'shape', idHaus), stamps);
 
   // ---------- 6. Lasso-Tipp wählt die ganze Form; Rückgängig = ein Schritt ----------
-  await p.click('[data-tool=lasso]');
+  await p.evaluate(() => setTool('lasso'));
   const tp = [tapStamp[0].pts[3], tapStamp[0].pts[4]];
   await drag(tp[0], tp[1], tp[0] + 1, tp[1], { steps: 1 }); await frames();
   const selT = await p.evaluate(() => S.sel ? [...S.sel.ids] : []);
@@ -341,7 +341,7 @@ const DEMO = {
     await p.click(`#customGrid .ct:has([data-shape="custom:${idBig}"]) .cdel`); await p.waitForSelector('#dlg:not(.hidden)');
     await p.click('#dlgOk'); await p.waitForFunction(id => !CUSTOM.some(r => r.id === id), idBig);
     const gone = await p.evaluate(async id => ({ db: !!(await dbShapeGet(id)), tile: !!document.querySelector(`#customGrid [data-shape="custom:${id}"]`), menu: !$('#shapeMenu').classList.contains('hidden'), shape: S.shape,
-      pref: localStorage.getItem('notizen.shape'), placed: S.items.filter(i => i.k === 'custom').length, title: $('#bShape').title }), idBig);
+      pref: localStorage.getItem('notizen.shape'), placed: S.items.filter(i => i.k === 'custom').length, title: $('#bGroup').title.split(' · ')[0] }), idBig);
     check('deleteFromLibrary', askMsg[0] === 'Form „Groß“ löschen?' && askMsg[1] === 'Löschen' && askMsg[2] && kept[0] && kept[1] && !gone.db && !gone.tile && gone.menu
       && gone.shape === 'rect' && gone.pref === '"rect"' && gone.placed === 50 && gone.title === 'Formen (F) – Rechteck', { askMsg, kept, gone });
     await closeMenu();
@@ -402,7 +402,7 @@ const DEMO = {
   }
   await p.evaluate(() => { if (S.dark) toggleDark(); }); await p.waitForTimeout(200);
   // Auswahlleiste mit „Als Form speichern“
-  await p.click('[data-tool=lasso]');
+  await p.evaluate(() => setTool('lasso'));
   await penPath([[150, 450], [560, 450], [560, 690], [150, 690], [150, 455]], { step: 6 });
   await p.waitForTimeout(150);
   await p.screenshot({ path: path.join(OUT, 'custom_selbar.png'), clip: { x: 0, y: 330, width: 760, height: 400 } });
@@ -426,11 +426,11 @@ const DEMO = {
   await p.reload(); await p.waitForTimeout(600); await idle(); await p.waitForFunction(() => customReady);
   const libAfter = await shapesDB();
   check('libraryPersisted', JSON.stringify(libAfter) === JSON.stringify(libBefore) && libAfter.length === 8, libAfter.map(r => r.name));
-  check('prefPersisted', await p.evaluate(id => S.shape === 'custom:' + id && $('#bShape').title === 'Formen (F) – Blume', demoIds.Blume));
+  check('prefPersisted', await p.evaluate(id => S.shape === 'custom:' + id && $('#bGroup').title.startsWith('Formen (F) – Blume ·'), demoIds.Blume));
   await p.evaluate(async id => { await openNote((await dbIndexAll()).find(n => n.id === id)); }, noteId); await p.waitForTimeout(300);
   const pageAfter = await items();
   check('stampsPersisted', JSON.stringify(pageAfter) === JSON.stringify(pageBefore) && new Set(pageAfter.map(i => i.g)).size === 14 && pageAfter.every(i => i.k === 'custom'), { before: pageBefore.length, after: pageAfter.length });
-  await p.click('[data-tool=lasso]');
+  await p.evaluate(() => setTool('lasso'));
   const hz = pageAfter.find(i => pageAfter.filter(j => j.g === i.g).length === 4);   // ein platziertes Haus
   await drag(hz.pts[3], hz.pts[4], hz.pts[3] + 1, hz.pts[4], { steps: 1 }); await frames();
   check('groupAfterReload', await p.evaluate(g => S.sel && S.sel.ids.size === 4 && S.items.filter(i => S.sel.ids.has(i.id)).every(i => i.g === g), hz.g));
@@ -480,7 +480,7 @@ const DEMO = {
     check('oldBackupRestores', r.notes > 0 && r.shapes === 0 && r.custom === 0 && /wiederhergestellt$/.test(r.toast), r);
     // leere Bibliothek im Menü (Hinweis)
     await q.evaluate(async () => { const now = Date.now(); const n = { id: uid(), name: 'Leer', created: now, updated: now, thumb: null, bg: 'dots', view: { tx: 0, ty: 0, z: 1 } }; await dbIndexPut(n); await openNote(n); });
-    await q.waitForTimeout(200); await q.click('#bShape'); await q.waitForTimeout(150);
+    await q.waitForTimeout(200); await q.evaluate(() => { if (S.tool !== 'shape') setTool('shape'); openGroupMenu(); }); await q.waitForTimeout(150);
     const e = await q.evaluate(() => ({ text: $('#customGrid .cempty') && $('#customGrid .cempty').textContent, tiles: $$('#customGrid .cpick').length }));
     const mb = await q.$eval('#shapeMenu', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
     await q.screenshot({ path: path.join(OUT, 'custom_menu_empty.png'), clip: { x: 0, y: 0, width: Math.min(1440, mb.x + mb.w + 40), height: mb.y + mb.h + 30 } });

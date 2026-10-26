@@ -912,7 +912,7 @@ function resize() {
   if (cvMain.width !== w + 2 * PADD || cvMain.height !== h + 2 * PADD) { cvMain.width = w + 2 * PADD; cvMain.height = h + 2 * PADD; shownSig = ''; }
   const ms = cvMain.style; ms.left = ms.top = -PADC + 'px'; ms.width = VW + 2 * PADC + 'px'; ms.height = VH + 2 * PADC + 'px';
   if (oldDPR !== DPR) { clearTiles(); patCache.clear(); }
-  closeMenus();
+  closeMenus(); fitBar();
   if (S.note) { S.view.tx = snap(S.view.tx); S.view.ty = snap(S.view.ty); draw(); drawLive(); }
   liveVis();
 }
@@ -1877,11 +1877,26 @@ document.addEventListener('gesturestart', e => e.preventDefault());   // Safari 
 function setTool(t) {
   if (action && t !== S.tool) cancelAction();
   S.tool = t;
+  if (GROUP[t]) setGroupTool(t);
   $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   if (t !== 'lasso') clearSel();
   $('#sizeMenu').classList.add('hidden'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
-  renderColors(); renderSizes();
+  renderColors(); renderSizes(); fitBar();
+}
+// Lasso, Tape und Formen teilen sich einen Knopf, damit die Leiste einzeilig bleibt. Er zeigt das zuletzt gewählte der
+// drei: Antippen wählt es (Formen: mit der Auswahl der Form), ist es schon gewählt, öffnet sich die Auswahl der drei
+const GROUP = { lasso: ['ic-lasso', 'Auswählen / Verschieben (L)'], tape: ['ic-tape', 'Tape: abdecken, antippen deckt auf (T)'], shape: ['ic-shape', 'Formen (F)'] };
+function setGroupTool(t) {
+  const b = $('#bGroup'); if (b.dataset.tool === t) return;
+  b.dataset.tool = t; b.querySelector('use').setAttribute('href', '#' + GROUP[t][0]); store.set('groupTool', t);
+  shapeTitle();
+}
+// Die Leiste bleibt einzeilig: wird es eng, wird zuerst der Titel schmaler; erst wenn das nicht reicht, bricht sie um
+function fitBar() {
+  const bar = $('#bar'); if (!bar.offsetParent) return;
+  bar.classList.remove('wrap');
+  if (bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('wrap');
 }
 // Farbe und Dicke gelten für Stift, Textmarker, Lasso (übernehmen) und Formen – nicht für eigene Formen,
 // die behalten ihre gespeicherten Farben (Antippen wechselt dann zum Stift, wie beim Radierer)
@@ -2022,13 +2037,20 @@ $('#smRange').oninput = () => {
   const b = $('#smPresets').children[S.smoothIdx]; b.textContent = fmtSmooth(v); b.title = 'Glättung ' + fmtSmooth(v); showSize();
 };
 $$('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
-// Formen: Antippen wählt das Werkzeug und öffnet die Auswahl, nochmal Antippen schließt sie
-function openShapeMenu() {
-  const m = $('#shapeMenu'), r = $('#bShape').getBoundingClientRect();
+// Auswahl der drei unter dem Knopf (unter der ganzen Leiste, auch wenn sie umbricht); bei Formen darunter die Formen
+function openGroupMenu() {
+  const g = $('#grpMenu'), r = $('#bGroup').getBoundingClientRect();
   closeMenus();
+  $$('#grpMenu [data-gtool]').forEach(x => x.classList.toggle('on', x.dataset.gtool === S.tool));
+  g.classList.remove('hidden');
+  g.style.top = Math.max(r.bottom, barBottom()) + 8 + 'px';
+  g.style.left = clamp(r.left + r.width / 2 - g.offsetWidth / 2, 8, innerWidth - g.offsetWidth - 8) + 'px';
+  if (S.tool === 'shape') openShapeMenu(g.getBoundingClientRect().bottom + 6);
+}
+function openShapeMenu(top) {
+  const m = $('#shapeMenu'), r = $('#bGroup').getBoundingClientRect();
   renderCustomGrid(); markShapeMenu();
   m.classList.remove('hidden');
-  const top = Math.max(r.bottom, barBottom()) + 8;   // unter der ganzen Leiste (Hochformat: zwei Zeilen)
   m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
   m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
 }
@@ -2037,17 +2059,19 @@ function markShapeMenu() {
   $('#shapeMenu .mhint').textContent = isCustom(S.shape) ? 'Tippen: in Originalgröße platzieren · Ziehen: Größe wählen' : 'Ziehen zum Zeichnen · Umschalt: gerade/quadratisch';
 }
 function shapeTitle() {
-  const cs = customOf(S.shape), b = !isCustom(S.shape) && $(`#shapeMenu [data-shape="${S.shape}"]`);
-  $('#bShape').title = 'Formen (F)' + (cs ? ' – ' + cs.name : b ? ' – ' + b.textContent.trim() : '');
+  const g = $('#bGroup'), t = g.dataset.tool, cs = customOf(S.shape), b = !isCustom(S.shape) && $(`#shapeMenu [data-shape="${S.shape}"]`);
+  g.title = (t === 'shape' ? 'Formen (F)' + (cs ? ' – ' + cs.name : b ? ' – ' + b.textContent.trim() : '') : GROUP[t][1]) + ' · nochmal antippen: Lasso, Tape oder Formen';
 }
 function setShape(k) { S.shape = k; store.set('shape', k); shapeTitle(); renderColors(); renderSizes(); }
 function pickShape(k) { setShape(k); closeMenus(); if (S.tool !== 'shape') setTool('shape'); }
-$('#bShape').onclick = () => {
-  const open = !$('#shapeMenu').classList.contains('hidden');
-  if (S.tool !== 'shape') setTool('shape');
-  if (open) closeMenus(); else openShapeMenu();
+$('#bGroup').onclick = () => {
+  const t = $('#bGroup').dataset.tool, open = !$('#grpMenu').classList.contains('hidden');
+  if (S.tool !== t) { setTool(t); if (t === 'shape') openGroupMenu(); return; }
+  if (open) closeMenus(); else openGroupMenu();
 };
+$$('#grpMenu [data-gtool]').forEach(b => b.onclick = () => { const t = b.dataset.gtool; setTool(t); if (t === 'shape') openGroupMenu(); else closeMenus(); });
 $$('#shapeMenu [data-shape]').forEach(b => b.onclick = () => pickShape(b.dataset.shape));
+{ const t = store.get('groupTool'); if (GROUP[t]) setGroupTool(t); }
 shapeTitle();
 
 /* ---------- Eigene Formen: Bibliothek ----------
@@ -2145,11 +2169,25 @@ function openMenu(menu, btn) {
   menu.style.left = clamp(r.right - menu.offsetWidth, 8, innerWidth - menu.offsetWidth - 8) + 'px';
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bShape,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bGroup,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
-$('#bMore').onclick = () => { $('#mFit').textContent = paperSize() ? 'Ganzes Blatt anzeigen' : 'Alles anzeigen'; $('#mFinger').textContent = 'Mit dem Finger zeichnen: ' + (S.fingerDraw ? 'an' : 'aus'); openMenu($('#moreMenu'), $('#bMore')); };
+$('#bMore').onclick = () => {
+  $('#mFit').textContent = paperSize() ? 'Ganzes Blatt anzeigen' : 'Alles anzeigen'; $('#mFinger').textContent = 'Mit dem Finger zeichnen: ' + (S.fingerDraw ? 'an' : 'aus');
+  $('#mFull').textContent = document.fullscreenElement ? 'Vollbild beenden' : 'Vollbild';
+  openMenu($('#moreMenu'), $('#bMore'));
+};
+// Vollbild: ohne Titelleiste des Fensters und ohne Taskleiste; Esc oder nochmal beendet es. Das Windows-Programm ruft
+// das auch bei F11 auf (main.js), damit es dasselbe Vollbild ist
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(e => toast('Vollbild geht hier nicht: ' + e.message, 4000));
+  return true;
+}
+$('#mFull').onclick = () => { closeMenus(); toggleFullscreen(); };
+// Esc beendet das Vollbild, wenn nichts anderes offen ist (der Browser macht das selbst, das Windows-Programm nicht)
+const escFullscreen = () => { if (document.fullscreenElement && $$('.menu').every(m => m.classList.contains('hidden')) && !S.sel) { document.exitFullscreen().catch(() => {}); return true; } return false; };
 $('#mFinger').onclick = () => { S.fingerDraw = !S.fingerDraw; store.set('fingerDraw', S.fingerDraw); liveVis(); closeMenus(); toast(S.fingerDraw ? 'Ein Finger zeichnet jetzt, zwei Finger verschieben und zoomen' : 'Finger verschieben und zoomen nur noch', 2600); };
 $('#mFit').onclick = () => { closeMenus(); fitAll(); };
 $('#mPng').onclick = () => { closeMenus(); exportPNG(); };
@@ -2191,7 +2229,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if ($('#editor').classList.contains('hidden') && k === 'escape') {   // Startseite: Menü schließen, sonst zurück zum Regal
-    if ($$('.menu').some(m => !m.classList.contains('hidden'))) closeMenus(); else if (homeBook) showShelf();
+    if ($$('.menu').some(m => !m.classList.contains('hidden'))) closeMenus(); else if (homeBook) showShelf(); else escFullscreen();
     return;
   }
   if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
@@ -2207,7 +2245,7 @@ document.addEventListener('keydown', e => {
   else if (mod && (k === '+' || k === '=')) zoomAt(VW / 2, VH / 2, S.view.z * 1.25);
   else if (mod && k === '-') zoomAt(VW / 2, VH / 2, S.view.z / 1.25);
   else if ((k === 'delete' || k === 'backspace') && S.sel) { e.preventDefault(); $('#sDel').click(); }
-  else if (k === 'escape') { clearSel(); closeMenus(); }
+  else if (k === 'escape') { if (!escFullscreen()) { clearSel(); closeMenus(); } }
   else if (!mod && !e.altKey && k === 'g') toggleSnap();
   else if (!mod && !e.altKey) { const t = { p: 'pen', m: 'hl', t: 'tape', f: 'shape', e: 'eraser', l: 'lasso', h: 'hand' }[k]; if (t) setTool(t); }
 });
@@ -3278,7 +3316,7 @@ async function openNote(meta) {
     if (!$('#home').classList.contains('hidden')) homeScroll = { key: homeKey, top: $('#grid').scrollTop };
     closeMenus(); $('#home').classList.add('hidden'); $('#editor').classList.remove('hidden');
     updateUndo(); setTool(S.tool === 'hand' ? 'pen' : S.tool); resize();
-    $('#bSheet').classList.toggle('hidden', !paperSize()); $('#sheetNo').classList.toggle('hidden', !paperSize());
+    $('#bSheet').classList.toggle('hidden', !paperSize()); $('#sheetNo').classList.toggle('hidden', !paperSize()); fitBar();
     if (!meta.view) fitAll(0);   // neue Seite mit Format: das ganze erste Blatt zeigen
     if (renumber) markDirty();
   } catch (e) { toast('Notiz konnte nicht geöffnet werden: ' + e.message, 6000); S.note = null; }
@@ -3312,7 +3350,7 @@ async function closeNote() {
 }
 window.__flush = () => flushNote().catch(() => {});
 $('#bBack').onclick = closeNote;
-$('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } });
+$('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } fitBar(); });
 $('#title').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); });
 /* Sicherung: eine Textdatei mit einer Zeile pro Buch, Notiz, Stricheliste und Bild.
    So entsteht nie ein einzelner riesiger Text, auch bei vielen PDFs.
