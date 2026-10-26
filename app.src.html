@@ -3136,10 +3136,11 @@ async function renderHome(quiet) {
   homeKey = key; homeScroll = null;
   grid.scrollTop = top;
 }
-function setHomeMode(book) {
-  const home = $('#home'), grid = $('#grid');
-  $('#hShelfHead').classList.toggle('hidden', !!book); $('#hBookHead').classList.toggle('hidden', !book);
-  $('#hNewBook').classList.toggle('hidden', !!book); $('#hNew').classList.toggle('hidden', !book);
+// home: die Startseite (oder eine Kopie davon, siehe warmUpBookFx)
+function setHomeMode(book, home = $('#home')) {
+  const q = s => home.querySelector(s), grid = q('#grid');
+  q('#hShelfHead').classList.toggle('hidden', !!book); q('#hBookHead').classList.toggle('hidden', !book);
+  q('#hNewBook').classList.toggle('hidden', !!book); q('#hNew').classList.toggle('hidden', !book);
   grid.classList.toggle('shelf', !book); grid.classList.toggle('pages', !!book);
   home.classList.toggle('inbook', !!book);
   if (book) coverVars(home, book.color); else { home.style.removeProperty('--c1'); home.style.removeProperty('--c2'); }
@@ -3165,11 +3166,11 @@ function renderShelf(grid, books, notes) {
   });
   grid.appendChild(addTile('bk', 'Neues Buch', newBook, books.length));
 }
-function renderBook(grid, book, notes) {
-  setHomeMode(book);
-  const pages = notes.filter(n => n.book === book.id).sort(byCreated);
-  $('#hBookName').textContent = $('#hBookName').title = book.name;
-  const sub = $('#hBookSub'); sub.textContent = pages.length ? pagesWord(pages.length) : 'Noch keine Seiten';
+function renderBook(grid, book, notes, home = $('#home')) {
+  setHomeMode(book, home);
+  const pages = notes.filter(n => n.book === book.id).sort(byCreated), q = s => home.querySelector(s);
+  q('#hBookName').textContent = q('#hBookName').title = book.name;
+  const sub = q('#hBookSub'); sub.textContent = pages.length ? pagesWord(pages.length) : 'Noch keine Seiten';
   if (pages.length) { const o = document.createElement('span'); o.className = 'opt'; o.textContent = ' · zuletzt bearbeitet ' + fmtDay(Math.max(...pages.map(n => n.updated || 0))); sub.appendChild(o); }
   if (!pages.length) { grid.appendChild(emptyState(true)); return; }
   pages.forEach((n, k) => {
@@ -3420,6 +3421,10 @@ function snapshot(fx) {
 }
 // Bilder der neuen Ansicht fertig dekodieren, bevor sich etwas bewegt (höchstens 200 ms warten)
 const decoded = root => Promise.race([Promise.all([...root.querySelectorAll('img')].map(i => i.decode().catch(() => {}))), wait(200)]);
+// Erst losfahren, wenn das Vorbereitete gezeichnet ist: das erste Zeichnen neuer Inhalte (Standbild, Buch) kann die
+// Grafikkarte kurz aufhalten, dann steht das Bild still (es sieht noch genau aus wie vorher), statt dass die Animation
+// gleich am Anfang hängt
+const painted = async () => { await nextFrame(); await nextFrame(); };
 // Bühne: das Buch kommt zum Aufklappen etwas größer in die Mitte, der Rücken mittig (Einband klappt nach links auf).
 // Offen ist es zwei Seiten breit, das muss ins Fenster passen (je Seite höchstens 44 % der Breite) und in der Höhe
 // unter den Kopf; schmaler wird es nur, wenn sonst nichts geht
@@ -3439,7 +3444,7 @@ async function bookOpenFx(from, id, fx) {
   homeBook = id; await renderHome(true);
   const grid = $('#grid'), head = $('#home header'), items = [...grid.children];
   items.forEach(e => e.style.visibility = 'hidden');
-  await decoded(grid);
+  await decoded(grid); await painted();
   // 2. los: Regal blendet aus (der neue Kopf erst danach, nicht übereinander), Buch fliegt in die Mitte und klappt auf
   snap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: 'ease-out', fill: 'forwards' });
   head.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 340, delay: 200, easing: 'ease-out', fill: 'backwards' });
@@ -3523,6 +3528,43 @@ async function bookCreateFx(b, from, fx) {
   el.style.visibility = ''; fly.cancel(); bk.remove();
   await wait(80);   // kurz innehalten, dann geht das neue Buch auf
   await bookOpenFx(el, b.id, fx);
+}
+
+/* Aufwärmen: Das erste Öffnen eines Buchs nach dem Start ruckelte stark (Hänger bis 200 ms). Beim ersten Zeichnen des
+   3D-Buchs übersetzt die Grafikkarte ihre Zeichenprogramme (unter Windows etwa 70, je einige ms, auf dem Surface länger)
+   und hält so lange an, nach jedem Start von Neuem (ihr Zwischenspeicher hilft da nicht). Darum spielt die App kurz
+   nach dem Start, wenn nichts los ist, das Aufklappen einmal unsichtbar ab (Deckkraft fast 0, keine Klicks): danach sind
+   die Programme übersetzt und das echte Öffnen läuft flüssig. */
+let warmed = false;
+function scheduleWarmUp() {
+  if (warmed) return;
+  setTimeout(() => idle(() => warmUpBookFx().catch(() => {}), { timeout: 2000 }), 400);
+}
+async function warmUpBookFx() {
+  if (warmed || homeAnim || S.note || reduceMotion() || $('#home').classList.contains('hidden')) return;
+  warmed = true;
+  const cv = $('#grid .book .cv'), book = (cv && homeData.books.find(b => b.id === cv.parentElement.dataset.id)) || { name: DEFAULT_BOOK, color: 'blue' };
+  const r0 = cv ? rectOf(cv) : { left: innerWidth / 2 - 80, top: innerHeight / 2 - 107, width: 160, height: 213 };
+  const fx = document.createElement('div'); fx.dataset.warm = '';   // enthält Kopien der Startseite (gleiche ids, wie beim Standbild)
+  Object.assign(fx.style, { position: 'fixed', inset: 0, zIndex: 29, pointerEvents: 'none', opacity: 0.004 });
+  document.body.appendChild(fx);
+  try {
+    // wie beim echten Öffnen: unten die Buchansicht (Kopf und Seitenkarten), darüber das Regal, das ausblendet
+    const view = $('#home').cloneNode(true), shelf = $('#home').cloneNode(true), vg = view.querySelector('#grid');
+    vg.innerHTML = ''; if (book.id) renderBook(vg, book, homeData.notes, view);
+    fx.append(view, shelf);
+    shelf.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, fill: 'forwards' });
+    [...vg.children].forEach((e, i) => e.animate([{ opacity: 0, transform: 'translateY(12px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 300, delay: 200 + Math.min(i, 6) * 30, fill: 'backwards' }));
+    const r1 = stageRect(r0), bk = fxBook(fx, book, r0), lid = bk.querySelector('.lid'), o = { duration: 360, fill: 'forwards' };
+    bk.animate([{ transform: 'none' }, { transform: toRect(r0, r1) }], o);
+    tiltOf(bk).animate([{ transform: FLAT }, { transform: TILT }], o);
+    cutOf(bk).animate([{ opacity: 1 }, { opacity: 0 }], o);
+    lid.animate([{ transform: SHUT }, { transform: OPEN }], o);
+    shadeOf(bk).animate([{ opacity: 0 }, { opacity: 1 }], o);
+    bendBook(bk, true, { duration: 360 });
+    await wait(400);
+    await fadeBook(bk, 1, 0, { duration: 300 }).finished;
+  } finally { fx.remove(); }
 }
 
 /* Menüs der Startseite (⋯ an Büchern und Seiten) */
@@ -3848,7 +3890,7 @@ window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
 
 /* ---------- Start ---------- */
 applyDark();
-openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome(); })
+openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome().then(scheduleWarmUp); })
   .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
 // Browser-Version im Netz (GitHub Pages): Offline-Start über sw.js; das Windows-Programm lädt die Datei lokal
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});

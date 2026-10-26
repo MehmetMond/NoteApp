@@ -2,6 +2,7 @@
 
 ## Neu (zuerst in der Browser-Version)
 - **Taste am Stift = Lasso** (wie in OneNote): Taste gedrückt halten und einen Kreis um Schrift oder Bilder ziehen, mit der Taste antippen wählt einen Strich. Danach verschiebt der Stift die Auswahl, wenn man darin zieht (auch ohne Taste), am blauen Punkt skaliert er sie; daneben schreibt er normal weiter und die Auswahl verschwindet. Das Werkzeug bleibt dabei der Stift. Radieren geht weiter mit dem Radierer-Ende des Stifts.
+- Das erste Öffnen eines Buchs nach dem Programmstart ruckelt nicht mehr: Die App wärmt die Animation kurz nach dem Start unsichtbar vor.
 
 ## Neu in 1.5.5: noch weniger Akkuverbrauch
 - Verschieben der Seite mit dem Finger braucht etwa 60 % weniger Grafikarbeit (mit Mausrad oder Hand ebenfalls weniger): Die Seite wird nur noch verschoben und erst neu gemalt, wenn ein neues Stück ins Bild kommt.

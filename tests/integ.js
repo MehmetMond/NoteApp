@@ -128,6 +128,7 @@ const check = (name, ok, detail) => { res.checks++; res[name] = detail === undef
 
   // ---------- 5. Neu laden: Regal, Buch, Seiten, Formen ----------
   await p.reload(); await p.waitForTimeout(500); await idle();
+  await p.waitForFunction(() => warmed && !document.querySelector('[data-warm]'), null, { timeout: 5000 });   // Aufwärmen enthält Kopien der Startseite
   check('reloadShelf', await vis('#hShelfHead') && (await p.$$('#grid .book')).length === 1);
   await p.click('#grid .book .cv'); await idle(); await p.locator('#grid .card').first().click(); await p.waitForFunction(() => S.note && S.items.length); await p.waitForTimeout(300);
   const persisted = await items();
