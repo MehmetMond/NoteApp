@@ -195,6 +195,7 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 #sizeMenu .smchips{display:flex;gap:6px;margin:8px 0 2px}
 #sizeMenu .smchips button{flex:1;justify-content:center;width:auto;height:34px;padding:0;border:1px solid var(--border);border-radius:9px;font-size:13px;font-variant-numeric:tabular-nums;color:var(--text)}
 #sizeMenu .smchips button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+#sizeMenu #tpPats{flex-wrap:wrap}#sizeMenu #tpPats button{flex:1 0 28%}  /* sechs Muster: zwei Reihen zu drei */
 #sizeMenu #stBox,#sizeMenu #tpAll{margin:10px 0}
 #sizeMenu #tpAll{margin-bottom:2px}
 #sizeMenu .szhint{font-size:12px;line-height:1.35;color:var(--muted);margin-top:8px}
@@ -482,7 +483,7 @@ const SIZE_DEFAULT = { pen: 2, hl: 1, tape: 1 };
 const SIZE_RANGE = { pen: [0.5, 30], hl: [4, 80], tape: [6, 120] };
 // Tape (wie Washi-Tape): eigene Farben und Muster
 const TAPE_PALETTE = ['#f4a7b9', '#f6c86e', '#9fd6aa', '#8ec5ef', '#c4a9ea', '#b8bec7'];
-const TAPE_PATTERNS = [['uni', 'Uni'], ['streifen', 'Streifen'], ['punkte', 'Punkte'], ['karo', 'Karo']];
+const TAPE_PATTERNS = [['uni', 'Uni'], ['streifen', 'Streifen'], ['punkte', 'Punkte'], ['karo', 'Karo'], ['kitty', 'Kätzchen'], ['hund', 'Hündchen']];
 // Glättung der Handschrift (0 = roh … 1 = stark), fünf Voreinstellungen wie bei der Strichstärke; 0,5 entspricht der
 // früheren festen Glättung und ist gewählt
 const SMOOTH_PRESETS = [0, 0.25, 0.5, 0.75, 1], SMOOTH_IDX = 2;
@@ -803,7 +804,8 @@ function drawImageItem(ctx, it, devScale, quality = true) {
   let bmp = null;
   if (e.low && (!quality || devW <= e.low.width * 1.3)) bmp = e.low;
   else { wantFull(it.img, e); bmp = e.full || e.low; }
-  if (bmp) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(bmp, it.x, it.y, it.w, it.h); return; }
+  // danach wieder die übliche Glättung: sonst zeichnete die Kachel (auch später, aus dem Vorrat) alles Weitere mit 'high', langsamer
+  if (bmp) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(bmp, it.x, it.y, it.w, it.h); ctx.imageSmoothingQuality = 'low'; return; }
   ctx.fillStyle = 'rgba(128,128,128,.15)'; ctx.fillRect(it.x, it.y, it.w, it.h);
   if (e.state === 'error' || e.state === 'missing') {
     ctx.strokeStyle = 'rgba(128,128,128,.6)'; ctx.lineWidth = 2 / devScale;
@@ -936,7 +938,7 @@ function tapeGeo(s) {
   for (let i = n - 1; i >= 0; i--) edge.lineTo(...side(i, -1));
   for (const q of z0.slice().reverse()) edge.lineTo(...q);
   edge.closePath();
-  g = { line, teeth, teethS, edge }; if (!s.live) pathCache.set(s, g);   // die Vorschau beim Zeichnen nicht merken
+  g = { line, teeth, teethS, edge, q: Q }; if (!s.live) pathCache.set(s, g);   // die Vorschau beim Zeichnen nicht merken
   return g;
 }
 // Muster des Tapes, hell über der Farbe, 16 Welteinheiten groß. Gemalt in der Auflösung, in der es erscheint (ds
@@ -957,6 +959,193 @@ function tapePattern(ctx, kind, ds) {
   if (pat) pat.setTransform(new DOMMatrix().scale(N / c.width));
   m.set(key, pat); return pat;
 }
+/* Figuren (Kätzchen, Hündchen): nicht gekachelt wie die Muster, sondern einzeln entlang der Mittellinie gestempelt,
+   0,72 Tape-Breiten hoch, längs des Tapes und nie auf dem Kopf, dazwischen eine kleine Beigabe – wie gedrucktes
+   Washi-Tape, das irgendwo abgeschnitten wird. Eigene, vereinfachte Zeichnungen im Stil von Hello Kitty und
+   Cinnamoroll. Eine Figur: Höhe 1 um (0, 0), Breite w; die Beigabe Höhe 1, Breite aw. */
+const TAPE_MOTIFS = {
+  // Kätzchen: weißer Kopf mit schwarzem Umriss, Schleife am rechten Ohr, gelbe Nase, je drei Schnurrhaare; dazwischen Schleifen
+  kitty: { w: 1.42, aw: 1.4,
+    draw(g) {
+      g.save();
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      const K = '#111', P = '#e5195e', T = 0.05;
+      // Flügel der Schleife vom Knoten (Ursprung) aus: am Knoten spitz, außen breit und rund, in Richtung a
+      const wing = (a, L, p, q, m) => {
+        const c = Math.cos(a), s = Math.sin(a), Q = (x, y) => [c * x - s * y, s * x + c * y];
+        g.moveTo(0, 0);
+        g.bezierCurveTo(...Q(p, -q), ...Q(L, -m), ...Q(L, 0));
+        g.bezierCurveTo(...Q(L, m), ...Q(p, q), 0, 0);
+      };
+      // Kopf: ein gespiegelter Pfad (Kinn, Backe, Ohransatz, Ohrspitze, innere Ohrecke, flacher Scheitel, zurück)
+      const R = [[0.40, 0.458, 0.537, 0.35, 0.537, 0.095],
+                 [0.537, 0.02, 0.507, -0.06, 0.498, -0.10],
+                 [0.515, -0.22, 0.50, -0.42, 0.405, -0.428],
+                 [0.35, -0.432, 0.28, -0.37, 0.22, -0.346]];
+      g.beginPath(); g.moveTo(0, 0.458);
+      for (const s of R) g.bezierCurveTo(s[0], s[1], s[2], s[3], s[4], s[5]);
+      g.bezierCurveTo(0.08, -0.362, -0.08, -0.362, -0.22, -0.346);
+      for (let i = R.length - 1; i >= 0; i--) {
+        const s = R[i], p = i ? R[i - 1] : [0, 0, 0, 0, 0, 0.458];
+        g.bezierCurveTo(-s[2], s[3], -s[0], s[1], -p[4], p[5]);
+      }
+      g.closePath();
+      g.fillStyle = '#fff'; g.fill();
+      g.strokeStyle = K; g.lineWidth = T; g.stroke();
+      // Schnurrhaare: je drei, nach unten gefächert, beginnen in den Backen
+      g.lineWidth = 0.044; g.beginPath();
+      for (const s of [-1, 1]) {
+        g.moveTo(s * 0.45, 0.115); g.lineTo(s * 0.67, 0.125);
+        g.moveTo(s * 0.455, 0.22); g.lineTo(s * 0.612, 0.25);
+        g.moveTo(s * 0.40, 0.305); g.lineTo(s * 0.565, 0.39);
+      }
+      g.stroke();
+      // Augen: schwarze, hohe Ovale, weit auseinander
+      g.fillStyle = K; g.beginPath();
+      g.ellipse(-0.276, 0.162, 0.046, 0.063, 0, 0, 7);
+      g.ellipse(0.276, 0.162, 0.046, 0.063, 0, 0, 7); g.fill();
+      // Nase: gelbes Oval, der schwarze Rand liegt außen (erst Umriss, dann Füllung), damit das Gelb groß bleibt
+      g.beginPath(); g.ellipse(0, 0.252, 0.05, 0.034, 0, 0, 7);
+      g.lineWidth = 0.044; g.stroke(); g.fillStyle = '#f6c500'; g.fill();
+      // Schleife am rechten Ohr: großer Flügel nach links oben, kleinerer nach rechts unten, runder Knoten; die Ohrspitze schaut dazwischen hervor
+      g.translate(0.27, -0.205);
+      g.beginPath(); wing(-2.58, 0.30, 0.15, 0.15, 0.17); wing(0.35, 0.29, 0.15, 0.15, 0.16);
+      g.lineWidth = 2 * T; g.stroke();   // Umriss außen um die Flügel …
+      g.fillStyle = P; g.fill();         // … das Rosa deckt die innere Hälfte
+      g.beginPath(); g.arc(0, 0, 0.094, 0, 7);
+      g.fill(); g.lineWidth = T; g.stroke();
+      g.restore();
+    },
+    accent(g) {
+      // kleine pinke Schleife: runde Flügel, leicht nach oben, runder Knoten (Umriss außen)
+      g.save();
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      g.strokeStyle = '#111'; g.fillStyle = '#e5195e';
+      g.beginPath();
+      for (const s of [-1, 1]) {
+        g.moveTo(0, 0.06);
+        g.bezierCurveTo(s * 0.26, -0.48, s * 0.62, -0.46, s * 0.6, -0.02);
+        g.bezierCurveTo(s * 0.58, 0.44, s * 0.26, 0.48, 0, 0.06);
+      }
+      g.lineWidth = 0.15; g.stroke(); g.fill();
+      g.beginPath(); g.arc(0, 0.05, 0.155, 0, 7); g.fill(); g.lineWidth = 0.075; g.stroke();
+      g.restore();
+    } },
+  // Hündchen: weiß mit weichem blauem Umriss, lange Schlappohren, rosa Bäckchen, „ω“-Mund, Ringelschwanz; dazwischen Sterne
+  hund: { w: 1.95, aw: 1,
+    draw(g) {
+      const B = '#3f8fdc', T = 0.046, P = 2 * Math.PI, PI = Math.PI;
+      // rechtes Ohr: vom Kopf über die obere Kante, die runde Spitze und die untere Kante zur Backe (das linke gespiegelt, rückwärts)
+      const E = [0.2962, -0.3528, 0.45, -0.372, 0.697, -0.071, 0.856, 0.051, 0.988, 0.152, 0.836, 0.351, 0.704, 0.249, 0.585, 0.158, 0.509, 0.091, 0.4403, 0.0386];
+      g.save();
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      // Umriss: Kopf mit Ohren, sitzender Körper mit zwei Füßen und Ringelschwanz (alle im Uhrzeigersinn: eine Fläche);
+      // erst breit blau umranden, dann weiß füllen: ein weicher Umriss außen um die ganze Figur
+      g.beginPath();
+      g.moveTo(E[0], E[1]);
+      for (let i = 2; i < 20; i += 6) g.bezierCurveTo(E[i], E[i + 1], E[i + 2], E[i + 3], E[i + 4], E[i + 5]);
+      g.bezierCurveTo(0.3878, 0.1538, 0.224, 0.205, 0, 0.205);
+      g.bezierCurveTo(-0.224, 0.205, -0.3878, 0.1538, -E[18], E[19]);
+      for (let i = 16; i > 0; i -= 6) g.bezierCurveTo(-E[i], E[i + 1], -E[i - 2], E[i - 1], -E[i - 4], E[i - 3]);
+      g.bezierCurveTo(-0.1361, -0.456, 0.1361, -0.456, E[0], E[1]);
+      g.moveTo(0, 0.05);
+      g.bezierCurveTo(0.14, 0.05, 0.21, 0.13, 0.24, 0.25);
+      g.bezierCurveTo(0.275, 0.39, 0.22, 0.437, 0.12, 0.437);
+      g.bezierCurveTo(0.06, 0.437, 0.025, 0.43, 0, 0.408);
+      g.bezierCurveTo(-0.025, 0.43, -0.06, 0.437, -0.12, 0.437);
+      g.bezierCurveTo(-0.22, 0.437, -0.275, 0.39, -0.24, 0.25);
+      g.bezierCurveTo(-0.21, 0.13, -0.14, 0.05, 0, 0.05);
+      g.moveTo(-0.135, 0.332); g.arc(-0.24, 0.332, 0.105, 0, P);
+      g.strokeStyle = B; g.lineWidth = 2 * T; g.stroke();
+      g.fillStyle = '#fff'; g.fill();
+      // Linien innen, bündig mit dem Umriss: Kinn, Schwanzkante vor dem Körper mit Spirale, Kopfrand über den Ohransätzen, kleiner Mund
+      g.beginPath();
+      g.moveTo(0.2246, 0.2014); g.quadraticCurveTo(0, 0.2454, -0.2246, 0.2014); g.lineTo(-0.24, 0.2086);
+      g.arc(-0.24, 0.3228, 0.1142, -PI / 2, PI / 2);
+      g.arc(-0.24, 0.368, 0.069, PI / 2, 1.5 * PI);
+      g.arc(-0.24, 0.337, 0.038, 1.5 * PI, 2.3 * PI);
+      for (const s of [1, -1]) { g.moveTo(s * 0.4552, 0.0502); g.quadraticCurveTo(s * 0.4943, -0.0964, s * 0.4579, -0.1722); }
+      g.moveTo(-0.07, 0); g.quadraticCurveTo(-0.035, 0.065, 0, 0.015); g.quadraticCurveTo(0.035, 0.065, 0.07, 0);
+      g.lineWidth = 0.8 * T; g.stroke();
+      // Bäckchen, dann Augen
+      g.fillStyle = '#f7aec3'; g.beginPath();
+      g.ellipse(-0.31, 0.06, 0.08, 0.045, 0, 0, P); g.moveTo(0.39, 0.06); g.ellipse(0.31, 0.06, 0.08, 0.045, 0, 0, P); g.fill();
+      g.fillStyle = '#2f7fd4'; g.beginPath();
+      g.ellipse(-0.225, -0.03, 0.046, 0.067, 0, 0, P); g.moveTo(0.271, -0.03); g.ellipse(0.225, -0.03, 0.046, 0.067, 0, 0, P); g.fill();
+      g.restore();
+    },
+    accent(g) {
+      // runder, hellgelber Stern mit demselben weichen blauen Umriss, leicht geneigt
+      g.save();
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      g.translate(0.03, 0.012); g.rotate(-0.22);
+      g.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 0.215 : 0.43;
+        g.lineTo(r * Math.cos(a), r * Math.sin(a));
+      }
+      g.closePath();
+      g.fillStyle = '#f8ec9a'; g.strokeStyle = '#3f8fdc'; g.lineWidth = 0.1;
+      g.fill(); g.stroke();
+      g.restore();
+    } },
+};
+// Jede Figur wird je Größe einmal als Bild gemalt (in 4-px-Stufen, höchstens 512 px hoch) und dann nur gestempelt
+const motifBmps = new Map();
+function motifBitmap(kind, part, hPx) {
+  const px = clamp(Math.ceil(hPx / 4) * 4, 8, 512), key = kind + part + px;
+  let c = motifBmps.get(key); if (c) return c;
+  const m = TAPE_MOTIFS[kind], a = part === 'a', pad = 2;
+  c = document.createElement('canvas'); c.width = Math.ceil(px * (a ? m.aw : m.w)) + 2 * pad; c.height = px + 2 * pad; c.px = px;
+  const g = c.getContext('2d'); g.translate(c.width / 2, c.height / 2); g.scale(px, px);
+  if (a) m.accent(g); else m.draw(g);
+  if (motifBmps.size >= 48) motifBmps.delete(motifBmps.keys().next().value);
+  motifBmps.set(key, c); return c;
+}
+function drawMotifs(ctx, s, g, ds) {
+  const Q = g.q, n = Q.length, L = [0];
+  for (let i = 1; i < n; i++) L.push(L[i - 1] + Math.hypot(Q[i][0] - Q[i - 1][0], Q[i][1] - Q[i - 1][1]));
+  const m = TAPE_MOTIFS[s.tp], total = L[n - 1], h = 0.72 * s.w, ha = 0.3 * s.w, lm = h * m.w, la = ha * m.aw, sp = lm * 1.18 + la;
+  if (!(total > 0)) return;
+  // Punkt bei der Länge d entlang der Mittellinie; vor dem Anfang und hinter dem Ende geht es gerade weiter (wie die
+  // Schnittkanten): die Figur am Ende bleibt an ihrem Platz und wird dort abgeschnitten, statt aufs Ende zu rutschen
+  const pos = d => {
+    let lo = 1, hi = n - 1; while (lo < hi) { const mid = (lo + hi) >> 1; if (L[mid] < d) lo = mid + 1; else hi = mid; }
+    const t = L[lo] > L[lo - 1] ? (d - L[lo - 1]) / (L[lo] - L[lo - 1]) : 0;
+    return [Q[lo - 1][0] + (Q[lo][0] - Q[lo - 1][0]) * t, Q[lo - 1][1] + (Q[lo][1] - Q[lo - 1][1]) * t];
+  };
+  // Lage der Figuren der Reihe nach: längs des Tapes (Richtung über eine Figurbreite gemittelt, ruhig auch bei zittriger
+  // Hand) und aufrecht. Umgedreht wird erst, wenn eine Figur um mehr als gut 100° kippen würde (U-Kurve, Zickzack);
+  // senkrecht zeigen die Köpfe nach links. So kippt beim Zeichnen nichts hin und her, und alle Kacheln rechnen gleich
+  let flip = null;
+  const angle = d => {
+    const a = pos(d - sp / 2), b = pos(d + sp / 2), r = Math.atan2(b[1] - a[1], b[0] - a[0]), c = Math.cos(r);
+    if (flip === null) flip = c > 0.3 ? 0 : c < -0.3 || Math.sin(r) > 0 ? Math.PI : 0;
+    else if (Math.cos(r + flip) < -0.3) flip = flip ? 0 : Math.PI;
+    return r + flip;
+  };
+  // in einer engen Kehre ist kein Platz für eine Figur (sie ragte aus dem Band): dort keine
+  const bent = d => { const a = pos(d - lm / 2), b = pos(d + lm / 2); return Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.7 * lm; };
+  // sichtbarer Ausschnitt in Weltkoordinaten (Kachel, Vorschau, Export: ohne Drehung), Figuren daneben nicht stempeln
+  const T = ctx.getTransform(), cw = ctx.canvas.width, chh = ctx.canvas.height, rr = h * Math.max(m.w, 1);
+  const cull = !T.b && !T.c && T.a > 0 && T.d > 0, vx0 = -T.e / T.a - rr, vy0 = -T.f / T.d - rr, vx1 = (cw - T.e) / T.a + rr, vy1 = (chh - T.f) / T.d + rr;
+  const bm = motifBitmap(s.tp, 'm', h * ds), ba = motifBitmap(s.tp, 'a', ha * ds), ends = [];
+  const stamp = (c, x, y, r, hw) => {   // hw: Höhe in Welteinheiten
+    const k = hw / c.px;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(r);
+    ctx.drawImage(c, -c.width / 2 * k, -c.height / 2 * k, c.width * k, c.height * k); ctx.restore();
+  };
+  // Figuren, die über ein Ende ragen, werden auf das Band (mit Zacken) beschnitten; die anderen liegen ganz im Band
+  // (0,72 Breiten hoch) und kommen ohne das teure Beschneiden aus
+  const put = (c, d, hw, len, fig) => {
+    const r = angle(d), [x, y] = pos(d);   // die Lage auch für nicht sichtbare Figuren, sie hängt von der Reihe ab
+    if ((fig && bent(d)) || (cull && (x < vx0 || x > vx1 || y < vy0 || y > vy1))) return;
+    if (d - len / 2 < 0 || d + len / 2 > total) ends.push([c, x, y, r, hw]); else stamp(c, x, y, r, hw);
+  };
+  if (total < sp) put(bm, total / 2, h, lm, true);   // kurzes Stück: eine Figur in der Mitte (bei total = sp dieselbe Stelle)
+  else for (let d = sp / 2; d - lm / 2 < total; d += sp) { put(bm, d, h, lm, true); if (d + sp / 2 - la / 2 < total) put(ba, d + sp / 2, ha, la, false); }
+  if (ends.length) { ctx.save(); ctx.clip(g.edge); for (const e of ends) stamp(...e); ctx.restore(); }
+}
 function drawTape(ctx, s, ds = 1) {
   const g = tapeGeo(s), on = covered(s);
   ctx.save(); ctx.lineCap = 'butt'; ctx.lineJoin = 'round'; ctx.lineWidth = s.w;
@@ -972,8 +1161,11 @@ function drawTape(ctx, s, ds = 1) {
     ctx.restore();
   }
   ctx.strokeStyle = ctx.fillStyle = s.c; ctx.stroke(g.line); ctx.fill(g.teeth);
-  const pat = on && tapePattern(ctx, s.tp, ds);
-  if (pat) { ctx.strokeStyle = ctx.fillStyle = pat; ctx.stroke(g.line); ctx.fill(g.teethS); }   // halb durchsichtig: nicht doppelt
+  if (on && TAPE_MOTIFS[s.tp]) drawMotifs(ctx, s, g, ds);
+  else {
+    const pat = on && tapePattern(ctx, s.tp, ds);
+    if (pat) { ctx.strokeStyle = ctx.fillStyle = pat; ctx.stroke(g.line); ctx.fill(g.teethS); }   // halb durchsichtig: nicht doppelt
+  }
   ctx.globalAlpha = 1;
   if (!on) { ctx.setLineDash([5 * DPR / ds, 4 * DPR / ds]); ctx.lineWidth = 1.3 * DPR / ds; ctx.strokeStyle = s.c; ctx.stroke(g.edge); }
   ctx.restore();
@@ -2434,6 +2626,7 @@ function drawSizePreview(k, v) {
   const cv = $('#szPrev'), W = cv.clientWidth || 248, H = cv.clientHeight || 84;
   if (cv.width !== Math.round(W * DPR) || cv.height !== Math.round(H * DPR)) { cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); }
   const g = cv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';   // der Textmarker ließ sonst seine Deckkraft stehen
   const w = clamp(v * S.view.z, 1, H * 0.6), m = Math.max(12, w / 2 + 6), amp = Math.max(3, (H / 2 - m) * 0.75);
   if (k === 'tape' || (k === 'hl' && S.straight.hl)) {
     const pts = [m, H / 2, 0.5, W - m, H / 2, 0.5];

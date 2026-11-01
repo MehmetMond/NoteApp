@@ -1,5 +1,8 @@
 # Notizen für das Surface Pro 11 (Version 1.5.7)
 
+## Neu (zuerst in der Browser-Version)
+- **Tape mit Figuren:** zwei neue Muster, **Kätzchen** (im Stil von Hello Kitty) und **Hündchen** (im Stil von Cinnamoroll). Die Figuren laufen wie bei gedrucktem Washi-Tape entlang des Tapes, folgen Bögen und stehen nie auf dem Kopf; dazwischen kleine Verzierungen. Auswahl im Menü des Tapes (gewählte Dicke nochmal antippen) unter „Muster“. Am schönsten auf Rosa bzw. Hellblau; dickere Tapes zeigen größere Figuren.
+
 ## Neu in 1.5.7: Leiste in einer Zeile, Vollbild
 - **Leiste in einer Zeile:** Lasso, Tape und Formen teilen sich einen Knopf. Er zeigt das zuletzt gewählte der drei (kleine Ecke unten rechts); nochmal antippen öffnet die Auswahl, bei Formen mit den Formen darunter. Wird es eng, wird der Seitentitel gekürzt, erst im Hochformat bricht die Leiste um.
 - **Vollbild** im Menü „⋯“ (oder F11): ohne die Titelleiste „Notizen“ und ohne Taskleiste. Esc oder „Vollbild beenden“ holt beides zurück.
@@ -85,7 +88,7 @@
 | Strichstärke | Punkte in der Leiste; die gewählte nochmal antippen für den Schieberegler |
 | Glättung | Gewählte Strichstärke nochmal antippen: Aus, 25, 50 (wie bisher), 75 oder 100 %, Feineinstellung mit dem Regler |
 | Lasso, Tape, Formen | Teilen sich einen Knopf (neben dem Textmarker): er zeigt das zuletzt gewählte, nochmal antippen öffnet die Auswahl der drei. Tasten L, T, F |
-| Tape | Tape (T), über den Inhalt ziehen; antippen deckt auf oder ab; am Ende halten = gerade |
+| Tape | Tape (T), über den Inhalt ziehen; antippen deckt auf oder ab; am Ende halten = gerade; Muster (auch Kätzchen und Hündchen) im Menü der Dicke |
 | Gerader Textmarker | Am Ende kurz halten, oder im Menü des Textmarkers „Immer gerade“ |
 | Formen und Graphen | Formen (F), dann aufziehen; der Knopf nochmal angetippt öffnet die Auswahl der Formen |
 | Am Raster ausrichten | Magnet-Knopf (G) an/aus |
