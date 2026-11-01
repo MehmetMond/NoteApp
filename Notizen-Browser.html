@@ -195,7 +195,7 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 #sizeMenu .smchips{display:flex;gap:6px;margin:8px 0 2px}
 #sizeMenu .smchips button{flex:1;justify-content:center;width:auto;height:34px;padding:0;border:1px solid var(--border);border-radius:9px;font-size:13px;font-variant-numeric:tabular-nums;color:var(--text)}
 #sizeMenu .smchips button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
-#sizeMenu #tpPats{flex-wrap:wrap}#sizeMenu #tpPats button{flex:1 0 28%}  /* sechs Muster: zwei Reihen zu drei */
+#sizeMenu #tpPats{flex-wrap:wrap}#sizeMenu #tpPats button{flex:1 1 0}#sizeMenu #tpPats .br{flex-basis:100%;height:0}  /* Muster in einer Reihe, Figuren in der zweiten */
 #sizeMenu #stBox,#sizeMenu #tpAll{margin:10px 0}
 #sizeMenu #tpAll{margin-bottom:2px}
 #sizeMenu .szhint{font-size:12px;line-height:1.35;color:var(--muted);margin-top:8px}
@@ -525,7 +525,7 @@ const SIZE_DEFAULT = { pen: 2, hl: 1, tape: 1 };
 const SIZE_RANGE = { pen: [0.5, 30], hl: [4, 80], tape: [6, 120] };
 // Tape (wie Washi-Tape): eigene Farben und Muster
 const TAPE_PALETTE = ['#f4a7b9', '#f6c86e', '#9fd6aa', '#8ec5ef', '#c4a9ea', '#b8bec7'];
-const TAPE_PATTERNS = [['uni', 'Uni'], ['streifen', 'Streifen'], ['punkte', 'Punkte'], ['karo', 'Karo'], ['kitty', 'Kätzchen'], ['hund', 'Hündchen']];
+const TAPE_PATTERNS = [['uni', 'Uni'], ['streifen', 'Streifen'], ['punkte', 'Punkte'], ['karo', 'Karo'], ['kitty', 'Kätzchen'], ['hund', 'Hündchen'], ['kuro', 'Teufelchen']];
 // Glättung der Handschrift (0 = roh … 1 = stark), fünf Voreinstellungen wie bei der Strichstärke; 0,5 entspricht der
 // früheren festen Glättung und ist gewählt
 const SMOOTH_PRESETS = [0, 0.25, 0.5, 0.75, 1], SMOOTH_IDX = 2;
@@ -1004,10 +1004,11 @@ function tapePattern(ctx, kind, ds) {
 /* Figuren (Kätzchen, Hündchen): nicht gekachelt wie die Muster, sondern einzeln entlang der Mittellinie gestempelt,
    0,72 Tape-Breiten hoch, längs des Tapes und nie auf dem Kopf, dazwischen eine kleine Beigabe – wie gedrucktes
    Washi-Tape, das irgendwo abgeschnitten wird. Eigene, vereinfachte Zeichnungen im Stil von Hello Kitty und
-   Cinnamoroll. Eine Figur: Höhe 1 um (0, 0), Breite w; die Beigabe Höhe 1, Breite aw. */
+   Cinnamoroll. Eine Figur: Höhe 1 um (0, 0), Breite w; die Beigabe Höhe 1, Breite aw; c: die passende Tape-Farbe, die
+   beim Wählen des Musters gleich mit eingestellt wird. */
 const TAPE_MOTIFS = {
   // Kätzchen: weißer Kopf mit schwarzem Umriss, Schleife am rechten Ohr, gelbe Nase, je drei Schnurrhaare; dazwischen Schleifen
-  kitty: { w: 1.42, aw: 1.4,
+  kitty: { w: 1.42, aw: 1.4, c: '#f4a7b9',
     draw(g) {
       g.save();
       g.lineJoin = 'round'; g.lineCap = 'round';
@@ -1074,7 +1075,7 @@ const TAPE_MOTIFS = {
       g.restore();
     } },
   // Hündchen: weiß mit weichem blauem Umriss, lange Schlappohren, rosa Bäckchen, „ω“-Mund, Ringelschwanz; dazwischen Sterne
-  hund: { w: 1.95, aw: 1,
+  hund: { w: 1.95, aw: 1, c: '#8ec5ef',
     draw(g) {
       const B = '#3f8fdc', T = 0.046, P = 2 * Math.PI, PI = Math.PI;
       // rechtes Ohr: vom Kopf über die obere Kante, die runde Spitze und die untere Kante zur Backe (das linke gespiegelt, rückwärts)
@@ -1129,6 +1130,73 @@ const TAPE_MOTIFS = {
       g.closePath();
       g.fillStyle = '#f8ec9a'; g.strokeStyle = '#3f8fdc'; g.lineWidth = 0.1;
       g.fill(); g.stroke();
+      g.restore();
+    } },
+  // Teufelchen: weißes, freches Gesicht in dunkler Kapuze mit spitzen Ohren und Kugeln daran, rosa Totenkopf; dazwischen Totenköpfe
+  kuro: { w: 1.16, aw: 0.9, c: '#c4a9ea',
+    draw(g) {
+      const K = '#1b181e', H = '#46424c', P = '#f4a3c4', T = 0.048, C = 2 * Math.PI;
+      // rechtes Ohr (das linke gespiegelt): verdeckter Ansatz, innere Ecke, Kugel an der Spitze, äußere Ecke, zurück
+      const E = [[0.15, 0], [0.185, -0.235], [0.43, 0], [0.3, 0.08]], B = [0.49, -0.405, 0.037, 2.18];
+      // Gesicht, rechte Hälfte ab der Spitze über der Stirn: Bogen über dem Auge, dann die Backe hinunter zum Kinn (links gespiegelt)
+      const F = [[0.045, 0.158, 0.1, 0.112, 0.15, 0.112], [0.31, 0.112, 0.41, 0.448, 0, 0.448]];
+      g.save();
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      g.strokeStyle = K; g.fillStyle = H; g.lineWidth = 2 * T;
+      // 1. Ohren mit den Kugeln an den Spitzen, hinter der Kapuze (breit umranden, dann füllen: der Umriss liegt außen)
+      g.beginPath();
+      for (const s of [1, -1]) {
+        const a = s > 0 ? B[3] : Math.PI - B[3];
+        g.moveTo(s * E[0][0], E[0][1]); g.lineTo(s * E[1][0], E[1][1]);
+        g.arc(s * B[0], B[1], B[2], a, a + s * C, s < 0);
+        g.lineTo(s * E[2][0], E[2][1]); g.lineTo(s * E[3][0], E[3][1]);
+      }
+      g.stroke(); g.fill();
+      // 2. Kapuze: runde Kuppel, die Seiten hängen neben den Backen herab; der offene Rand liegt hinter dem Gesicht
+      g.beginPath(); g.moveTo(-0.24, 0.376);
+      g.bezierCurveTo(-0.47, 0.43, -0.43, -0.19, 0, -0.19);
+      g.bezierCurveTo(0.43, -0.19, 0.47, 0.43, 0.24, 0.376);
+      g.stroke(); g.fill();
+      // 3. weißes Gesicht mit derselben Linienbreite: seine Linie führt den Umriss der Kapuze ums Kinn weiter
+      g.beginPath(); g.moveTo(0, 0.168);
+      for (const f of F) g.bezierCurveTo(f[0], f[1], f[2], f[3], f[4], f[5]);
+      for (let i = F.length - 1; i >= 0; i--) {
+        const f = F[i], p = i ? F[i - 1] : [0, 0, 0, 0, 0, 0.168];
+        g.bezierCurveTo(-f[2], f[3], -f[0], f[1], -p[4], p[5]);
+      }
+      g.stroke(); g.fillStyle = '#fff'; g.fill();
+      // 4. schwarz: Rand der Nase, freche Augen (Lid fällt zur Mitte hin ab, Wimper außen), schiefes Grinsen
+      g.fillStyle = K; g.beginPath();
+      g.ellipse(0, 0.334, 0.036, 0.025, 0, 0, C);
+      for (const s of [-1, 1]) {
+        g.moveTo(s * 0.232, 0.212); g.lineTo(s * 0.125, 0.254);
+        g.bezierCurveTo(s * 0.108, 0.278, s * 0.122, 0.35, s * 0.17, 0.35);
+        g.bezierCurveTo(s * 0.208, 0.35, s * 0.228, 0.3, s * 0.218, 0.25);
+      }
+      g.moveTo(-0.042, 0.388); g.bezierCurveTo(-0.01, 0.402, 0.048, 0.436, 0.058, 0.377);
+      g.fill(); g.lineWidth = 0.012; g.stroke();   // dünner Rand in derselben Farbe rundet alle Ecken, auch das Mundende
+      // 5. rosa: Totenkopf auf der Kapuze (Augen und Zahnlücken gegenläufig ausgespart), Nase, Zunge
+      g.fillStyle = P; g.beginPath();
+      g.ellipse(0, -0.012, 0.118, 0.09, 0, 0, C); g.ellipse(0, 0.334, 0.025, 0.015, 0, 0, C);
+      g.rect(-0.047, 0.044, 0.094, 0.06);
+      for (const s of [-1, 1]) {
+        g.ellipse(s * 0.054, 0.004, 0.033, 0.038, 0, C, 0, true);
+        g.rect(s * 0.016 + 0.0065, 0.082, -0.013, 0.022);
+      }
+      g.ellipse(0.027, 0.403, 0.019, 0.0095, -0.25, 0, C);
+      g.fill();
+      g.restore();
+    },
+    accent(g) {
+      // kleiner rosa Totenkopf mit demselben dunklen Rand: runder Schädel und Kiefer, dunkle Augen und Zahnlücken
+      g.save();
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      g.strokeStyle = '#1b181e'; g.fillStyle = '#f4a3c4'; g.lineWidth = 0.14;
+      g.beginPath(); g.ellipse(0, -0.07, 0.36, 0.3, 0, 0, 2 * Math.PI); g.rect(-0.19, 0.06, 0.38, 0.29);
+      g.stroke(); g.fill();
+      g.fillStyle = '#1b181e'; g.beginPath();
+      for (const s of [-1, 1]) { g.ellipse(s * 0.15, -0.03, 0.105, 0.125, 0, 0, 2 * Math.PI); g.rect(s * 0.0625 - 0.0225, 0.23, 0.045, 0.12); }
+      g.fill();
       g.restore();
     } },
 };
@@ -2708,8 +2776,13 @@ $('#szRange').oninput = () => {
 function renderTapePats() {
   const box = $('#tpPats'); box.innerHTML = '';
   for (const [k, name] of TAPE_PATTERNS) {
+    if (k === 'kitty') { const br = document.createElement('i'); br.className = 'br'; box.appendChild(br); }   // Figuren in eine eigene Reihe
     const b = document.createElement('button'); b.className = S.tapePat === k ? 'on' : ''; b.textContent = name;
-    b.onclick = () => { S.tapePat = k; store.set('tapePat', k); renderTapePats(); showSize(); };
+    b.onclick = () => {
+      S.tapePat = k; store.set('tapePat', k);
+      if (TAPE_MOTIFS[k]) { S.color.tape = TAPE_MOTIFS[k].c; store.set('color', S.color); renderColors(); }   // Figuren: ihre Farbe gleich mit
+      renderTapePats(); showSize();
+    };
     box.appendChild(b);
   }
 }

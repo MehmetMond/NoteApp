@@ -81,7 +81,11 @@ const DEMO = {
   const geo = list => { const b = [Infinity, Infinity, -Infinity, -Infinity]; for (const s of list) for (let i = 0; i < s.pts.length; i += 3) { b[0] = Math.min(b[0], s.pts[i]); b[1] = Math.min(b[1], s.pts[i + 1]); b[2] = Math.max(b[2], s.pts[i]); b[3] = Math.max(b[3], s.pts[i + 1]); } return b; };
   const vis = sel => p.evaluate(s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }, sel);
   const shapesDB = () => p.evaluate(async () => (await dbShapesAll()).sort(byCreated).map(r => ({ id: r.id, name: r.name, created: r.created, w: r.w, h: r.h, f32: r.strokes.every(s => s.pts instanceof Float32Array), strokes: r.strokes.map(s => ({ c: s.c, w: s.w, hl: s.hl, pts: Array.from(s.pts) })) })));
-  const openMenu = async () => { if (!(await vis('#shapeMenu'))) await p.evaluate(() => { if (S.tool !== 'shape') setTool('shape'); openGroupMenu(); }); await p.waitForSelector('#shapeMenu:not(.hidden)'); };
+  // öffnen; schließt es ein gleichzeitiges Anpassen an die Fenstergröße (gleich nach einer neuen Seite) wieder, nochmal
+  const openMenu = async () => {
+    for (let i = 0; i < 3 && !(await vis('#shapeMenu')); i++) { await p.evaluate(() => { if (S.tool !== 'shape') setTool('shape'); openGroupMenu(); }); await p.waitForTimeout(150); }
+    await p.waitForSelector('#shapeMenu:not(.hidden)');
+  };
   const closeMenu = async () => { if (await vis('#shapeMenu')) await p.click('#bGroup'); };
   const pickCustom = async id => { await openMenu(); await p.click(`#shapeMenu [data-shape="custom:${id}"]`); await frames(); };
   // Auswahl über die Oberfläche speichern (Knopf in der Auswahlleiste, Name im Dialog, Enter)

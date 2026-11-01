@@ -37,15 +37,14 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   // Muster im Menü: sechs, in zwei Reihen
   await p.keyboard.press('t'); await p.click('#sizes .sz.on');
   res.chips = await p.evaluate(() => { const bs = [...document.querySelectorAll('#tpPats button')]; return { names: bs.map(b => b.textContent), rows: new Set(bs.map(b => Math.round(b.getBoundingClientRect().top))).size }; });
-  check(res.chips.names.join() === 'Uni,Streifen,Punkte,Karo,Kätzchen,Hündchen' && res.chips.rows === 2, 'Sechs Muster in zwei Reihen (' + JSON.stringify(res.chips) + ')');
+  check(res.chips.names.join() === 'Uni,Streifen,Punkte,Karo,Kätzchen,Hündchen,Teufelchen' && res.chips.rows === 2, 'Muster in einer Reihe, Figuren in der zweiten (' + JSON.stringify(res.chips) + ')');
   await p.click('#tpPats button:text-is("Kätzchen")');
-  res.pick = await p.evaluate(() => [S.tapePat, localStorage.getItem('notizen.tapePat'), $('#tpPats button.on').textContent]);
-  check(res.pick.join() === 'kitty,"kitty",Kätzchen', 'Kätzchen gewählt und gemerkt (' + res.pick + ')');
+  res.pick = await p.evaluate(() => [S.tapePat, localStorage.getItem('notizen.tapePat'), $('#tpPats button.on').textContent, S.color.tape, JSON.parse(localStorage.getItem('notizen.color')).tape]);
+  check(res.pick.join() === 'kitty,"kitty",Kätzchen,#f4a7b9,#f4a7b9', 'Kätzchen gewählt und gemerkt, Rosa gleich mit (' + res.pick + ')');
   res.preview = await p.evaluate(() => { const c = $('#szPrev'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let w = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 240 && d[i + 1] > 240 && d[i + 2] > 240 && d[i + 3] > 200) w++; return w; });
   check(res.preview > 200, 'Vorschau im Menü zeigt Figuren (' + res.preview + ' weiße Pixel)');
   await p.keyboard.press('Escape');
-  // Kätzchen: rosa Tape, waagerecht
-  await p.click('#colors .sw:nth-child(1)');
+  // Kätzchen: rosa Tape (mit dem Muster schon gewählt), waagerecht
   await draw(line(200, 900, 250));
   res.kitty = await p.evaluate(() => { const s = S.items.at(-1); return { tp: s.tp, hid: s.hid, w: s.w }; });
   check(res.kitty.tp === 'kitty' && res.kitty.hid === true, 'Tape mit Kätzchen angelegt');
@@ -53,11 +52,18 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   check(res.kittyBand.white > 0.12 && res.kittyBand.dark > 0.02, 'Kätzchen sichtbar: weiß mit dunklem Umriss (' + JSON.stringify(res.kittyBand) + ')');
   // Hündchen: blaues Tape, von rechts nach links gezogen
   await p.click('#sizes .sz.on'); await p.click('#tpPats button:text-is("Hündchen")'); await p.keyboard.press('Escape');
-  await p.click('#colors .sw:nth-child(4)');
+  res.hundColor = await p.evaluate(() => S.color.tape); check(res.hundColor === '#8ec5ef', 'Hündchen: Hellblau gleich mit (' + res.hundColor + ')');
   await draw(line(900, 200, 400));
   res.hund = await p.evaluate(() => S.items.at(-1).tp); check(res.hund === 'hund', 'Tape mit Hündchen angelegt');
   res.hundBand = await band(230, 870, 400, 8);
   check(res.hundBand.white > 0.12 && res.hundBand.dark < 0.01, 'Hündchen sichtbar: weiß, ohne schwarzen Umriss (' + JSON.stringify(res.hundBand) + ')');
+  // Teufelchen: lila Tape, weißes Gesicht in dunkler Kapuze
+  await p.click('#sizes .sz.on'); await p.click('#tpPats button:text-is("Teufelchen")'); await p.keyboard.press('Escape');
+  res.kuroColor = await p.evaluate(() => [S.color.tape, $('#colors .sw.on').title]); check(res.kuroColor.join() === '#c4a9ea,#c4a9ea', 'Teufelchen: Lila gleich mit, in der Leiste gewählt (' + res.kuroColor + ')');
+  await draw(line(200, 900, 550));
+  res.kuro = await p.evaluate(() => S.items.at(-1).tp); check(res.kuro === 'kuro', 'Tape mit Teufelchen angelegt');
+  res.kuroBand = await band(230, 870, 550, 8);
+  check(res.kuroBand.white > 0.01 && res.kuroBand.dark > 0.08,   /* das Gesicht ist klein, die Kapuze groß */ 'Teufelchen sichtbar: weißes Gesicht, dunkle Kapuze (' + JSON.stringify(res.kuroBand) + ')');
   // aufdecken: keine Figuren mehr
   await tap(500, 250); res.revealed = await p.evaluate(() => S.items.find(i => i.tp === 'kitty').hid);
   res.revealedBand = await band(230, 870, 250, 8);
@@ -107,9 +113,9 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
       const list = []; for (let k = 0; k < 40; k++) { const pts = []; for (let i = 0; i <= 80; i++) pts.push(40 + i * 15, 60 + k * 19 + Math.sin(i / 6) * 4, 0.5); list.push(makeStroke(pts, '#f4a7b9', 22, false, { tp, hid: true })); }
       setItems(list); const t = []; for (let r = 0; r < 3; r++) { clearTiles(); pathCache.clear(); const t0 = performance.now(); draw(); t.push(performance.now() - t0); } return Math.round(Math.min(...t));
     };
-    const keep = S.items, out = { streifen: time('streifen'), kitty: time('kitty'), hund: time('hund') }; setItems(keep); clearTiles(); draw(); return out;
+    const keep = S.items, out = { streifen: time('streifen'), kitty: time('kitty'), hund: time('hund'), kuro: time('kuro') }; setItems(keep); clearTiles(); draw(); return out;
   });
-  check(res.ms.kitty < Math.max(250, res.ms.streifen * 3) && res.ms.hund < Math.max(250, res.ms.streifen * 3), 'Figuren-Tapes zeichnen schnell genug (' + JSON.stringify(res.ms) + ')');
+  check(['kitty', 'hund', 'kuro'].every(k => res.ms[k] < Math.max(250, res.ms.streifen * 3)), 'Figuren-Tapes zeichnen schnell genug (' + JSON.stringify(res.ms) + ')');
   await p.screenshot({ path: path.join(__dirname, 'tapemotif.png') });
   if (errs.length) fails.push('Fehler: ' + errs.join(' | '));
   res.errs = errs; res.fails = fails;

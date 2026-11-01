@@ -63,8 +63,8 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   check(straight.tp && straight.n === 2 && Math.abs(straight.y[0] - straight.y[1]) < 0.01, 'Halten: Tape wird gerade und waagerecht');
   // „Alle aufdecken“ / „Alle abdecken“ im Menü des Tapes
   await p.click('#sizes .sz.on'); await p.waitForTimeout(150);
-  res.menu = await p.evaluate(() => ({ label: $('#szLabel').textContent, pats: [...$('#tpPats').children].map(c => c.textContent + (c.classList.contains('on') ? '*' : '')), smooth: !$('#smBox').hidden, straight: !$('#stBox').hidden, all: !$('#tpAll').hidden }));
-  check(res.menu.label === 'Tape' && res.menu.pats.join() === 'Uni,Streifen*,Punkte,Karo,Kätzchen,Hündchen' && !res.menu.smooth && res.menu.straight && res.menu.all, 'Menü des Tapes');
+  res.menu = await p.evaluate(() => ({ label: $('#szLabel').textContent, pats: [...$('#tpPats').querySelectorAll('button')].map(c => c.textContent + (c.classList.contains('on') ? '*' : '')), smooth: !$('#smBox').hidden, straight: !$('#stBox').hidden, all: !$('#tpAll').hidden }));
+  check(res.menu.label === 'Tape' && res.menu.pats.join() === 'Uni,Streifen*,Punkte,Karo,Kätzchen,Hündchen,Teufelchen' && !res.menu.smooth && res.menu.straight && res.menu.all, 'Menü des Tapes');
   await p.click('#tpPats button:nth-child(3)'); await p.waitForTimeout(80);
   const mbox = await p.evaluate(() => { const r = $('#sizeMenu').getBoundingClientRect(); return { x: r.left - 4, y: r.top - 4, width: r.width + 8, height: r.height + 8 }; });
   await p.screenshot({ path: path.join(__dirname, 'tape_menu.png'), clip: mbox });
