@@ -2047,8 +2047,12 @@ function hoverDot(e) {
   if (!action && !spaceDown && cvLive.style.cursor !== cur) cvLive.style.cursor = cur;
 }
 
+// Der Stift ist irgendwo im Fenster (auch auf der Leiste oder an einem Regler im Menü): Handballen auf der Seite ignorieren
+document.addEventListener('pointerdown', e => { if (e.pointerType === 'pen') penActiveUntil = Math.max(penActiveUntil, performance.now() + 600); }, true);
+document.addEventListener('pointermove', e => { if (e.pointerType === 'pen') penActiveUntil = Math.max(penActiveUntil, performance.now() + 300); }, true);
 cvLive.addEventListener('pointerdown', e => {
   hoverIn(e);
+  if (e.pointerType === 'touch' && performance.now() < penActiveUntil) return;   // Handballen: schließt auch kein offenes Menü
   penDot.style.display = '';
   if (e.pointerType === 'pen') { penLast = true; if (!spaceDown) cvLive.style.cursor = toolCursor(S.tool); }
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
@@ -2139,7 +2143,7 @@ function setTool(t) {
   if (GROUP[t]) setGroupTool(t);
   $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   if (t !== 'lasso') clearSel();
-  $('#sizeMenu').classList.add('hidden'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
+  $('#sizeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes(); fitBar();
 }
@@ -2198,12 +2202,17 @@ function renderSizes() {
     b.appendChild(d);
     b.onclick = () => {
       if (on && show) { openSizeMenu(k, b); return; }
-      $('#sizeMenu').classList.add('hidden'); setSize(k, i);
+      $('#sizeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); setSize(k, i);
       if (!show) setTool(k); else renderSizes();
     };
     box.appendChild(b);
   });
+  const t = $('#bTune'); t.style.opacity = box.style.opacity;
+  t.title = 'Einstellungen ' + { pen: 'des Stifts: Dicke, Glättung', hl: 'des Textmarkers: Dicke, Glättung, Immer gerade', tape: 'des Tapes: Dicke, Muster, Immer gerade' }[k];
 }
+// Einstellungen des Werkzeugs (Dicke, Glättung, Muster …) über einen eigenen Knopf neben den Dicken; das zweite Antippen
+// der gewählten Dicke geht weiterhin. Radierer, Hand: wie beim Antippen einer Dicke erst zum Stift
+$('#bTune').onclick = () => { if (!penLike()) setTool(toolKind()); openSizeMenu(toolKind(), $('#bTune')); };
 // Schieberegler für die gewählte Voreinstellung, logarithmisch (feine Schritte bei dünnen Stiften)
 let sizeKind = 'pen';
 const sizeToT = (k, v) => { const [lo, hi] = SIZE_RANGE[k]; return Math.round(Math.log(v / lo) / Math.log(hi / lo) * 1000); };
@@ -2251,9 +2260,10 @@ function openSizeMenu(k, btn) {
   sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth(); renderTapePats();
   // Stift: Glättung; Textmarker: dazu „Immer gerade“; Tape: Muster, „Immer gerade“, alle auf- und abdecken
   $('#tpBox').hidden = $('#tpAll').hidden = k !== 'tape'; $('#smBox').hidden = k === 'tape'; $('#stBox').hidden = k === 'pen';
-  m.classList.remove('hidden'); showSize();
-  const r = btn.getBoundingClientRect();
-  m.style.top = (r.bottom + 8) + 'px';
+  m.classList.remove('hidden'); showSize(); $('#bTune').classList.add('on');
+  // unter der ganzen Leiste: bricht sie um, verdeckte das Menü sonst Knöpfe der nächsten Zeile; in niedrigen Fenstern scrollbar
+  const r = btn.getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 8;
+  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
   m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
 }
 $('#szRange').oninput = () => {
@@ -2425,7 +2435,7 @@ function applyDark() {
 function toggleDark() { S.dark = !S.dark; store.set('dark', S.dark); applyDark(); }
 $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
 
-function closeMenus() { $$('.menu').forEach(m => m.classList.add('hidden')); $$('.mbtn.on').forEach(b => b.classList.remove('on')); }
+function closeMenus() { $$('.menu').forEach(m => m.classList.add('hidden')); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
 function openMenu(menu, btn) {
   const was = !menu.classList.contains('hidden'); closeMenus(); if (was) return;
   menu.classList.remove('hidden');
@@ -2434,7 +2444,7 @@ function openMenu(menu, btn) {
   menu.style.left = clamp(r.right - menu.offsetWidth, 8, innerWidth - menu.offsetWidth - 8) + 'px';
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bGroup,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -2497,6 +2507,8 @@ document.addEventListener('keydown', e => {
     if ($$('.menu').some(m => !m.classList.contains('hidden'))) closeMenus(); else if (homeBook) showShelf(); else escFullscreen();
     return;
   }
+  // Esc schließt offene Menüs auch, wenn ein Regler darin noch den Fokus hat
+  if (k === 'escape' && $$('.menu').some(m => !m.classList.contains('hidden'))) { closeMenus(); if (e.target.blur) e.target.blur(); return; }
   if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
   if (k === ' ') { e.preventDefault(); if (!spaceDown && !action) { spaceDown = true; cvLive.style.cursor = 'grab'; } return; }
   if (action) {

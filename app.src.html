@@ -178,17 +178,21 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 .sep{width:1px;height:28px;background:var(--border);margin:0 3px}
 #title{field-sizing:content;min-width:56px;flex:0 1 auto;text-overflow:ellipsis;max-width:280px;font:inherit;font-weight:600;color:var(--text);background:transparent;border:1px solid transparent;border-radius:8px;padding:7px 8px;-webkit-user-select:text;user-select:text}
 #title:hover,#title:focus{border-color:var(--border);outline:none}
-@media (max-width:1500px){#bar{gap:4px}.sep{margin:0 2px}#title{max-width:180px;text-overflow:ellipsis}}  /* bleibt bei ~1440 px einzeilig */
+@media (max-width:1500px){#bar{gap:2px}.sep{margin:0 2px}#title{max-width:180px;text-overflow:ellipsis}}  /* bleibt bei ~1440 px einzeilig */
 .sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--border);margin:0 1px;padding:0;position:relative}
 .sw.on{box-shadow:0 0 0 2px var(--accent)}
 .sw.custom{background:conic-gradient(#e53935,#fdd835,#43a047,#1e88e5,#8e24aa,#e53935)}
 .sw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
 .sz{width:32px;height:40px;display:flex;align-items:center;justify-content:center}
+/* Einzeilig sind Farben und Dicken immer so breit wie beim Stift (8 Farben, 5 Dicken): beim Wechsel zu Textmarker oder
+   Tape springt nichts zur Seite, und der Titel wird nicht je nach Werkzeug anders gekürzt (umgebrochen verschenkte das
+   nur Platz). Der Einstellungs-Knopf bricht mit den Dicken zusammen um */
+#bar:not(.wrap) #colors{min-width:256px}#bar:not(.wrap) #sizes{min-width:160px}.szgrp{display:flex;align-items:center}
 .sz span{display:block;border-radius:50%;background:var(--text)}
 .sz:hover{background:var(--hover)}
 .sz.on{background:var(--accent-soft)}
 .sz.on span{background:var(--accent)}
-#sizeMenu{min-width:0;width:280px;padding:12px 16px 14px}
+#sizeMenu{min-width:0;width:280px;padding:12px 16px 14px;overflow-y:auto;overscroll-behavior:contain}
 #sizeMenu .szhead{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;color:var(--muted)}
 #sizeMenu .szhead b{color:var(--text);font-size:16px;font-variant-numeric:tabular-nums}
 #szRange,#smRange{display:block;width:100%;height:32px;margin:6px 0;accent-color:var(--accent);touch-action:none}
@@ -336,7 +340,7 @@ html.dark #toast{background:#eee;color:#111}
     <div class="sep"></div>
     <div id="colors" style="display:flex;align-items:center"></div>
     <div class="sep"></div>
-    <div id="sizes" style="display:flex;align-items:center"></div>
+    <div class="szgrp"><div id="sizes" style="display:flex;align-items:center"></div><button class="tb" id="bTune" title="Einstellungen des Werkzeugs"><svg class="i"><use href="#ic-tune"/></svg></button></div>
     <div class="grow"></div>
     <button class="tb" id="bImg" title="Bild einfügen"><svg class="i"><use href="#ic-img"/></svg></button>
     <button class="tb" id="bPdf" title="PDF einfügen"><svg class="i"><use href="#ic-pdf"/></svg></button>
@@ -441,6 +445,7 @@ html.dark #toast{background:#eee;color:#111}
   <symbol id="ic-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></symbol>
   <symbol id="ic-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></symbol>
   <symbol id="ic-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></symbol>
+  <symbol id="ic-tune" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
   <symbol id="ic-more" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g></symbol>
   <symbol id="ic-down" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
   <symbol id="ic-up" viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></symbol>
@@ -2516,8 +2521,12 @@ function hoverDot(e) {
   if (!action && !spaceDown && cvLive.style.cursor !== cur) cvLive.style.cursor = cur;
 }
 
+// Der Stift ist irgendwo im Fenster (auch auf der Leiste oder an einem Regler im Menü): Handballen auf der Seite ignorieren
+document.addEventListener('pointerdown', e => { if (e.pointerType === 'pen') penActiveUntil = Math.max(penActiveUntil, performance.now() + 600); }, true);
+document.addEventListener('pointermove', e => { if (e.pointerType === 'pen') penActiveUntil = Math.max(penActiveUntil, performance.now() + 300); }, true);
 cvLive.addEventListener('pointerdown', e => {
   hoverIn(e);
+  if (e.pointerType === 'touch' && performance.now() < penActiveUntil) return;   // Handballen: schließt auch kein offenes Menü
   penDot.style.display = '';
   if (e.pointerType === 'pen') { penLast = true; if (!spaceDown) cvLive.style.cursor = toolCursor(S.tool); }
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
@@ -2608,7 +2617,7 @@ function setTool(t) {
   if (GROUP[t]) setGroupTool(t);
   $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   if (t !== 'lasso') clearSel();
-  $('#sizeMenu').classList.add('hidden'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
+  $('#sizeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes(); fitBar();
 }
@@ -2667,12 +2676,17 @@ function renderSizes() {
     b.appendChild(d);
     b.onclick = () => {
       if (on && show) { openSizeMenu(k, b); return; }
-      $('#sizeMenu').classList.add('hidden'); setSize(k, i);
+      $('#sizeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); setSize(k, i);
       if (!show) setTool(k); else renderSizes();
     };
     box.appendChild(b);
   });
+  const t = $('#bTune'); t.style.opacity = box.style.opacity;
+  t.title = 'Einstellungen ' + { pen: 'des Stifts: Dicke, Glättung', hl: 'des Textmarkers: Dicke, Glättung, Immer gerade', tape: 'des Tapes: Dicke, Muster, Immer gerade' }[k];
 }
+// Einstellungen des Werkzeugs (Dicke, Glättung, Muster …) über einen eigenen Knopf neben den Dicken; das zweite Antippen
+// der gewählten Dicke geht weiterhin. Radierer, Hand: wie beim Antippen einer Dicke erst zum Stift
+$('#bTune').onclick = () => { if (!penLike()) setTool(toolKind()); openSizeMenu(toolKind(), $('#bTune')); };
 // Schieberegler für die gewählte Voreinstellung, logarithmisch (feine Schritte bei dünnen Stiften)
 let sizeKind = 'pen';
 const sizeToT = (k, v) => { const [lo, hi] = SIZE_RANGE[k]; return Math.round(Math.log(v / lo) / Math.log(hi / lo) * 1000); };
@@ -2720,9 +2734,10 @@ function openSizeMenu(k, btn) {
   sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth(); renderTapePats();
   // Stift: Glättung; Textmarker: dazu „Immer gerade“; Tape: Muster, „Immer gerade“, alle auf- und abdecken
   $('#tpBox').hidden = $('#tpAll').hidden = k !== 'tape'; $('#smBox').hidden = k === 'tape'; $('#stBox').hidden = k === 'pen';
-  m.classList.remove('hidden'); showSize();
-  const r = btn.getBoundingClientRect();
-  m.style.top = (r.bottom + 8) + 'px';
+  m.classList.remove('hidden'); showSize(); $('#bTune').classList.add('on');
+  // unter der ganzen Leiste: bricht sie um, verdeckte das Menü sonst Knöpfe der nächsten Zeile; in niedrigen Fenstern scrollbar
+  const r = btn.getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 8;
+  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
   m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
 }
 $('#szRange').oninput = () => {
@@ -2894,7 +2909,7 @@ function applyDark() {
 function toggleDark() { S.dark = !S.dark; store.set('dark', S.dark); applyDark(); }
 $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
 
-function closeMenus() { $$('.menu').forEach(m => m.classList.add('hidden')); $$('.mbtn.on').forEach(b => b.classList.remove('on')); }
+function closeMenus() { $$('.menu').forEach(m => m.classList.add('hidden')); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
 function openMenu(menu, btn) {
   const was = !menu.classList.contains('hidden'); closeMenus(); if (was) return;
   menu.classList.remove('hidden');
@@ -2903,7 +2918,7 @@ function openMenu(menu, btn) {
   menu.style.left = clamp(r.right - menu.offsetWidth, 8, innerWidth - menu.offsetWidth - 8) + 'px';
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bGroup,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -2966,6 +2981,8 @@ document.addEventListener('keydown', e => {
     if ($$('.menu').some(m => !m.classList.contains('hidden'))) closeMenus(); else if (homeBook) showShelf(); else escFullscreen();
     return;
   }
+  // Esc schließt offene Menüs auch, wenn ein Regler darin noch den Fokus hat
+  if (k === 'escape' && $$('.menu').some(m => !m.classList.contains('hidden'))) { closeMenus(); if (e.target.blur) e.target.blur(); return; }
   if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
   if (k === ' ') { e.preventDefault(); if (!spaceDown && !action) { spaceDown = true; cvLive.style.cursor = 'grab'; } return; }
   if (action) {
