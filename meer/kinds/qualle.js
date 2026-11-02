@@ -45,7 +45,7 @@ function own(c, oc) {
 }
 
 TM.kinds.qualle = {
-  label: 'Qualle', count: 3, len: [72, 140], speed: [5, 9], depth: [0.2, 0.85], rigid: true,
+  label: 'Qualle', count: 3, len: [72, 140], speed: [5, 9], depth: [0.2, 0.85], rigid: true, wake: 0,
   tapTip: 'pumpt schneller und treibt davon',   // Hinweis beim Antippen (Vorschauseite)
   ext: 0.66, wext: 0.66, space: 0.5, every: 2,   // every: träge, nur jedes zweite Bild neu abtasten
   //        Glocke     Saum       Gonaden    Mundarme   Kanäle     Gonaden (lila)

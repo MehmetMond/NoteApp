@@ -161,9 +161,13 @@ function update(c, dt, oc) {
   if (food) c.flt = 0;
   if (c.flt > 0) {   // treiben, Beine halb gespreizt
     c.flt -= dt; c.kk += (0.12 - c.kk) * Math.min(1, dt * 3); c.v *= Math.exp(-dt * 1.4);
+    c.frT -= dt; if (c.frT <= 0) { c.frT = lerp(1.4, 2.4, rnd(c, 74)); oc.ripple(c.x, c.y, 0.18, true, L0 * 0.42); }   // leises Schwappen
   } else {
     const ph = c.sk; c.sk += dt / 1.05; const u = c.sk % 1;
-    if (Math.floor(c.sk) > Math.floor(ph)) { if (!food && rnd(c, 71) < 0.12) c.flt = lerp(1.5, 4.5, rnd(c, 72)); else c.v += 70 * sc; }
+    if (Math.floor(c.sk) > Math.floor(ph)) {
+      if (!food && rnd(c, 71) < 0.12) c.flt = lerp(1.5, 4.5, rnd(c, 72));
+      else { c.v += 70 * sc; oc.ripple(c.x, c.y, 0.3, true, L0 * 0.42); }   // Beinschlag: Ring läuft um den Frosch
+    }
     if (c.flt <= 0) c.kk = u < 0.26 ? smooth(0, 0.26, u) : 1 - smooth(0.26, 1, u);
     c.v *= Math.exp(-dt * 1.5);
   }
@@ -183,14 +187,14 @@ function update(c, dt, oc) {
 }
 
 TM.kinds.frosch = {
-  label: 'Frosch', count: 2, len: [80, 94], speed: [0, 0], depth: [0.03, 0.03], rigid: true, ext: 1.3, wext: 0.88, every: 2, slowV: 1,
+  label: 'Frosch', count: 2, len: [80, 94], speed: [0, 0], depth: [0.03, 0.03], rigid: true, ext: 1.3, wext: 0.88, every: 2, slowV: 1, wake: 0,   // eigene Ringe statt Kielwelle
   tapTip: 'springt ins Wasser oder stößt sich weg',   // Hinweis beim Antippen (Vorschauseite)
   //        grün       Flecken    Rückenleiste Iris      Pupille    Schallblase Zunge      braun      Flecken    Leiste
   colors: ['#62a24a', '#2f5b2b', '#a3cf6b', '#e8bf4f', '#151b14', '#dfe9b8', '#e98a98', '#a07a4a', '#5c4126', '#cfae73'],
   light: ['#3f7d2c', '#1e3b1b', '#6c9c3a', '#b8860f', '#101410', '#8ea65c', '#c24f62', '#7a5630', '#3e2a16', '#a07c40'],
   init(c, R) {
     c.var = c.var || (R() < 0.7 ? 'gruen' : 'braun');
-    c.len0 = c.len; c.st = SWIM; c.sitT = 0; c.flt = 0; c.pad = null; c.hpad = null; c.sr = 0; c.sp = 0; c.sth = R() * TAU; c.turn = 0;
+    c.len0 = c.len; c.st = SWIM; c.sitT = 0; c.flt = 0; c.frT = 0; c.sub = 0; c.pad = null; c.hpad = null; c.sr = 0; c.sp = 0; c.sth = R() * TAU; c.turn = 0;
     c.tn = lerp(1.5, 6, R()); c.cro = 0; c.cp = 0; c.blk = lerp(1, 6, R()); c.tcd = lerp(2, 6, R()); c.tg = 0; c.tgt = null; c.tgx = 0; c.tgy = 0;
     c.hu = 0; c.pre = 0; c.hT = 1; c.hx0 = 0; c.hy0 = 0; c.hd0 = 0; c.htx = 0; c.hty = 0; c.kk = 0; c.ss = 0; c.sk = 0; c.swT = 0; c.v = 0;
     c.rn = 0; c.started = 0; c.px0 = R() * 97; c.py0 = R() * 89; c.vb = c.var === 'braun' ? 7 : 0;
@@ -210,6 +214,7 @@ TM.kinds.frosch = {
     const J = c.J, s = c.ss, k = c.kk;
     for (let i = 0; i < 14; i++) J[i] = lerp(lerp(P_SIT[i], P_TUCK[i], s), P_EXT[i], k);
     c.ext = 0.68 + 0.64 * k; c.wext = 0.8 + 0.07 * s;   // nur so viel abtasten, wie die Beine gerade reichen
+    c.sub = c.st === SWIM ? 1 : 0;   // im Wasser: Beine und hinterer Rücken unter der Oberfläche
     c.sac = c.cro > 0 ? Math.max(0, Math.sin(c.cp * Math.PI)) * Math.min(1, c.cro * 3) : 0;
     c.shut = c.blk < 0;
     // Zunge: Ziel im Körpermaß
@@ -247,6 +252,7 @@ TM.kinds.frosch = {
         o.lit = TM.shade(t, c) - 0.12 * ((a - 0.03) / 0.47) ** 2 + 0.06 * (noise2(a * 19 + c.px0, b * 19) - 0.5);
         o.col = vb;
         if (a < 0.3 && noise2(a * 7 + c.px0, b * 7 + c.py0) > 0.7) o.col = vb + 1;   // wenige dunkle Flecken
+        if (c.sub && a < -0.05) o.lit *= 0.62 + 0.38 * Math.max(0, 1 + (a + 0.05) * 2.5);   // hinten taucht er ein
         return;
       }
       case 1:   // Auge (zu: Lid in Körperfarbe)
@@ -256,9 +262,10 @@ TM.kinds.frosch = {
       case 3: case 4: {   // Beine: rund, mit dunklen Ringeln
         o.lit = (0.3 + 0.5 * Math.sqrt(Math.max(0, 1 - pq * pq)) + 0.12 * pq * side * c.lx) * 0.8;   // etwas dunkler als der Rücken
         o.col = Math.sin(pt * Math.PI * 2.2 + 1) > 0.7 ? vb + 1 : vb;
+        if (c.sub) { o.lit *= 0.5; o.sh = 1; }   // unter Wasser: blass, lichter Schatten
         return;
       }
-      default: o.col = vb; o.lit = 0.42; return;   // Füße, Hände
+      default: o.col = vb; o.lit = c.sub ? 0.22 : 0.42; if (c.sub) o.sh = 1; return;   // Füße, Hände
     }
   },
   marks(c) {

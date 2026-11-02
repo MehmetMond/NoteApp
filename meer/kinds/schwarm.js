@@ -169,7 +169,7 @@ function update(c, dt, oc) {
 }
 
 TM.kinds.schwarm = {
-  label: 'Fischschwarm', count: 24, len: [26, 44], speed: [36, 50], turn: 2.8, depth: [0.28, 0.55], eats: true,
+  label: 'Fischschwarm', count: 24, len: [26, 44], speed: [36, 50], turn: 2.8, depth: [0.28, 0.55], eats: true, wake: 0.45,
   tapTip: 'der ganze Schwarm stiebt auseinander',   // Hinweis beim Antippen (Vorschauseite)
   rigid: true, ext: 0.52, wext: 0.14, dash: 1.8,
   //        Silber      Rücken      Auge       Gold-Orange  Flossen gold  Kopf orange

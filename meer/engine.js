@@ -35,7 +35,10 @@
 //   des Körpers fallen weg, dünne Striche bleiben, der Schatten wird zu dunkleren Kacheln.
 // Am Tier c: x, y (px), th (Richtung), hx, hy (Einheitsvektor), v, len, depth, ph (Schlagphase), bend, t, seed,
 //   lx (Licht von oben links, für TM.shade), burst (> 0: flitzt), alles aus add(name, {…}) und init.
-//   Belegt von der Engine (nicht selbst benutzen): n, ci, cg, cc, mk, fx, fy, om, wt, sT, sL.
+//   Belegt von der Engine (nicht selbst benutzen): n, ci, cg, cc, cs, mk, fx, fy, om, wt, sT, sL, wx, wy, wd, wkT, bbT.
+//   Wasser: Tiere bis Tiefe 0.6 ziehen kleine Wellenbögen hinter sich her und stupsen ab und zu an die Oberfläche
+//   (Ring am Kopf); wake: 0 an der Art schaltet das ab (Quallen, Frösche mit eigenen Ringen), wake: 0.5 dämpft. Getauchte Tiere
+//   (ab Tiefe 0.12) lassen ab und zu Luftblasen steigen; bubbles: 0 schaltet das ab.
 //   Tipp: viele Felder oder c[k] = … machen das Objekt langsam; Werte für cell lieber in einem eigenen Objekt fester Form.
 // Am Meer oc: W, H, t, scale, list, food, add(name, opts), remove(c), resort(), ripple(x, y, s), put(x, y, ch, farbNr),
 //   ring(x, y, r, farbNr), pal(kind)[col][stufe 0..7] → farbNr, ramp([r,g,b]) → 8 farbNr, fx.push({ depth, under,
@@ -172,7 +175,7 @@ class Ocean {
     cv.style.cssText = 'position:absolute;left:0;top:0;display:block;pointer-events:none';
     box.appendChild(cv); this.g = cv.getContext('2d');
     this.R = rng(this.opt.seed); this.ids = 0;
-    this.list = []; this.food = []; this.rip = []; this.fx = [];
+    this.list = []; this.food = []; this.rip = []; this.fx = []; this.wk = []; this.bb = [];
     this.t = 0; this.fn = 0; this.ptr = { x: -1e4, y: -1e4, t: -1e4 };
     this.o = { f: 0, lit: 0, col: 0, ch: 0, line: 0, sh: 0, solid: 0 };
     this.css = []; this.tcss = []; this.cssId = new Map();
@@ -314,7 +317,7 @@ class Ocean {
   resort() { this.list.sort((p, q) => q.depth - p.depth);
   }
   remove(c) { c.dead = true; }   // wird nach dem Schritt entfernt
-  clear() { this.list = []; this.food = []; this.rip = []; this.fx = []; }
+  clear() { this.list = []; this.food = []; this.rip = []; this.fx = []; this.wk = []; this.bb = []; }
 
   feed(x, y) {
     this.ripple(x, y, 1);
@@ -323,7 +326,8 @@ class Ocean {
   }
   eat(p, c) { const i = this.food.indexOf(p); if (i >= 0) this.food.splice(i, 1); this.ripple(p.x, p.y, 0.35); }
   // under: Welle unter den Tieren malen (nur im Wasser sichtbar), z. B. beim Antippen eines Tiers
-  ripple(x, y, s = 1, under = false) { this.rip.push({ x, y, age: 0, s, life: 1.6 + s * 1.2, under }); }
+  // r0: Ring beginnt schon so weit draußen (px), z. B. um einen Frosch herum statt unter ihm
+  ripple(x, y, s = 1, under = false, r0 = 0) { this.rip.push({ x, y, age: 0, s, life: 1.6 + s * 1.2, under, r0 }); }
   hit(x, y) {
     const q = Math.floor(x / this.cw), r = Math.floor(y / this.ch);
     for (const [dq, dr] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
@@ -349,6 +353,40 @@ class Ocean {
     for (let i = this.food.length - 1; i >= 0; i--) { const p = this.food[i]; p.age += dt; if (p.age > p.life) this.food.splice(i, 1); }
     for (let i = this.rip.length - 1; i >= 0; i--) { const r = this.rip[i]; r.age += dt; if (r.age > r.life) this.rip.splice(i, 1); }
     for (let i = this.fx.length - 1; i >= 0; i--) if (!this.fx[i].update(dt, this)) this.fx.splice(i, 1);
+    this.wakes(dt);
+  }
+  // Kielwellen: flache Tiere ziehen hinter sich kleine Wellenbögen her (alle paar Körperlängen ein Bogen, er läuft
+  // nach hinten auseinander), ab und zu stupsen sie von unten an die Oberfläche: kleiner Ring am Kopf.
+  wakes(dt) {
+    for (const c of this.list) {
+      const k = c.kind;
+      if (k.hidden || c.depth < 0) continue;
+      // Luftblasen: 1–3 vom Kopf, alle paar Sekunden (je tiefer, desto länger steigen sie)
+      if (k.bubbles !== 0 && c.depth >= 0.12) {
+        if (c.bbT == null) c.bbT = 2 + this.R() * 8;
+        c.bbT -= dt;
+        if (c.bbT <= 0) {
+          c.bbT = 4 + this.R() * 9; const n = 1 + ((this.R() * 3) | 0), hx = c.x + c.hx * c.len * 0.45, hy = c.y + c.hy * c.len * 0.45;
+          for (let i = 0; i < n; i++) this.bb.push({ x: hx + (this.R() - 0.5) * 10, y: hy + (this.R() - 0.5) * 10, age: -i * 0.3, life: 0.9 + c.depth * 1.8, p: this.R() * TAU });
+        }
+      }
+      if (k.wake === 0 || c.depth > 0.6) { c.wx = null; continue; }
+      const sh = 1 - c.depth / 0.6;
+      if (c.wx == null) { c.wx = c.x; c.wy = c.y; c.wd = 0; c.wkT = 4 + this.R() * 14; continue; }
+      const d = Math.hypot(c.x - c.wx, c.y - c.wy); c.wx = c.x; c.wy = c.y;
+      if (d < dt * 6 * this.scale || d > c.len) c.wd *= 0.9; else c.wd += d;   // still oder versetzt: kein Bogen
+      if (c.wd > Math.max(40 * this.scale, c.len * 0.3)) {   // kleine Fische seltener, sonst wird ein Schwarm unruhig
+        c.wd = 0; const L = c.len * 0.42, z = clamp(c.len / 150, 0.2, 1);
+        this.wk.push({ x: c.x - c.hx * L, y: c.y - c.hy * L, dir: c.th + Math.PI, r0: c.len * 0.1, g: (10 + 18 * z) * this.scale, age: 0, life: 1.1 + 0.5 * sh, s: sh * Math.max(0.35, z) * (k.wake ?? 1) });
+      }
+      c.wkT -= dt;
+      if (c.wkT <= 0) { c.wkT = 8 + this.R() * 16; if (sh > 0.3) this.ripple(c.x + c.hx * c.len * 0.45, c.y + c.hy * c.len * 0.45, 0.3 * sh, true); }
+    }
+    for (let i = this.wk.length - 1; i >= 0; i--) { const w = this.wk[i]; w.age += dt; if (w.age > w.life) this.wk.splice(i, 1); }
+    for (let i = this.bb.length - 1; i >= 0; i--) {   // oben angekommen: platzt mit einem Ringlein
+      const b = this.bb[i]; b.age += dt; b.x += Math.sin(b.age * 5 + b.p) * 4 * dt;
+      if (b.age > b.life) { this.bb.splice(i, 1); this.ripple(b.x, b.y, 0.14, true); }
+    }
   }
 
   // Schwebeteilchen: ein paar hundert Pünktchen, die langsam mit der Strömung treiben (weit weg = matter)
@@ -356,6 +394,21 @@ class Ocean {
     const want = Math.round(this.W * this.H / 6500 * (this.opt.motes ?? 1)), P = this.mo || (this.mo = []), R = this.R;
     while (P.length < want) P.push({ x: R() * this.W, y: R() * this.H, z: R(), p: R() * TAU });
     P.length = want;
+    const wg = Math.round(this.W * this.H / 38000 * (this.opt.glints ?? 1)), G = this.gl || (this.gl = []);
+    while (G.length < wg) G.push({ x: R() * this.W, y: R() * this.H, t: R() * 3, d: 1.4 + R() * 2.2, w: 1 });
+    G.length = wg;
+  }
+  // Glitzern: kleine Wellen ~ blitzen kurz auf und treiben mit (die Oberfläche), dann woanders
+  drawGlints(dt) {
+    const R = this.R, cc = this.ripCol, cols = this.cols, rows = this.rows;
+    for (const g of this.gl) {
+      g.t += dt;
+      if (g.t > g.d) { g.x = R() * this.W; g.y = R() * this.H; g.t = 0; g.d = 1.4 + R() * 2.2; g.w = R() < 0.35 ? 2 : 1; }
+      g.x += 4 * this.scale * dt; g.y += 1.5 * this.scale * dt;
+      const lv = Math.round(Math.sin(Math.PI * g.t / g.d) * 2.6); if (lv < 1) continue;
+      const q = Math.floor(g.x / this.cw), r = Math.floor(g.y / this.ch); if (r < 0 || r >= rows) continue;
+      for (let k = 0; k < g.w; k++) { const qq = q + k; if (qq < 0 || qq >= cols) continue; const i = r * cols + qq; this.G[i] = 126; this.C[i] = cc[lv]; this.L[i] = 1; }
+    }
   }
   drawMotes(dt) {
     const W = this.W, H = this.H, t = this.t, cm = this.moCol;
@@ -491,7 +544,8 @@ class Ocean {
     const i = r * this.cols + q; this.G[i] = typeof gl === 'string' ? gl.charCodeAt(0) : gl; this.C[i] = co; this.L[i] = 3; if (owner) this.O[i] = owner;
   }
   // Kreislinie (Mitte x, y, Radius R in px) mit den Kanten-Zeichen: genau ein Zeichen je Durchgang
-  ring(x, y, R, co, owner = 0) {
+  // dir, span: nur der Bogen um Richtung dir (rad) bis ±span, z. B. Kielwelle hinter einem Tier
+  ring(x, y, R, co, owner = 0, dir = 0, span = 4) {
     const cw = this.cw, ch = this.ch, cols = this.cols, rows = this.rows, lut = this.lut, NA = this.NA, ND = this.ND;
     const r0 = Math.max(0, Math.floor((y - R) / ch) - 1), r1 = Math.min(rows - 1, Math.floor((y + R) / ch) + 1);
     for (let r = r0; r <= r1; r++) {
@@ -501,6 +555,7 @@ class Ocean {
         for (let q = Math.max(0, qc - 2); q <= Math.min(cols - 1, qc + 2); q++) {
           if (span && sx < 0 && (q + 0.5) * cw > x || span && sx > 0 && (q + 0.5) * cw <= x) continue;
           const px = (q + 0.5) * cw - x, d = Math.hypot(px, py) || 1e-3, nx = -px / d, ny = -py / d, off = R - d;
+          if (span < 3.2) { let da = Math.atan2(py, px) - dir; da -= Math.round(da / TAU) * TAU; if (Math.abs(da) > span) continue; }
           const half = 0.5 * (Math.abs(nx) * cw + Math.abs(ny) * ch); if (off <= -half || off > half) continue;
           let ia = Math.round(Math.atan2(ny, nx) / TAU * NA) % NA; if (ia < 0) ia += NA;
           const gl = lut[ia * ND + Math.min(ND - 1, Math.floor((off / half + 1) * 0.5 * ND))]; if (!gl) continue;
@@ -513,8 +568,22 @@ class Ocean {
     for (const w of this.rip) {
       if (!w.under !== !under) continue;
       const f = w.age / w.life, lv = clamp(Math.round((1 - f) * (LV - 1) * (0.55 + 0.45 * w.s)), 0, LV - 1); if (!lv) continue;
-      this.ring(w.x, w.y, (4 + w.age * 42) * w.s * this.scale + 3, this.ripCol[lv]);
-      if (w.age > 0.4 && lv > 2) this.ring(w.x, w.y, (4 + (w.age - 0.4) * 34) * w.s * this.scale + 3, this.ripCol[lv - 2]);
+      this.ring(w.x, w.y, w.r0 + (4 + w.age * 42) * w.s * this.scale + 3, this.ripCol[lv]);
+      if (w.age > 0.4 && lv > 2) this.ring(w.x, w.y, w.r0 + (4 + (w.age - 0.4) * 34) * w.s * this.scale + 3, this.ripCol[lv - 2]);
+    }
+  }
+  drawWakes() {
+    for (const w of this.wk) {
+      const f = w.age / w.life, lv = clamp(Math.round((1 - f) * 7 * Math.sqrt(w.s)), 0, 5); if (!lv) continue;
+      this.ring(w.x, w.y, w.r0 + 3 * this.scale + w.age * w.g, this.ripCol[lv], 0, w.dir, 1.05);
+    }
+  }
+  // Luftblasen: wachsen beim Aufsteigen (näher am Auge): . o O
+  drawBubbles() {
+    for (const b of this.bb) {
+      if (b.age < 0) continue;
+      const f = b.age / b.life;
+      this.put(b.x, b.y, f < 0.35 ? 46 : f < 0.75 ? 111 : 79, this.ripCol[clamp(Math.round(3 + f * 3), 1, LV - 1)]);
     }
   }
   drawFood() {
@@ -528,6 +597,7 @@ class Ocean {
     const t0 = performance.now(), fr = 2.5 / (this.opt.fps || 15);
     this.G.fill(0); this.L.fill(0); this.O.fill(0);
     if (this.opt.motes !== 0) this.drawMotes(this.dtR || 0);
+    if (this.opt.glints !== 0) this.drawGlints(this.dtR || 0);
     for (const c of this.list) {
       const k = c.kind;
       // träge Tiere (every: 2) nur jedes zweite Bild neu abtasten, solange sie langsam sind und das letzte Abtasten
@@ -539,13 +609,13 @@ class Ocean {
     for (const c of this.list) this.shadow(c);
     const fx = this.fx.filter(e => e.under);
     for (const e of fx) e.draw(this);
-    this.drawRipples(true);
+    this.drawWakes(); this.drawRipples(true);
     // Tiere von tief nach flach, Effekte mit Tiefe dazwischen
     const over = this.fx.filter(e => !e.under).sort((p, q) => q.depth - p.depth);
     let j = 0;
     for (const c of this.list) { while (j < over.length && over[j].depth > c.depth) over[j++].draw(this); this.write(c); }
     while (j < over.length) over[j++].draw(this);
-    this.drawFood(); this.drawRipples(false); this.dtR = 0;
+    this.drawBubbles(); this.drawFood(); this.drawRipples(false); this.dtR = 0;
     this.blit(); this.fn++;
     this.stats.ms = this.stats.ms * 0.9 + (performance.now() - t0) * 0.1;
   }
