@@ -47,6 +47,7 @@ function freePad(c, oc, maxD, away) {
     if (p === c.pad || taken(oc, p, c)) continue;
     const d = Math.hypot(p.px - c.x, p.py - c.y); if (d > maxD || d < 20) continue;
     let s = -d / maxD + rnd(c, 7) * 0.8 + (p.var === 'blatt' ? 0.3 : 0);
+    for (const f of oc.list) if (f !== c && f.name === 'frosch') s += Math.min(1, Math.hypot(p.px - f.x, p.py - f.y) / (4 * c.len0)) * 0.7;   // weg vom anderen Frosch
     if (away) s += ((p.px - c.x) * away.x + (p.py - c.y) * away.y) / (d || 1);   // weg vom Finger
     if (s > bs) { bs = s; best = p; }
   }
@@ -177,7 +178,10 @@ function update(c, dt, oc) {
   let tx, ty;
   if (food) { tx = food.x; ty = food.y; }
   else if (c.hpad) { const s = seatPos(c, c.hpad); tx = s.x; ty = s.y; }
-  else { const w = c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2; tx = c.x + Math.cos(w) * 100; ty = c.y + Math.sin(w) * 100; }
+  else {   // umherschwimmen, volle Stellen meiden
+    const w = c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2, sp = TM.spread(c, oc);
+    tx = c.x + Math.cos(w) * 100 + sp.x * 140; ty = c.y + Math.sin(w) * 100 + sp.y * 140;
+  }
   const m = 30 * sc + L0; let want = Math.atan2(ty - c.y, tx - c.x);
   if (c.x < m || c.x > oc.W - m || c.y < m || c.y > oc.H - m) want = Math.atan2(oc.H / 2 - c.y, oc.W / 2 - c.x);
   turnTo(c, want, c.flt > 0 ? 0.3 : 1.6, dt);

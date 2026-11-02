@@ -41,10 +41,17 @@ function next(c, oc) {
     const s = seatPos(c, p); aim(c, oc, s.x, s.y); return;
   }
   c.lpad = null;
-  const ang = c.th + (rnd(c, 9) < 0.5 ? -1 : 1) * lerp(0.7, 2.6, rnd(c, 10)), d = lerp(150, 430, rnd(c, 11)) * oc.scale;
-  let x = c.x + Math.cos(ang) * d, y = c.y + Math.sin(ang) * d;
-  if (x < 80 || x > oc.W - 80 || y < 80 || y > oc.H - 80) { x = lerp(0.15, 0.85, rnd(c, 12)) * oc.W; y = lerp(0.15, 0.85, rnd(c, 13)) * oc.H; }
-  aim(c, oc, x, y);
+  // von sechs möglichen Zielen das, das am weitesten von den anderen Libellen (und ihren Zielen) weg ist
+  const others = oc.list.filter(d => d !== c && d.name === 'libelle');
+  let bx = c.x, by = c.y, bs = -1;
+  for (let i = 0; i < 6; i++) {
+    const ang = c.th + (rnd(c, 9) < 0.5 ? -1 : 1) * lerp(0.7, 2.6, rnd(c, 10)), d = lerp(150, 430, rnd(c, 11)) * oc.scale;
+    let x = c.x + Math.cos(ang) * d, y = c.y + Math.sin(ang) * d;
+    if (x < 80 || x > oc.W - 80 || y < 80 || y > oc.H - 80) { x = lerp(0.15, 0.85, rnd(c, 12)) * oc.W; y = lerp(0.15, 0.85, rnd(c, 13)) * oc.H; }
+    let sc = 1e9; for (const o of others) sc = Math.min(sc, Math.hypot(o.x - x, o.y - y), Math.hypot(o.tx - x, o.ty - y));
+    if (sc > bs) { bs = sc; bx = x; by = y; }
+  }
+  aim(c, oc, bx, by);
 }
 // erschrecken (Antippen, Zunge, Finger): im Zickzack davon, vom Blatt sofort auf
 function scare(c, oc, x, y, delay = 0) {

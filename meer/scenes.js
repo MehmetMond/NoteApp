@@ -45,7 +45,7 @@ TM.themeFor = (scene, look) => {
   return (s && s.theme && s.theme[look]) || look;
 };
 
-// Szene ins Meer setzen (vorher oc.clear()). Große Tiere (Art mit space) liegen schon zu Anfang auseinander:
+// Szene ins Meer setzen (vorher oc.clear()). Alle Einzeltiere (nicht Schwarm, nicht Seerosen) liegen schon zu Anfang auseinander:
 // von 24 Zufallsorten nimmt jedes den, der am weitesten von den schon gesetzten entfernt ist. n = Anzahlen
 // je Eintrag statt der Szenenwerte (für Tests).
 TM.populate = (oc, scene, n) => {
@@ -55,8 +55,8 @@ TM.populate = (oc, scene, n) => {
     const k = TM.kinds[id], m = n && n[e] != null ? n[e] : count;
     for (let i = 0; i < m; i++) {
       const o = Object.assign({}, opts);
-      if (k && k.space && o.x == null && o.y == null) {
-        const r = k.space * (k.len[0] + k.len[1]) * 0.5 * oc.scale;
+      if (k && !k.hidden && !k.school && !k.surface && o.x == null && o.y == null) {   // Einzeltiere verteilt
+        const r = (k.space || 0.45) * (k.len[0] + k.len[1]) * 0.5 * oc.scale;
         let bx = 0, by = 0, bd = -Infinity;
         for (let j = 0; j < 24; j++) {
           const x = r + R() * Math.max(1, oc.W - 2 * r), y = r + R() * Math.max(1, oc.H - 2 * r);

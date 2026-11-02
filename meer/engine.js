@@ -24,7 +24,9 @@
 //   marks(c, oc): optionale Punkte, die immer sichtbar sein sollen (Augen): [[a, b, 'o', col, lit], …]
 //   tap(c, oc, x, y): optional, was beim Antippen passiert (sonst: erschrickt und flitzt weg).
 //   update und tap werden ohne this aufgerufen (init, prep, cell, marks dagegen als Methoden der Art).
-//   space: Radius in Körperlängen, mit dem große Tiere einander von oben gesehen Platz lassen (TM.crowd),
+//   space: Radius in Körperlängen, mit dem große Tiere einander von oben gesehen Platz lassen (TM.crowd; dazu meidet
+//   jedes Tier über TM.spread Stellen, an denen schon andere sind), school: true = Schwarmfisch (zählen untereinander
+//   nicht), surface: true = liegt flach oben (Seerosen; man schwimmt darunter durch, zählt für die Verteilung nicht),
 //   every: 2 = solange langsamer als slowV px/s (14), nur jedes zweite Bild neu abtasten (spart bei trägen Tieren),
 //   ext/wext dürfen auch am Tier stehen (c.ext, c.wext) und gelten dann je Bild, z. B. kleiner, solange die Beine angezogen sind,
 //   margin: px Wasser zwischen Körper und Bildrand in TM.swim (sonst wie der Koi, der auch mal halb hinausschwimmt),
@@ -114,13 +116,32 @@ TM.dirGlyph = (c, da, db) => lineGlyph(da * c.hx - db * c.hy, da * c.hy + db * c
 const CROWD = { x: 0, y: 0 };
 TM.crowd = function (c, oc, w = 1.2) {
   const sp = c.kind.space; CROWD.x = 0; CROWD.y = 0;
-  if (!sp) return CROWD;
-  for (const d of oc.list) {
+  if (sp) for (const d of oc.list) {
     const ds = d.kind.space; if (d === c || !ds || d.dead) continue;
     const ex = c.x - d.x, ey = c.y - d.y, r = (c.len * sp + d.len * ds) * 1.2, q = ex * ex + ey * ey;
     if (q < r * r && q > 0.01) { const m = Math.sqrt(q), s = (1 - m / r) * w; CROWD.x += ex / m * s; CROWD.y += ey / m * s; }
   }
+  const s = TM.spread(c, oc, 1.6); CROWD.x += s.x; CROWD.y += s.y;   // dazu: volle Stellen von weitem meiden
   return CROWD;
+};
+// Verteilung: reicht weiter als crowd; jedes Tier meidet Stellen, an denen schon andere sind (von oben gesehen),
+// damit sich nirgends ein Haufen bildet. Kleine Tiere zählen wenig, Fliegendes (Tiefe < -0.1), Verstecktes und
+// Flaches an der Oberfläche (surface: true, Seerosen: darunter darf man schwimmen) gar nicht, Schwarmfische
+// (school: true) nicht untereinander. Höchstens 1.6 · w stark.
+const SPREAD = { x: 0, y: 0 };
+TM.spread = function (c, oc, w = 1) {
+  SPREAD.x = 0; SPREAD.y = 0;
+  for (const d of oc.list) {
+    const dk = d.kind;
+    if (d === c || d.dead || dk.hidden || dk.surface || d.depth < -0.1 || (dk === c.kind && dk.school)) continue;
+    const ex = c.x - d.x, ey = c.y - d.y, R = (c.len + d.len) * 0.7 + 60 * oc.scale, q = ex * ex + ey * ey;
+    if (q >= R * R || q < 0.01) continue;
+    const m = Math.sqrt(q), f = 1 - m / R, s = f * f * w * Math.min(1, d.len / 110);
+    SPREAD.x += ex / m * s; SPREAD.y += ey / m * s;
+  }
+  const sm = Math.hypot(SPREAD.x, SPREAD.y), mx = 1.6 * w;
+  if (sm > mx) { SPREAD.x *= mx / sm; SPREAD.y *= mx / sm; }
+  return SPREAD;
 };
 
 // Standard-Schwimmen: umherschweifen, am Rand umkehren, Futter suchen, vor dem Stift fliehen, Abstand halten
@@ -151,7 +172,7 @@ TM.swim = function (c, dt, oc) {
     const ex = c.x - d.x, ey = c.y - d.y, r = (L + d.len) * 0.36, q = ex * ex + ey * ey;
     if (q < r * r && q > 1) { const m = Math.sqrt(q), s = (1 - m / r) * 2; sx += ex / m * s; sy += ey / m * s; }
   }
-  if (k.space) { const cr = TM.crowd(c, oc); sx += cr.x; sy += cr.y; }
+  { const cr = TM.crowd(c, oc); sx += cr.x; sy += cr.y; }   // Platz lassen, volle Stellen meiden
   let da = Math.atan2(sy, sx) - c.th; da -= Math.round(da / TAU) * TAU;
   const mt = (k.turn || 0.9) * (1 + fast * 1.4);
   c.om += (clamp(da * 1.6, -mt, mt) - c.om) * Math.min(1, dt * 3);

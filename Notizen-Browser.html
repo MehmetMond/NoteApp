@@ -550,7 +550,9 @@ html.dark #toast{background:#eee;color:#111}
 //   marks(c, oc): optionale Punkte, die immer sichtbar sein sollen (Augen): [[a, b, 'o', col, lit], …]
 //   tap(c, oc, x, y): optional, was beim Antippen passiert (sonst: erschrickt und flitzt weg).
 //   update und tap werden ohne this aufgerufen (init, prep, cell, marks dagegen als Methoden der Art).
-//   space: Radius in Körperlängen, mit dem große Tiere einander von oben gesehen Platz lassen (TM.crowd),
+//   space: Radius in Körperlängen, mit dem große Tiere einander von oben gesehen Platz lassen (TM.crowd; dazu meidet
+//   jedes Tier über TM.spread Stellen, an denen schon andere sind), school: true = Schwarmfisch (zählen untereinander
+//   nicht), surface: true = liegt flach oben (Seerosen; man schwimmt darunter durch, zählt für die Verteilung nicht),
 //   every: 2 = solange langsamer als slowV px/s (14), nur jedes zweite Bild neu abtasten (spart bei trägen Tieren),
 //   ext/wext dürfen auch am Tier stehen (c.ext, c.wext) und gelten dann je Bild, z. B. kleiner, solange die Beine angezogen sind,
 //   margin: px Wasser zwischen Körper und Bildrand in TM.swim (sonst wie der Koi, der auch mal halb hinausschwimmt),
@@ -640,13 +642,32 @@ TM.dirGlyph = (c, da, db) => lineGlyph(da * c.hx - db * c.hy, da * c.hy + db * c
 const CROWD = { x: 0, y: 0 };
 TM.crowd = function (c, oc, w = 1.2) {
   const sp = c.kind.space; CROWD.x = 0; CROWD.y = 0;
-  if (!sp) return CROWD;
-  for (const d of oc.list) {
+  if (sp) for (const d of oc.list) {
     const ds = d.kind.space; if (d === c || !ds || d.dead) continue;
     const ex = c.x - d.x, ey = c.y - d.y, r = (c.len * sp + d.len * ds) * 1.2, q = ex * ex + ey * ey;
     if (q < r * r && q > 0.01) { const m = Math.sqrt(q), s = (1 - m / r) * w; CROWD.x += ex / m * s; CROWD.y += ey / m * s; }
   }
+  const s = TM.spread(c, oc, 1.6); CROWD.x += s.x; CROWD.y += s.y;   // dazu: volle Stellen von weitem meiden
   return CROWD;
+};
+// Verteilung: reicht weiter als crowd; jedes Tier meidet Stellen, an denen schon andere sind (von oben gesehen),
+// damit sich nirgends ein Haufen bildet. Kleine Tiere zählen wenig, Fliegendes (Tiefe < -0.1), Verstecktes und
+// Flaches an der Oberfläche (surface: true, Seerosen: darunter darf man schwimmen) gar nicht, Schwarmfische
+// (school: true) nicht untereinander. Höchstens 1.6 · w stark.
+const SPREAD = { x: 0, y: 0 };
+TM.spread = function (c, oc, w = 1) {
+  SPREAD.x = 0; SPREAD.y = 0;
+  for (const d of oc.list) {
+    const dk = d.kind;
+    if (d === c || d.dead || dk.hidden || dk.surface || d.depth < -0.1 || (dk === c.kind && dk.school)) continue;
+    const ex = c.x - d.x, ey = c.y - d.y, R = (c.len + d.len) * 0.7 + 60 * oc.scale, q = ex * ex + ey * ey;
+    if (q >= R * R || q < 0.01) continue;
+    const m = Math.sqrt(q), f = 1 - m / R, s = f * f * w * Math.min(1, d.len / 110);
+    SPREAD.x += ex / m * s; SPREAD.y += ey / m * s;
+  }
+  const sm = Math.hypot(SPREAD.x, SPREAD.y), mx = 1.6 * w;
+  if (sm > mx) { SPREAD.x *= mx / sm; SPREAD.y *= mx / sm; }
+  return SPREAD;
 };
 
 // Standard-Schwimmen: umherschweifen, am Rand umkehren, Futter suchen, vor dem Stift fliehen, Abstand halten
@@ -677,7 +698,7 @@ TM.swim = function (c, dt, oc) {
     const ex = c.x - d.x, ey = c.y - d.y, r = (L + d.len) * 0.36, q = ex * ex + ey * ey;
     if (q < r * r && q > 1) { const m = Math.sqrt(q), s = (1 - m / r) * 2; sx += ex / m * s; sy += ey / m * s; }
   }
-  if (k.space) { const cr = TM.crowd(c, oc); sx += cr.x; sy += cr.y; }
+  { const cr = TM.crowd(c, oc); sx += cr.x; sy += cr.y; }   // Platz lassen, volle Stellen meiden
   let da = Math.atan2(sy, sx) - c.th; da -= Math.round(da / TAU) * TAU;
   const mt = (k.turn || 0.9) * (1 + fast * 1.4);
   c.om += (clamp(da * 1.6, -mt, mt) - c.om) * Math.min(1, dt * 3);
@@ -1230,6 +1251,7 @@ function freePad(c, oc, maxD, away) {
     if (p === c.pad || taken(oc, p, c)) continue;
     const d = Math.hypot(p.px - c.x, p.py - c.y); if (d > maxD || d < 20) continue;
     let s = -d / maxD + rnd(c, 7) * 0.8 + (p.var === 'blatt' ? 0.3 : 0);
+    for (const f of oc.list) if (f !== c && f.name === 'frosch') s += Math.min(1, Math.hypot(p.px - f.x, p.py - f.y) / (4 * c.len0)) * 0.7;   // weg vom anderen Frosch
     if (away) s += ((p.px - c.x) * away.x + (p.py - c.y) * away.y) / (d || 1);   // weg vom Finger
     if (s > bs) { bs = s; best = p; }
   }
@@ -1360,7 +1382,10 @@ function update(c, dt, oc) {
   let tx, ty;
   if (food) { tx = food.x; ty = food.y; }
   else if (c.hpad) { const s = seatPos(c, c.hpad); tx = s.x; ty = s.y; }
-  else { const w = c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2; tx = c.x + Math.cos(w) * 100; ty = c.y + Math.sin(w) * 100; }
+  else {   // umherschwimmen, volle Stellen meiden
+    const w = c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2, sp = TM.spread(c, oc);
+    tx = c.x + Math.cos(w) * 100 + sp.x * 140; ty = c.y + Math.sin(w) * 100 + sp.y * 140;
+  }
   const m = 30 * sc + L0; let want = Math.atan2(ty - c.y, tx - c.x);
   if (c.x < m || c.x > oc.W - m || c.y < m || c.y > oc.H - m) want = Math.atan2(oc.H / 2 - c.y, oc.W / 2 - c.x);
   turnTo(c, want, c.flt > 0 ? 0.3 : 1.6, dt);
@@ -1947,10 +1972,17 @@ function next(c, oc) {
     const s = seatPos(c, p); aim(c, oc, s.x, s.y); return;
   }
   c.lpad = null;
-  const ang = c.th + (rnd(c, 9) < 0.5 ? -1 : 1) * lerp(0.7, 2.6, rnd(c, 10)), d = lerp(150, 430, rnd(c, 11)) * oc.scale;
-  let x = c.x + Math.cos(ang) * d, y = c.y + Math.sin(ang) * d;
-  if (x < 80 || x > oc.W - 80 || y < 80 || y > oc.H - 80) { x = lerp(0.15, 0.85, rnd(c, 12)) * oc.W; y = lerp(0.15, 0.85, rnd(c, 13)) * oc.H; }
-  aim(c, oc, x, y);
+  // von sechs möglichen Zielen das, das am weitesten von den anderen Libellen (und ihren Zielen) weg ist
+  const others = oc.list.filter(d => d !== c && d.name === 'libelle');
+  let bx = c.x, by = c.y, bs = -1;
+  for (let i = 0; i < 6; i++) {
+    const ang = c.th + (rnd(c, 9) < 0.5 ? -1 : 1) * lerp(0.7, 2.6, rnd(c, 10)), d = lerp(150, 430, rnd(c, 11)) * oc.scale;
+    let x = c.x + Math.cos(ang) * d, y = c.y + Math.sin(ang) * d;
+    if (x < 80 || x > oc.W - 80 || y < 80 || y > oc.H - 80) { x = lerp(0.15, 0.85, rnd(c, 12)) * oc.W; y = lerp(0.15, 0.85, rnd(c, 13)) * oc.H; }
+    let sc = 1e9; for (const o of others) sc = Math.min(sc, Math.hypot(o.x - x, o.y - y), Math.hypot(o.tx - x, o.ty - y));
+    if (sc > bs) { bs = sc; bx = x; by = y; }
+  }
+  aim(c, oc, bx, by);
 }
 // erschrecken (Antippen, Zunge, Finger): im Zickzack davon, vom Blatt sofort auf
 function scare(c, oc, x, y, delay = 0) {
@@ -3041,6 +3073,13 @@ function stepSchool(S, k, v, oc) {
   const t = oc.t, W = oc.W, H = oc.H, pad = Math.min(220, W * 0.18);
   S.gx = clamp(W * (0.5 + 0.6 * (noise1(S.seed + t * 0.031) * 2 - 1)), pad, W - pad);
   S.gy = clamp(H * (0.5 + 0.6 * (noise1(S.seed + 40 + t * 0.027) * 2 - 1)), pad, H - pad);
+  // das Ziel weicht großen Tieren aus: der Schwarm zieht ins freie Wasser, statt sich zu ihnen zu drängen
+  for (const d of oc.list) {
+    const dk = d.kind; if (dk === k || dk.hidden || dk.surface || d.dead || d.depth < -0.1 || d.len < 60) continue;
+    const ex = S.gx - d.x, ey = S.gy - d.y, R = d.len * 0.8 + 120 * oc.scale, q = Math.hypot(ex, ey) || 1;
+    if (q < R) { S.gx += ex / q * (R - q) * 0.8; S.gy += ey / q * (R - q) * 0.8; }
+  }
+  S.gx = clamp(S.gx, pad, W - pad); S.gy = clamp(S.gy, pad, H - pad);
   S.mill = smooth(0.52, 0.66, noise1(S.seed * 1.7 + 9 + t * 0.045));
   if (S.mill < 0.02) S.spin = noise1(S.seed + t * 0.2) > 0.5 ? 1 : -1;
   if (S.threat && t - S.threat.t > 1.6) S.threat = null;
@@ -3121,6 +3160,7 @@ function update(c, dt, oc) {
   sx += ex / em * far * 1.4; sy += ey / em * far * 1.4;
   const gx = S.gx - c.x, gy = S.gy - c.y, gm = Math.hypot(gx, gy) || 1, goal = 0.45 * (1 - S.mill);
   sx += gx / gm * goal; sy += gy / gm * goal;
+  { const sp = TM.spread(c, oc, 0.8); sx += sp.x; sy += sp.y; }   // großen Tieren Platz lassen (Schwarmfische zählen nicht)
   if (S.mill > 0) {   // Kreisen: tangential um die Mitte, Ring bei einigen Körperlängen
     const rr = L * (2.2 + 0.08 * S.m.length), rad = clamp((em - rr) / rr, -1, 1);
     sx += (-ey / em * S.spin * 1.5 + ex / em * rad * 0.8) * S.mill;
@@ -3165,7 +3205,7 @@ function update(c, dt, oc) {
 }
 
 TM.kinds.schwarm = {
-  label: 'Fischschwarm', count: 24, len: [26, 44], speed: [36, 50], turn: 2.8, depth: [0.28, 0.55], eats: true, wake: 0.45,
+  label: 'Fischschwarm', count: 24, len: [26, 44], speed: [36, 50], turn: 2.8, depth: [0.28, 0.55], eats: true, wake: 0.45, school: true,
   tapTip: 'der ganze Schwarm stiebt auseinander',   // Hinweis beim Antippen (Vorschauseite)
   rigid: true, ext: 0.52, wext: 0.14, dash: 1.8,
   //        Silber      Rücken      Auge       Gold-Orange  Flossen gold  Kopf orange
@@ -3309,34 +3349,34 @@ function cacheInit(c) {
   c.zn = 0; c.zi = 0; c.zh = false; c.px = c.x; c.py = c.y; c.sx = c.x; c.sy = c.y;
 }
 
-// erster Schritt: Blätter in losen Gruppen verteilen (meist dicht an ein schon liegendes Blatt)
+// erster Schritt: Blätter gleichmäßig über den Teich verteilen (von 40 Zufallsorten der, der am weitesten von den
+// schon liegenden Blättern entfernt ist). Dort wurzelt das Blatt (Anker ax, ay): es pendelt nur in seiner Gegend.
 function place(c, oc) {
   c.placed = 1;
   const pads = oc.list.filter(d => d.kind === c.kind && d !== c && d.placed);
-  const W = oc.W, H = oc.H, R = c.len * 0.5;
+  const W = oc.W, H = oc.H, R = c.len * 0.5, m = R + 40 * oc.scale;
+  let bx = c.x, by = c.y, bs = -1e9;
   for (let i = 0; i < 40; i++) {
-    let x, y;
-    const near = pads.length && rnd(c, i) < 0.4;   // meist einzeln, manchmal zu zweit
-    if (near) {
-      const p = pads[(rnd(c, i + 50) * pads.length) | 0], a = rnd(c, i + 90) * TAU, d = (p.len * 0.5 + R) * (0.95 + 0.12 * rnd(c, i + 130));
-      x = p.px + Math.cos(a) * d; y = p.py + Math.sin(a) * d;
-    } else { x = R + 30 + rnd(c, i + 170) * (W - 2 * R - 60); y = R + 30 + rnd(c, i + 210) * (H - 2 * R - 60); }
-    if (x < R + 14 || y < R + 14 || x > W - R - 14 || y > H - R - 14) continue;
-    let ok = true;
-    for (const p of pads) { const m = (p.len * 0.5 + R) * (near ? 0.93 : 1.7); if ((p.px - x) ** 2 + (p.py - y) ** 2 < m * m) { ok = false; break; } }
-    if (ok) { c.px = c.x = c.sx = x; c.py = c.y = c.sy = y; return; }
+    const x = m + rnd(c, i + 170) * Math.max(1, W - 2 * m), y = m + rnd(c, i + 210) * Math.max(1, H - 2 * m);
+    let sc = 1e9; for (const p of pads) sc = Math.min(sc, Math.hypot(p.ax - x, p.ay - y) - p.len * 0.5 - R);
+    if (sc > bs) { bs = sc; bx = x; by = y; }
   }
+  c.px = c.x = c.sx = c.ax = bx; c.py = c.y = c.sy = c.ay = by;
 }
 
 function update(c, dt, oc) {
-  if (c.x !== c.sx) c.px = c.x;
-  if (c.y !== c.sy) c.py = c.y;
+  if (c.x !== c.sx) c.px = c.ax = c.x;   // von außen versetzt: dort wurzelt es nun
+  if (c.y !== c.sy) c.py = c.ay = c.y;
   if (!c.placed) place(c, oc);
   const t = oc.t, W = oc.W, H = oc.H, R = c.len * 0.5, sc = oc.scale;
   let x = c.px, y = c.py;
   // Strömung: großräumig und langsam, alle Blätter treiben ähnlich (Gruppen bleiben beisammen)
   const ang = noise2(x * 0.0012 + 3.1, y * 0.0012 + t * 0.004) * TAU * 2;
   let ax = Math.cos(ang) * c.drift, ay = Math.sin(ang) * c.drift;
+  // Stiel: zieht sanft zum Wurzelpunkt zurück, so pendelt jedes Blatt in seiner Gegend, statt dass alle mit der
+  // Strömung an dieselbe Stelle treiben (Gleichgewicht etwa 30–70 px vom Anker)
+  c.ax = clamp(c.ax, R + 16 * sc, W - R - 16 * sc); c.ay = clamp(c.ay, R + 16 * sc, H - R - 16 * sc);   // Fenster kleiner geworden
+  ax += (c.ax - x) * 0.05; ay += (c.ay - y) * 0.05;
   // Rand: ganz im Bild bleiben
   const m = R + 16 * sc, k = 0.06;
   if (x < m + 30) ax += (m + 30 - x) * k; else if (x > W - m - 30) ax -= (x - W + m + 30) * k;
@@ -3398,7 +3438,7 @@ function padCell(x, y, c, o) {
 }
 
 TM.kinds.seerose = {
-  label: 'Seerosen', count: 6, len: [85, 160], speed: [1.5, 3.5], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
+  label: 'Seerosen', count: 6, len: [85, 160], speed: [1.5, 3.5], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2, surface: true,
   tapTip: 'das Blatt wippt, Wellen laufen',   // Hinweis beim Antippen (Vorschauseite)
   //        Blatt      Ader       Blatt dunkel  -          -          -          Welle
   colors: ['#4f7d47', '#7fa463', '#36593a', '#4f7d47', '#4f7d47', '#4f7d47', '#a6cfc8'],
@@ -3410,7 +3450,7 @@ TM.kinds.seerose = {
     c.nw = lerp(0.13, 0.22, R());                    // halbe Kerbenöffnung (rad)
     c.wv1 = lerp(0.006, 0.016, R()); c.wv2 = lerp(0.004, 0.01, R()); c.s1 = R() * TAU; c.s2 = R() * TAU;
     c.vx = 0; c.vy = 0; c.spin = 0; c.kick = 0; c.wt2 = 9; c.wob = 0; c.placed = Q.get('mode') === 'solo' ? 1 : 0;
-    c.drift = c.cruise; c.tx = R() * 50;
+    c.drift = c.cruise; c.tx = R() * 50; c.ax = c.x; c.ay = c.y;
     c.vi = new Uint16Array(NV); c.vh = new Float32Array(NV); c.vn = 0; c.vr0 = 0.2;
     // Drehung selbst führen: das Blatt ist rund, mit Richtung 0 bleibt das abgetastete Rechteck klein
     c.ang = c.th; c.th = 0; c.ra = 0;
@@ -3471,7 +3511,7 @@ function flowerCell(a, b, c, o) {
   if (g) { o.ch = g; o.col = 2; o.lit = 0.7; }
 }
 TM.kinds.seerose_bluete = {
-  label: 'Seerosenblüte', hidden: true, count: 0, len: [60, 60], speed: [0, 0], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
+  label: 'Seerosenblüte', hidden: true, surface: true, count: 0, len: [60, 60], speed: [0, 0], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
   rim: 0.75,
   //        weiß       rosa       gelb       weiß innen  rosa innen
   colors: ['#efeae0', '#e8a7b8', '#e6bb4a', '#f4dccf', '#d98a9f'],
@@ -3549,7 +3589,7 @@ TM.themeFor = (scene, look) => {
   return (s && s.theme && s.theme[look]) || look;
 };
 
-// Szene ins Meer setzen (vorher oc.clear()). Große Tiere (Art mit space) liegen schon zu Anfang auseinander:
+// Szene ins Meer setzen (vorher oc.clear()). Alle Einzeltiere (nicht Schwarm, nicht Seerosen) liegen schon zu Anfang auseinander:
 // von 24 Zufallsorten nimmt jedes den, der am weitesten von den schon gesetzten entfernt ist. n = Anzahlen
 // je Eintrag statt der Szenenwerte (für Tests).
 TM.populate = (oc, scene, n) => {
@@ -3559,8 +3599,8 @@ TM.populate = (oc, scene, n) => {
     const k = TM.kinds[id], m = n && n[e] != null ? n[e] : count;
     for (let i = 0; i < m; i++) {
       const o = Object.assign({}, opts);
-      if (k && k.space && o.x == null && o.y == null) {
-        const r = k.space * (k.len[0] + k.len[1]) * 0.5 * oc.scale;
+      if (k && !k.hidden && !k.school && !k.surface && o.x == null && o.y == null) {   // Einzeltiere verteilt
+        const r = (k.space || 0.45) * (k.len[0] + k.len[1]) * 0.5 * oc.scale;
         let bx = 0, by = 0, bd = -Infinity;
         for (let j = 0; j < 24; j++) {
           const x = r + R() * Math.max(1, oc.W - 2 * r), y = r + R() * Math.max(1, oc.H - 2 * r);

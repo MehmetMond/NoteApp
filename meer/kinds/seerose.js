@@ -49,34 +49,34 @@ function cacheInit(c) {
   c.zn = 0; c.zi = 0; c.zh = false; c.px = c.x; c.py = c.y; c.sx = c.x; c.sy = c.y;
 }
 
-// erster Schritt: Blätter in losen Gruppen verteilen (meist dicht an ein schon liegendes Blatt)
+// erster Schritt: Blätter gleichmäßig über den Teich verteilen (von 40 Zufallsorten der, der am weitesten von den
+// schon liegenden Blättern entfernt ist). Dort wurzelt das Blatt (Anker ax, ay): es pendelt nur in seiner Gegend.
 function place(c, oc) {
   c.placed = 1;
   const pads = oc.list.filter(d => d.kind === c.kind && d !== c && d.placed);
-  const W = oc.W, H = oc.H, R = c.len * 0.5;
+  const W = oc.W, H = oc.H, R = c.len * 0.5, m = R + 40 * oc.scale;
+  let bx = c.x, by = c.y, bs = -1e9;
   for (let i = 0; i < 40; i++) {
-    let x, y;
-    const near = pads.length && rnd(c, i) < 0.4;   // meist einzeln, manchmal zu zweit
-    if (near) {
-      const p = pads[(rnd(c, i + 50) * pads.length) | 0], a = rnd(c, i + 90) * TAU, d = (p.len * 0.5 + R) * (0.95 + 0.12 * rnd(c, i + 130));
-      x = p.px + Math.cos(a) * d; y = p.py + Math.sin(a) * d;
-    } else { x = R + 30 + rnd(c, i + 170) * (W - 2 * R - 60); y = R + 30 + rnd(c, i + 210) * (H - 2 * R - 60); }
-    if (x < R + 14 || y < R + 14 || x > W - R - 14 || y > H - R - 14) continue;
-    let ok = true;
-    for (const p of pads) { const m = (p.len * 0.5 + R) * (near ? 0.93 : 1.7); if ((p.px - x) ** 2 + (p.py - y) ** 2 < m * m) { ok = false; break; } }
-    if (ok) { c.px = c.x = c.sx = x; c.py = c.y = c.sy = y; return; }
+    const x = m + rnd(c, i + 170) * Math.max(1, W - 2 * m), y = m + rnd(c, i + 210) * Math.max(1, H - 2 * m);
+    let sc = 1e9; for (const p of pads) sc = Math.min(sc, Math.hypot(p.ax - x, p.ay - y) - p.len * 0.5 - R);
+    if (sc > bs) { bs = sc; bx = x; by = y; }
   }
+  c.px = c.x = c.sx = c.ax = bx; c.py = c.y = c.sy = c.ay = by;
 }
 
 function update(c, dt, oc) {
-  if (c.x !== c.sx) c.px = c.x;
-  if (c.y !== c.sy) c.py = c.y;
+  if (c.x !== c.sx) c.px = c.ax = c.x;   // von außen versetzt: dort wurzelt es nun
+  if (c.y !== c.sy) c.py = c.ay = c.y;
   if (!c.placed) place(c, oc);
   const t = oc.t, W = oc.W, H = oc.H, R = c.len * 0.5, sc = oc.scale;
   let x = c.px, y = c.py;
   // Strömung: großräumig und langsam, alle Blätter treiben ähnlich (Gruppen bleiben beisammen)
   const ang = noise2(x * 0.0012 + 3.1, y * 0.0012 + t * 0.004) * TAU * 2;
   let ax = Math.cos(ang) * c.drift, ay = Math.sin(ang) * c.drift;
+  // Stiel: zieht sanft zum Wurzelpunkt zurück, so pendelt jedes Blatt in seiner Gegend, statt dass alle mit der
+  // Strömung an dieselbe Stelle treiben (Gleichgewicht etwa 30–70 px vom Anker)
+  c.ax = clamp(c.ax, R + 16 * sc, W - R - 16 * sc); c.ay = clamp(c.ay, R + 16 * sc, H - R - 16 * sc);   // Fenster kleiner geworden
+  ax += (c.ax - x) * 0.05; ay += (c.ay - y) * 0.05;
   // Rand: ganz im Bild bleiben
   const m = R + 16 * sc, k = 0.06;
   if (x < m + 30) ax += (m + 30 - x) * k; else if (x > W - m - 30) ax -= (x - W + m + 30) * k;
@@ -138,7 +138,7 @@ function padCell(x, y, c, o) {
 }
 
 TM.kinds.seerose = {
-  label: 'Seerosen', count: 6, len: [85, 160], speed: [1.5, 3.5], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
+  label: 'Seerosen', count: 6, len: [85, 160], speed: [1.5, 3.5], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2, surface: true,
   tapTip: 'das Blatt wippt, Wellen laufen',   // Hinweis beim Antippen (Vorschauseite)
   //        Blatt      Ader       Blatt dunkel  -          -          -          Welle
   colors: ['#4f7d47', '#7fa463', '#36593a', '#4f7d47', '#4f7d47', '#4f7d47', '#a6cfc8'],
@@ -150,7 +150,7 @@ TM.kinds.seerose = {
     c.nw = lerp(0.13, 0.22, R());                    // halbe Kerbenöffnung (rad)
     c.wv1 = lerp(0.006, 0.016, R()); c.wv2 = lerp(0.004, 0.01, R()); c.s1 = R() * TAU; c.s2 = R() * TAU;
     c.vx = 0; c.vy = 0; c.spin = 0; c.kick = 0; c.wt2 = 9; c.wob = 0; c.placed = Q.get('mode') === 'solo' ? 1 : 0;
-    c.drift = c.cruise; c.tx = R() * 50;
+    c.drift = c.cruise; c.tx = R() * 50; c.ax = c.x; c.ay = c.y;
     c.vi = new Uint16Array(NV); c.vh = new Float32Array(NV); c.vn = 0; c.vr0 = 0.2;
     // Drehung selbst führen: das Blatt ist rund, mit Richtung 0 bleibt das abgetastete Rechteck klein
     c.ang = c.th; c.th = 0; c.ra = 0;
@@ -211,7 +211,7 @@ function flowerCell(a, b, c, o) {
   if (g) { o.ch = g; o.col = 2; o.lit = 0.7; }
 }
 TM.kinds.seerose_bluete = {
-  label: 'Seerosenblüte', hidden: true, count: 0, len: [60, 60], speed: [0, 0], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
+  label: 'Seerosenblüte', hidden: true, surface: true, count: 0, len: [60, 60], speed: [0, 0], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
   rim: 0.75,
   //        weiß       rosa       gelb       weiß innen  rosa innen
   colors: ['#efeae0', '#e8a7b8', '#e6bb4a', '#f4dccf', '#d98a9f'],

@@ -45,6 +45,13 @@ function stepSchool(S, k, v, oc) {
   const t = oc.t, W = oc.W, H = oc.H, pad = Math.min(220, W * 0.18);
   S.gx = clamp(W * (0.5 + 0.6 * (noise1(S.seed + t * 0.031) * 2 - 1)), pad, W - pad);
   S.gy = clamp(H * (0.5 + 0.6 * (noise1(S.seed + 40 + t * 0.027) * 2 - 1)), pad, H - pad);
+  // das Ziel weicht großen Tieren aus: der Schwarm zieht ins freie Wasser, statt sich zu ihnen zu drängen
+  for (const d of oc.list) {
+    const dk = d.kind; if (dk === k || dk.hidden || dk.surface || d.dead || d.depth < -0.1 || d.len < 60) continue;
+    const ex = S.gx - d.x, ey = S.gy - d.y, R = d.len * 0.8 + 120 * oc.scale, q = Math.hypot(ex, ey) || 1;
+    if (q < R) { S.gx += ex / q * (R - q) * 0.8; S.gy += ey / q * (R - q) * 0.8; }
+  }
+  S.gx = clamp(S.gx, pad, W - pad); S.gy = clamp(S.gy, pad, H - pad);
   S.mill = smooth(0.52, 0.66, noise1(S.seed * 1.7 + 9 + t * 0.045));
   if (S.mill < 0.02) S.spin = noise1(S.seed + t * 0.2) > 0.5 ? 1 : -1;
   if (S.threat && t - S.threat.t > 1.6) S.threat = null;
@@ -125,6 +132,7 @@ function update(c, dt, oc) {
   sx += ex / em * far * 1.4; sy += ey / em * far * 1.4;
   const gx = S.gx - c.x, gy = S.gy - c.y, gm = Math.hypot(gx, gy) || 1, goal = 0.45 * (1 - S.mill);
   sx += gx / gm * goal; sy += gy / gm * goal;
+  { const sp = TM.spread(c, oc, 0.8); sx += sp.x; sy += sp.y; }   // großen Tieren Platz lassen (Schwarmfische zählen nicht)
   if (S.mill > 0) {   // Kreisen: tangential um die Mitte, Ring bei einigen Körperlängen
     const rr = L * (2.2 + 0.08 * S.m.length), rad = clamp((em - rr) / rr, -1, 1);
     sx += (-ey / em * S.spin * 1.5 + ex / em * rad * 0.8) * S.mill;
@@ -169,7 +177,7 @@ function update(c, dt, oc) {
 }
 
 TM.kinds.schwarm = {
-  label: 'Fischschwarm', count: 24, len: [26, 44], speed: [36, 50], turn: 2.8, depth: [0.28, 0.55], eats: true, wake: 0.45,
+  label: 'Fischschwarm', count: 24, len: [26, 44], speed: [36, 50], turn: 2.8, depth: [0.28, 0.55], eats: true, wake: 0.45, school: true,
   tapTip: 'der ganze Schwarm stiebt auseinander',   // Hinweis beim Antippen (Vorschauseite)
   rigid: true, ext: 0.52, wext: 0.14, dash: 1.8,
   //        Silber      Rücken      Auge       Gold-Orange  Flossen gold  Kopf orange
