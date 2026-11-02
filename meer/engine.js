@@ -19,11 +19,14 @@
 //     o.f   > 0 innen (am besten Abstand zum Rand in Körperlängen, außen negativ: daraus kommen die Randzeichen)
 //     o.lit 0..1 Helligkeit (Zeichendichte und Farbstufe), o.col Index in colors, o.ch Zeichencode statt Rampe,
 //     o.line = 1: wo der Rand durch eine Zelle läuft, das passende Zeichen . , ' - _ / \ | ( )
+//     o.sh = 1: die Zelle wirft nur einen lichten Schatten (jede zweite Schattenzelle, z. B. durchsichtige Flügel)
+//     o.solid = 1: im Kachel-Stil immer deckend, auch am Rand (dünne Körperteile, die sonst halb durchsichtig wären)
 //   marks(c, oc): optionale Punkte, die immer sichtbar sein sollen (Augen): [[a, b, 'o', col, lit], …]
 //   tap(c, oc, x, y): optional, was beim Antippen passiert (sonst: erschrickt und flitzt weg).
 //   update und tap werden ohne this aufgerufen (init, prep, cell, marks dagegen als Methoden der Art).
 //   space: Radius in Körperlängen, mit dem große Tiere einander von oben gesehen Platz lassen (TM.crowd),
 //   every: 2 = solange langsamer als slowV px/s (14), nur jedes zweite Bild neu abtasten (spart bei trägen Tieren),
+//   ext/wext dürfen auch am Tier stehen (c.ext, c.wext) und gelten dann je Bild, z. B. kleiner, solange die Beine angezogen sind,
 //   margin: px Wasser zwischen Körper und Bildrand in TM.swim (sonst wie der Koi, der auch mal halb hinausschwimmt),
 //   tapTip: kurzer Hinweis, was Antippen bewirkt (für die Vorschauseite).
 // Die Leinwand ist deckend: sie malt den Wassergrund (Thema bg) selbst, die Seite darunter spielt keine Rolle.
@@ -171,7 +174,7 @@ class Ocean {
     this.R = rng(this.opt.seed); this.ids = 0;
     this.list = []; this.food = []; this.rip = []; this.fx = [];
     this.t = 0; this.fn = 0; this.ptr = { x: -1e4, y: -1e4, t: -1e4 };
-    this.o = { f: 0, lit: 0, col: 0, ch: 0, line: 0 };
+    this.o = { f: 0, lit: 0, col: 0, ch: 0, line: 0, sh: 0, solid: 0 };
     this.css = []; this.tcss = []; this.cssId = new Map();
     this.stats = { cells: 0, ms: 0 };
     this.theme = TM.themes[this.opt.theme];
@@ -297,7 +300,7 @@ class Ocean {
   add(name, o = {}) {
     const k = KINDS[name]; if (!k) return null;
     const R = this.R, c = { ...o, kind: k, name, id: ++this.ids, seed: (R() * 1e5) | 0, t: 0, wt: R() * 50, om: 0, ph: R() * TAU, bend: 0, burst: 0, fx: null, fy: 0, n: 0,
-      ci: new Int32Array(256), cg: new Uint16Array(256), cc: new Uint16Array(256), mk: [] };
+      ci: new Int32Array(256), cg: new Uint16Array(256), cc: new Uint16Array(256), cs: new Uint8Array(256), mk: [] };
     c.depth = o.depth ?? lerp(k.depth[0], k.depth[1], R());
     c.len = (o.len ?? lerp(k.len[0], k.len[1], R())) * this.scale * (1 - 0.2 * c.depth);
     c.cruise = c.v = lerp(k.speed[0], k.speed[1], R()) * this.scale;
@@ -374,15 +377,16 @@ class Ocean {
   sample(c) {
     const k = c.kind, L = c.len, cw = this.cw, ch = this.ch, cols = this.cols, rows = this.rows;
     // enges Rechteck um das gedrehte Tier: längs ext, quer wext (+ Platz für Schwanzschlag und Kurve)
-    const ex = (k.ext || 0.62) * L, ey = ((k.wext || k.ext || 0.62) + (k.rigid ? 0 : c.amp * 1.3 + Math.abs(c.bend) * 0.16)) * L;
+    // c.ext / c.wext (am Tier) gehen vor: Tiere, die ihre Form ändern, tasten nur so viel ab, wie die Haltung braucht
+    const ex = (c.ext || k.ext || 0.62) * L, ey = ((c.wext || k.wext || k.ext || 0.62) + (k.rigid ? 0 : c.amp * 1.3 + Math.abs(c.bend) * 0.16)) * L;
     const hw = Math.abs(c.hx) * ex + Math.abs(c.hy) * ey + cw, hh = Math.abs(c.hy) * ex + Math.abs(c.hx) * ey + ch;
     let q0 = Math.floor((c.x - hw) / cw), q1 = Math.floor((c.x + hw) / cw), r0 = Math.floor((c.y - hh) / ch), r1 = Math.floor((c.y + hh) / ch);
     q0 = Math.max(q0, -1); q1 = Math.min(q1, cols); r0 = Math.max(r0, -1); r1 = Math.min(r1, rows);
     c.n = 0; c.mk.length = 0;
     if (q0 > q1 || r0 > r1) return;
     const W = q1 - q0 + 1, H = r1 - r0 + 1, n = W * H;
-    if (!this.sF || this.sF.length < n) { const m = Math.max(n, 4096) * 2; this.sF = new Float32Array(m); this.sL = new Float32Array(m); this.sC = new Uint8Array(m); this.sH = new Uint16Array(m); this.sN = new Uint8Array(m); this.sJ = new Float32Array(m); }
-    const F = this.sF, LI = this.sL, CO = this.sC, CH = this.sH, LN = this.sN, J = this.sJ, o = this.o, tiles = this.opt.tiles;
+    if (!this.sF || this.sF.length < n) { const m = Math.max(n, 4096) * 2; this.sF = new Float32Array(m); this.sL = new Float32Array(m); this.sC = new Uint8Array(m); this.sH = new Uint16Array(m); this.sN = new Uint8Array(m); this.sJ = new Float32Array(m); this.sS = new Uint8Array(m); }
+    const F = this.sF, LI = this.sL, CO = this.sC, CH = this.sH, LN = this.sN, J = this.sJ, SH = this.sS, o = this.o, tiles = this.opt.tiles;
     const hx = c.hx, hy = c.hy, iL = 1 / L, rigid = k.rigid, amp = c.amp, kw = TAU * (k.waveK || 0.75), ph = c.ph, bend = c.bend;
     let i = 0;
     for (let r = r0; r <= r1; r++) {
@@ -391,21 +395,21 @@ class Ocean {
         const px = (q + 0.5) * cw - c.x;
         const a = (px * hx + py * hy) * iL; let b = (py * hx - px * hy) * iL;
         if (!rigid) { const e = clamp(0.5 - a, 0, 1.25); b -= amp * e * e * Math.sin(kw * e - ph) + bend * a * a * 0.5; }
-        o.f = -1; o.lit = 0.6; o.col = 0; o.ch = 0; o.line = 0;
+        o.f = -1; o.lit = 0.6; o.col = 0; o.ch = 0; o.line = 0; o.sh = 0; o.solid = 0;
         k.cell(a, b, c, o, this);
         F[i] = o.f;
         if (o.f > 0) {
-          LI[i] = o.lit; CO[i] = o.col; CH[i] = o.ch; LN[i] = o.line;
+          LI[i] = o.lit; CO[i] = o.col; CH[i] = o.ch; LN[i] = o.line; SH[i] = o.sh | (o.solid << 1);
           // Kacheln: Zeichen um eine Stufe streuen, fest am Körper (wandert mit dem Tier, flackert nicht)
           if (tiles) J[i] = hash2(Math.floor(a * L / 6), Math.floor(b * L / 6) + c.seed) - 0.5;
         }
       }
     }
     // tiefer = matter; bei Kacheln stärker, dort heißt matt durchscheinend (Kachel näher am Wasser)
-    const pal = this.pal(k), rmp = k._ramp, rl = rmp.length - 1, dim = 1 - (tiles ? 0.55 : 0.38) * c.depth, rim = k.rim ?? 0.62, gam = k.gamma || 1.4;
+    const pal = this.pal(k), rmp = k._ramp, rl = rmp.length - 1, dim = Math.min(1, 1 - (tiles ? 0.55 : 0.38) * c.depth), rim = k.rim ?? 0.62, gam = k.gamma || 1.4;
     const lut = this.lut, NA = this.NA, ND = this.ND, dpr = this.dpr;
     let m = 0;
-    if (c.ci.length < n) { c.ci = new Int32Array(n * 2); c.cg = new Uint16Array(n * 2); c.cc = new Uint16Array(n * 2); }
+    if (c.ci.length < n) { c.ci = new Int32Array(n * 2); c.cg = new Uint16Array(n * 2); c.cc = new Uint16Array(n * 2); c.cs = new Uint8Array(n * 2); }
     for (let rr = 0; rr < H; rr++) {
       const r = r0 + rr; if (r < 0 || r >= rows) continue;
       for (let qq = 0; qq < W; qq++) {
@@ -418,6 +422,7 @@ class Ocean {
           // Innen am Rand halb bis ganz, knapp außen eine blasse Kachel: der Umriss wird weich wie bei Pinselfarbe.
           const gx = Math.abs(fr - fl) / (2 * cw), gy = Math.abs(fd - fu) / (2 * ch), gs = gx * cw + gy * ch;
           if (gs > 1e-7) cov = clamp(0.5 + f / gs, 0, 1);
+          if (f > 0 && SH[j] & 2) cov = 1;
           if (f <= 0) {
             if (cov < 0.15 || (fl <= 0 && fr <= 0 && fu <= 0 && fd <= 0)) continue;
             s = fl > 0 ? j - 1 : fr > 0 ? j + 1 : fu > 0 ? j - W : j + W;
@@ -453,7 +458,7 @@ class Ocean {
         if (edge && gl) lit = rim + (1 - rim) * lit;
         lit *= dim * cov;
         if (!gl) { if (f <= 0 && !tiles) continue; gl = rmp[tiles ? clamp(Math.round(Math.pow(lit, gam) * rl + J[s] * 2.4), 0, rl) : Math.round(Math.pow(lit, gam) * rl)]; }
-        c.ci[m] = r * cols + q; c.cg[m] = gl; c.cc[m] = pal[CO[s]][clamp(Math.round(lit * (LV - 1)), 0, LV - 1)]; m++;
+        c.ci[m] = r * cols + q; c.cg[m] = gl; c.cc[m] = pal[CO[s]][clamp(Math.round(lit * (LV - 1)), 0, LV - 1)]; c.cs[m] = SH[s] & 1; m++;
       }
     }
     c.n = m;
@@ -470,7 +475,7 @@ class Ocean {
     const cols = this.cols, rows = this.rows, G = this.G, C = this.C, Ly = this.L, tiles = this.opt.tiles;
     const sg = tiles ? 32 : this.theme.shadow, sc = tiles ? this.shTile : this.shCol;
     for (let m = 0; m < c.n; m++) {
-      const i = c.ci[m], q = i % cols + dq, r = ((i / cols) | 0) + dr; if (q >= cols || r >= rows) continue;
+      const i = c.ci[m], q = i % cols + dq, r = ((i / cols) | 0) + dr; if (q >= cols || r >= rows || c.cs[m] && (q + r) & 1) continue;
       const j = r * cols + q; if (Ly[j] < 2) { G[j] = !tiles && sg && (q + r) & 1 ? 0 : sg; C[j] = sc; Ly[j] = 2; }
     }
   }

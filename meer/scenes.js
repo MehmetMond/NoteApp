@@ -30,9 +30,11 @@ TM.scenes = {
     label: 'Teich',
     theme: { dark: 'teichDark', light: 'teichLight' },
     kinds: [
-      ['seerose', 6],                          // Blätter treiben oben, manche mit Blüte
+      ['seerose', 5],                          // Blätter treiben oben, manche mit Blüte
       ['koi', 3],
       ['schwarm', 10, { var: 'goldfisch', len: 42 }],   // ein Trupp Goldfische, etwas größer als Sardinen, sonst nur Krümel
+      ['frosch', 2],                           // sitzen auf den Blättern (nach den Seerosen, die müssen schon da sein)
+      ['libelle', 2],                          // fliegen hoch über allem
     ],
   },
 };

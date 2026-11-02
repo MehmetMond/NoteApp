@@ -56,7 +56,7 @@ function place(c, oc) {
   const W = oc.W, H = oc.H, R = c.len * 0.5;
   for (let i = 0; i < 40; i++) {
     let x, y;
-    const near = pads.length && rnd(c, i) < 0.7;
+    const near = pads.length && rnd(c, i) < 0.4;   // meist einzeln, manchmal zu zweit
     if (near) {
       const p = pads[(rnd(c, i + 50) * pads.length) | 0], a = rnd(c, i + 90) * TAU, d = (p.len * 0.5 + R) * (0.95 + 0.12 * rnd(c, i + 130));
       x = p.px + Math.cos(a) * d; y = p.py + Math.sin(a) * d;
@@ -138,7 +138,7 @@ function padCell(x, y, c, o) {
 }
 
 TM.kinds.seerose = {
-  label: 'Seerosen', count: 6, len: [70, 150], speed: [1.5, 3.5], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
+  label: 'Seerosen', count: 6, len: [85, 160], speed: [1.5, 3.5], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
   tapTip: 'das Blatt wippt, Wellen laufen',   // Hinweis beim Antippen (Vorschauseite)
   //        Blatt      Ader       Blatt dunkel  -          -          -          Welle
   colors: ['#4f7d47', '#7fa463', '#36593a', '#4f7d47', '#4f7d47', '#4f7d47', '#a6cfc8'],

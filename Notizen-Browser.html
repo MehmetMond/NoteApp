@@ -545,11 +545,14 @@ html.dark #toast{background:#eee;color:#111}
 //     o.f   > 0 innen (am besten Abstand zum Rand in Körperlängen, außen negativ: daraus kommen die Randzeichen)
 //     o.lit 0..1 Helligkeit (Zeichendichte und Farbstufe), o.col Index in colors, o.ch Zeichencode statt Rampe,
 //     o.line = 1: wo der Rand durch eine Zelle läuft, das passende Zeichen . , ' - _ / \ | ( )
+//     o.sh = 1: die Zelle wirft nur einen lichten Schatten (jede zweite Schattenzelle, z. B. durchsichtige Flügel)
+//     o.solid = 1: im Kachel-Stil immer deckend, auch am Rand (dünne Körperteile, die sonst halb durchsichtig wären)
 //   marks(c, oc): optionale Punkte, die immer sichtbar sein sollen (Augen): [[a, b, 'o', col, lit], …]
 //   tap(c, oc, x, y): optional, was beim Antippen passiert (sonst: erschrickt und flitzt weg).
 //   update und tap werden ohne this aufgerufen (init, prep, cell, marks dagegen als Methoden der Art).
 //   space: Radius in Körperlängen, mit dem große Tiere einander von oben gesehen Platz lassen (TM.crowd),
 //   every: 2 = solange langsamer als slowV px/s (14), nur jedes zweite Bild neu abtasten (spart bei trägen Tieren),
+//   ext/wext dürfen auch am Tier stehen (c.ext, c.wext) und gelten dann je Bild, z. B. kleiner, solange die Beine angezogen sind,
 //   margin: px Wasser zwischen Körper und Bildrand in TM.swim (sonst wie der Koi, der auch mal halb hinausschwimmt),
 //   tapTip: kurzer Hinweis, was Antippen bewirkt (für die Vorschauseite).
 // Die Leinwand ist deckend: sie malt den Wassergrund (Thema bg) selbst, die Seite darunter spielt keine Rolle.
@@ -697,7 +700,7 @@ class Ocean {
     this.R = rng(this.opt.seed); this.ids = 0;
     this.list = []; this.food = []; this.rip = []; this.fx = [];
     this.t = 0; this.fn = 0; this.ptr = { x: -1e4, y: -1e4, t: -1e4 };
-    this.o = { f: 0, lit: 0, col: 0, ch: 0, line: 0 };
+    this.o = { f: 0, lit: 0, col: 0, ch: 0, line: 0, sh: 0, solid: 0 };
     this.css = []; this.tcss = []; this.cssId = new Map();
     this.stats = { cells: 0, ms: 0 };
     this.theme = TM.themes[this.opt.theme];
@@ -823,7 +826,7 @@ class Ocean {
   add(name, o = {}) {
     const k = KINDS[name]; if (!k) return null;
     const R = this.R, c = { ...o, kind: k, name, id: ++this.ids, seed: (R() * 1e5) | 0, t: 0, wt: R() * 50, om: 0, ph: R() * TAU, bend: 0, burst: 0, fx: null, fy: 0, n: 0,
-      ci: new Int32Array(256), cg: new Uint16Array(256), cc: new Uint16Array(256), mk: [] };
+      ci: new Int32Array(256), cg: new Uint16Array(256), cc: new Uint16Array(256), cs: new Uint8Array(256), mk: [] };
     c.depth = o.depth ?? lerp(k.depth[0], k.depth[1], R());
     c.len = (o.len ?? lerp(k.len[0], k.len[1], R())) * this.scale * (1 - 0.2 * c.depth);
     c.cruise = c.v = lerp(k.speed[0], k.speed[1], R()) * this.scale;
@@ -900,15 +903,16 @@ class Ocean {
   sample(c) {
     const k = c.kind, L = c.len, cw = this.cw, ch = this.ch, cols = this.cols, rows = this.rows;
     // enges Rechteck um das gedrehte Tier: längs ext, quer wext (+ Platz für Schwanzschlag und Kurve)
-    const ex = (k.ext || 0.62) * L, ey = ((k.wext || k.ext || 0.62) + (k.rigid ? 0 : c.amp * 1.3 + Math.abs(c.bend) * 0.16)) * L;
+    // c.ext / c.wext (am Tier) gehen vor: Tiere, die ihre Form ändern, tasten nur so viel ab, wie die Haltung braucht
+    const ex = (c.ext || k.ext || 0.62) * L, ey = ((c.wext || k.wext || k.ext || 0.62) + (k.rigid ? 0 : c.amp * 1.3 + Math.abs(c.bend) * 0.16)) * L;
     const hw = Math.abs(c.hx) * ex + Math.abs(c.hy) * ey + cw, hh = Math.abs(c.hy) * ex + Math.abs(c.hx) * ey + ch;
     let q0 = Math.floor((c.x - hw) / cw), q1 = Math.floor((c.x + hw) / cw), r0 = Math.floor((c.y - hh) / ch), r1 = Math.floor((c.y + hh) / ch);
     q0 = Math.max(q0, -1); q1 = Math.min(q1, cols); r0 = Math.max(r0, -1); r1 = Math.min(r1, rows);
     c.n = 0; c.mk.length = 0;
     if (q0 > q1 || r0 > r1) return;
     const W = q1 - q0 + 1, H = r1 - r0 + 1, n = W * H;
-    if (!this.sF || this.sF.length < n) { const m = Math.max(n, 4096) * 2; this.sF = new Float32Array(m); this.sL = new Float32Array(m); this.sC = new Uint8Array(m); this.sH = new Uint16Array(m); this.sN = new Uint8Array(m); this.sJ = new Float32Array(m); }
-    const F = this.sF, LI = this.sL, CO = this.sC, CH = this.sH, LN = this.sN, J = this.sJ, o = this.o, tiles = this.opt.tiles;
+    if (!this.sF || this.sF.length < n) { const m = Math.max(n, 4096) * 2; this.sF = new Float32Array(m); this.sL = new Float32Array(m); this.sC = new Uint8Array(m); this.sH = new Uint16Array(m); this.sN = new Uint8Array(m); this.sJ = new Float32Array(m); this.sS = new Uint8Array(m); }
+    const F = this.sF, LI = this.sL, CO = this.sC, CH = this.sH, LN = this.sN, J = this.sJ, SH = this.sS, o = this.o, tiles = this.opt.tiles;
     const hx = c.hx, hy = c.hy, iL = 1 / L, rigid = k.rigid, amp = c.amp, kw = TAU * (k.waveK || 0.75), ph = c.ph, bend = c.bend;
     let i = 0;
     for (let r = r0; r <= r1; r++) {
@@ -917,21 +921,21 @@ class Ocean {
         const px = (q + 0.5) * cw - c.x;
         const a = (px * hx + py * hy) * iL; let b = (py * hx - px * hy) * iL;
         if (!rigid) { const e = clamp(0.5 - a, 0, 1.25); b -= amp * e * e * Math.sin(kw * e - ph) + bend * a * a * 0.5; }
-        o.f = -1; o.lit = 0.6; o.col = 0; o.ch = 0; o.line = 0;
+        o.f = -1; o.lit = 0.6; o.col = 0; o.ch = 0; o.line = 0; o.sh = 0; o.solid = 0;
         k.cell(a, b, c, o, this);
         F[i] = o.f;
         if (o.f > 0) {
-          LI[i] = o.lit; CO[i] = o.col; CH[i] = o.ch; LN[i] = o.line;
+          LI[i] = o.lit; CO[i] = o.col; CH[i] = o.ch; LN[i] = o.line; SH[i] = o.sh | (o.solid << 1);
           // Kacheln: Zeichen um eine Stufe streuen, fest am Körper (wandert mit dem Tier, flackert nicht)
           if (tiles) J[i] = hash2(Math.floor(a * L / 6), Math.floor(b * L / 6) + c.seed) - 0.5;
         }
       }
     }
     // tiefer = matter; bei Kacheln stärker, dort heißt matt durchscheinend (Kachel näher am Wasser)
-    const pal = this.pal(k), rmp = k._ramp, rl = rmp.length - 1, dim = 1 - (tiles ? 0.55 : 0.38) * c.depth, rim = k.rim ?? 0.62, gam = k.gamma || 1.4;
+    const pal = this.pal(k), rmp = k._ramp, rl = rmp.length - 1, dim = Math.min(1, 1 - (tiles ? 0.55 : 0.38) * c.depth), rim = k.rim ?? 0.62, gam = k.gamma || 1.4;
     const lut = this.lut, NA = this.NA, ND = this.ND, dpr = this.dpr;
     let m = 0;
-    if (c.ci.length < n) { c.ci = new Int32Array(n * 2); c.cg = new Uint16Array(n * 2); c.cc = new Uint16Array(n * 2); }
+    if (c.ci.length < n) { c.ci = new Int32Array(n * 2); c.cg = new Uint16Array(n * 2); c.cc = new Uint16Array(n * 2); c.cs = new Uint8Array(n * 2); }
     for (let rr = 0; rr < H; rr++) {
       const r = r0 + rr; if (r < 0 || r >= rows) continue;
       for (let qq = 0; qq < W; qq++) {
@@ -944,6 +948,7 @@ class Ocean {
           // Innen am Rand halb bis ganz, knapp außen eine blasse Kachel: der Umriss wird weich wie bei Pinselfarbe.
           const gx = Math.abs(fr - fl) / (2 * cw), gy = Math.abs(fd - fu) / (2 * ch), gs = gx * cw + gy * ch;
           if (gs > 1e-7) cov = clamp(0.5 + f / gs, 0, 1);
+          if (f > 0 && SH[j] & 2) cov = 1;
           if (f <= 0) {
             if (cov < 0.15 || (fl <= 0 && fr <= 0 && fu <= 0 && fd <= 0)) continue;
             s = fl > 0 ? j - 1 : fr > 0 ? j + 1 : fu > 0 ? j - W : j + W;
@@ -979,7 +984,7 @@ class Ocean {
         if (edge && gl) lit = rim + (1 - rim) * lit;
         lit *= dim * cov;
         if (!gl) { if (f <= 0 && !tiles) continue; gl = rmp[tiles ? clamp(Math.round(Math.pow(lit, gam) * rl + J[s] * 2.4), 0, rl) : Math.round(Math.pow(lit, gam) * rl)]; }
-        c.ci[m] = r * cols + q; c.cg[m] = gl; c.cc[m] = pal[CO[s]][clamp(Math.round(lit * (LV - 1)), 0, LV - 1)]; m++;
+        c.ci[m] = r * cols + q; c.cg[m] = gl; c.cc[m] = pal[CO[s]][clamp(Math.round(lit * (LV - 1)), 0, LV - 1)]; c.cs[m] = SH[s] & 1; m++;
       }
     }
     c.n = m;
@@ -996,7 +1001,7 @@ class Ocean {
     const cols = this.cols, rows = this.rows, G = this.G, C = this.C, Ly = this.L, tiles = this.opt.tiles;
     const sg = tiles ? 32 : this.theme.shadow, sc = tiles ? this.shTile : this.shCol;
     for (let m = 0; m < c.n; m++) {
-      const i = c.ci[m], q = i % cols + dq, r = ((i / cols) | 0) + dr; if (q >= cols || r >= rows) continue;
+      const i = c.ci[m], q = i % cols + dq, r = ((i / cols) | 0) + dr; if (q >= cols || r >= rows || c.cs[m] && (q + r) & 1) continue;
       const j = r * cols + q; if (Ly[j] < 2) { G[j] = !tiles && sg && (q + r) & 1 ? 0 : sg; C[j] = sc; Ly[j] = 2; }
     }
   }
@@ -1105,6 +1110,265 @@ class Ocean {
 }
 TM.Ocean = Ocean;
 })(typeof window !== 'undefined' ? window : globalThis);
+
+// Frösche (Teich): sitzen auf den Seerosenblättern und treiben mit ihnen, quaken (zwei Schallblasen blähen sich
+// seitlich am Kopf auf), springen im Bogen zum nächsten freien Blatt (im Sprung größer, der Schatten rückt weg,
+// das Blatt wippt beim Landen) und schwimmen mit Beinschlägen, wenn sie im Wasser landen. Kommt eine Libelle oder
+// Futter in Reichweite, schnellt die Zunge vor. Antippen: springt weg.
+(function () {
+const { TAU, clamp, lerp, smooth, noise2, hash2 } = TM.util;
+const Q = TM.Q || new URLSearchParams('');
+const SIT = 0, HOP = 1, SWIM = 2;
+
+// Gelenke der rechten Seite (die linke ist gespiegelt), je [a, b] in Körperlängen:
+// Hüfte, Knie, Ferse, Zehen (Hinterbein), Schulter, Ellbogen, Hand (Vorderbein)
+const P_SIT = [-0.28, 0.15, -0.05, 0.47, -0.45, 0.50, -0.30, 0.68, 0.12, 0.18, 0.22, 0.36, 0.40, 0.44];   // gespreizt wie ein Frosch von oben
+const P_TUCK = [-0.28, 0.15, -0.15, 0.55, -0.52, 0.56, -0.42, 0.75, 0.12, 0.18, 0.22, 0.38, 0.36, 0.50];   // schwimmen: noch weiter gespreizt
+const P_EXT = [-0.32, 0.14, -0.62, 0.25, -0.93, 0.22, -1.18, 0.26, 0.12, 0.19, 0.26, 0.28, 0.46, 0.27];    // gestreckt: Sprung, Beinschlag
+// Glieder: [Gelenk von, Gelenk bis, Radius]; 0..2 Hinterbein, 3..4 Vorderbein
+const SEG = [[0, 1, 0.095], [1, 2, 0.075], [2, 3, 0.06], [4, 5, 0.055], [5, 6, 0.048]];
+
+// Abstand Punkt–Strecke, dazu wo auf der Strecke (0..1) und wie weit quer (für Licht und Ringel)
+const D = { d: 0, t: 0, q: 0 };
+function seg(a, b, a0, b0, a1, b1) {
+  const da = a1 - a0, db = b1 - b0, l2 = da * da + db * db;
+  const t = l2 > 0 ? clamp(((a - a0) * da + (b - b0) * db) / l2, 0, 1) : 0;
+  const pa = a0 + da * t, pb = b0 + db * t, l = Math.sqrt(l2) || 1;
+  D.d = Math.hypot(a - pa, b - pb); D.t = t; D.q = ((a - a0) * db - (b - b0) * da) / l;   // q: Seite der Strecke
+  return D;
+}
+// Rumpf von oben: rundlich, vorn etwas breiter (Kopf), hinten rund
+const bodyW = a => { const u = Math.abs((a - 0.025) / 0.475); return u >= 1 ? 0 : 0.26 * Math.pow(1 - Math.pow(u, 2.6), 1 / 2.6) * (0.92 + 0.12 * (a + 0.45)); };
+
+// Sitzplatz auf einem Blatt: auf Blättern ohne Blüte nah der Mitte, sonst gegenüber der Blüte am Rand
+function seatOn(c, p) {
+  if (p.var === 'blatt' || !p.fl) { c.sr = lerp(0.03, 0.13, rnd(c, 1)); c.sp = Math.PI + lerp(-0.9, 0.9, rnd(c, 2)); }
+  else { c.sr = 0.3; c.sp = p.fl.offa + Math.PI + lerp(-0.45, 0.45, rnd(c, 3)); }
+}
+const rnd = (c, k) => hash2(c.seed, (c.rn += 1) * 7919 + k);
+const SP = { x: 0, y: 0 };
+function seatPos(c, p) {
+  const ca = Math.cos(p.ang), sa = Math.sin(p.ang), lx = Math.cos(c.sp) * c.sr * p.len, ly = Math.sin(c.sp) * c.sr * p.len;
+  SP.x = p.px + ca * lx - sa * ly; SP.y = p.py + sa * lx + ca * ly; return SP;
+}
+const pads = oc => oc.list.filter(d => d.name === 'seerose' && !d.dead);
+const taken = (oc, p, c) => oc.list.some(d => d !== c && d.name === 'frosch' && (d.pad === p || d.hpad === p));
+// freies Blatt in Sprungweite (nicht das eigene), zufällig unter den näheren
+function freePad(c, oc, maxD, away) {
+  let best = null, bs = -1e9;
+  for (const p of pads(oc)) {
+    if (p === c.pad || taken(oc, p, c)) continue;
+    const d = Math.hypot(p.px - c.x, p.py - c.y); if (d > maxD || d < 20) continue;
+    let s = -d / maxD + rnd(c, 7) * 0.8 + (p.var === 'blatt' ? 0.3 : 0);
+    if (away) s += ((p.px - c.x) * away.x + (p.py - c.y) * away.y) / (d || 1);   // weg vom Finger
+    if (s > bs) { bs = s; best = p; }
+  }
+  return best;
+}
+function turnTo(c, want, rate, dt) { let d = want - c.th; d -= Math.round(d / TAU) * TAU; c.th += clamp(d, -rate * dt, rate * dt); return Math.abs(d); }
+
+// Sprung beginnen: erst kurz ducken und hindrehen, dann im Bogen
+function hop(c, oc, pad, x, y, quick) {
+  c.st = HOP; c.hpad = pad; c.htx = x; c.hty = y; c.hu = 0; c.pre = quick ? 0.08 : 0.24;
+  c.hx0 = c.x; c.hy0 = c.y; c.hd0 = c.depth;
+  c.hT = clamp(0.45 + Math.hypot(x - c.x, y - c.y) / 520, 0.5, 1.05);
+  if (c.pad) { c.pad.wob = Math.max(c.pad.wob, 0.35); c.pad.wt2 = 0; }   // Absprung: das Blatt wippt
+  c.pad = null; c.cro = 0; c.tg = 0;
+}
+// Ziel im Wasser: ein Stück weg, nicht auf einem Blatt, im Bild
+function waterSpot(c, oc, away) {
+  const L = c.len0, m = 40 * oc.scale + L;
+  for (let i = 0; i < 24; i++) {
+    let ang = rnd(c, 11) * TAU; if (away && i < 16) ang = Math.atan2(away.y, away.x) + lerp(-0.9, 0.9, rnd(c, 12));
+    const d = L * lerp(1.5, 2.8, rnd(c, 13)), x = c.x + Math.cos(ang) * d, y = c.y + Math.sin(ang) * d;
+    if (x < m || y < m || x > oc.W - m || y > oc.H - m) continue;
+    if (pads(oc).some(p => Math.hypot(p.px - x, p.py - y) < p.len * 0.5 + L * 0.3)) continue;
+    return { x, y };
+  }
+  return { x: clamp(c.x + L * 1.8, m, oc.W - m), y: clamp(c.y, m, oc.H - m) };
+}
+function leave(c, oc, away, quick) {
+  const p = freePad(c, oc, c.len0 * 4.6 + 80 * oc.scale, away);
+  if (p) { seatOn(c, p); const s = seatPos(c, p); hop(c, oc, p, s.x, s.y, quick); return; }
+  const w = waterSpot(c, oc, away); hop(c, oc, null, w.x, w.y, quick);
+}
+
+function update(c, dt, oc) {
+  const L0 = c.len0, sc = oc.scale;
+  c.blk -= dt; if (c.blk < -0.16) c.blk = lerp(2.5, 7, rnd(c, 21));
+  c.tcd -= dt;
+  if (!c.started) { c.started = 1; if (c.solo) return; const p = freePad(c, oc, 1e9); if (p) { seatOn(c, p); c.pad = p; } else { c.st = SWIM; c.depth = 0.03; c.swT = 0; oc.resort(); } }
+  if (c.solo) return;
+  // Zunge: raus in 0.12 s, zurück in 0.18 s; am weitesten draußen wird Futter gefressen
+  if (c.tg > 0) {
+    c.tg += dt / 0.3; const T = c.tgt;
+    if (T && T.age != null) { c.tgx = T.x; c.tgy = T.y; if (c.tg > 0.4 && oc.food.includes(T)) oc.eat(T, c); }
+    else if (T) { c.tgx = T.x; c.tgy = T.y; }
+    if (c.tg >= 1) { c.tg = 0; c.tgt = null; }
+  }
+  if (c.st === SIT) {
+    c.v = c.tg > 0 || c.turn || c.cro > 0 ? 99 : 0;   // still sitzen: jedes zweite Bild abtasten reicht (every: 2)
+    const p = c.pad;
+    if (!p || p.dead) { c.pad = null; c.st = SWIM; c.depth = 0.03; oc.resort(); return; }
+    const s = seatPos(c, p); c.x = s.x; c.y = s.y;
+    c.th = p.ang + c.sth;
+    if (c.turn) { const st = clamp(c.turn, -2 * dt, 2 * dt); c.sth += st; c.turn -= st; if (Math.abs(c.turn) < 1e-3) c.turn = 0; }
+    c.kk += (0 - c.kk) * Math.min(1, dt * 8); c.ss += (0 - c.ss) * Math.min(1, dt * 3);
+    // quaken: Schallblasen pumpen 3–5 Mal, jedes Mal ein kleiner Ring im Wasser
+    if (c.cro > 0) { const ph = c.cp; c.cp += dt / 0.42; c.cro -= dt; if (Math.floor(c.cp) > Math.floor(ph)) oc.ripple(c.x, c.y, 0.22, true); }
+    // Zunge nach Libelle oder Futter in Reichweite (vor dem Maul, ±50°)
+    if (c.tcd <= 0 && c.tg === 0 && c.cro <= 0) {
+      const mx = c.x + c.hx * L0 * 0.47, my = c.y + c.hy * L0 * 0.47, reach = L0 * 2.1;
+      let tgt = null, bd = reach;
+      for (const d of oc.list) if (d.name === 'libelle' && d.st !== 2) { const e = Math.hypot(d.x - mx, d.y - my); if (e < bd && ((d.x - mx) * c.hx + (d.y - my) * c.hy) > e * 0.64) { bd = e; tgt = d; } }
+      for (const f of oc.food) { const e = Math.hypot(f.x - mx, f.y - my); if (e < bd && ((f.x - mx) * c.hx + (f.y - my) * c.hy) > e * 0.64) { bd = e; tgt = f; } }
+      if (tgt) {
+        c.tg = 1e-3; c.tgt = tgt; c.tgx = tgt.x; c.tgy = tgt.y; c.tcd = lerp(4, 8, rnd(c, 31));
+        if (tgt.kind && TM.kinds.libelle && TM.kinds.libelle.scare) TM.kinds.libelle.scare(tgt, oc, c.x, c.y, 0.12);   // entwischt knapp
+      }
+    }
+    c.tn -= dt;
+    if (c.tn <= 0) {
+      const r = rnd(c, 41); c.tn = lerp(3, 9, rnd(c, 42));
+      if (r < 0.36) { c.cro = lerp(1.2, 2.1, rnd(c, 43)); c.cp = 0; }
+      else if (r < 0.62) c.turn = (rnd(c, 44) < 0.5 ? -1 : 1) * lerp(0.4, 1.3, rnd(c, 45));
+      else if (r < 0.86) leave(c, oc, null, false);
+    }
+    return;
+  }
+  if (c.st === HOP) {
+    if (c.hpad && c.hpad.dead) c.hpad = null;
+    let tx = c.htx, ty = c.hty;
+    if (c.hpad) { const s = seatPos(c, c.hpad); tx = s.x; ty = s.y; }
+    if (c.pre > 0) {   // ducken und hindrehen
+      c.v = 99; c.pre -= dt; turnTo(c, Math.atan2(ty - c.y, tx - c.x), 9, dt); c.kk += (0 - c.kk) * Math.min(1, dt * 10);
+      c.hx0 = c.x; c.hy0 = c.y; return;
+    }
+    c.v = 99; c.hu = Math.min(1, c.hu + dt / c.hT); const u = c.hu, h = 4 * u * (1 - u);
+    c.x = lerp(c.hx0, tx, u); c.y = lerp(c.hy0, ty, u);
+    turnTo(c, Math.atan2(ty - c.hy0, tx - c.hx0), 6, dt);
+    const land = c.hpad ? -0.02 : 0.03;
+    c.depth = lerp(c.hd0, land, u) - 0.5 * h; c.len = L0 * (1 + 0.32 * h); oc.resort();
+    c.kk = u < 0.12 ? u / 0.12 : u > 0.76 ? Math.max(0.2, 1 - (u - 0.76) / 0.24) : 1;
+    if (u >= 1) {
+      c.len = L0;
+      if (c.hpad) {   // auf dem Blatt: es wippt unter dem Gewicht
+        const p = c.hpad; c.hpad = null; c.pad = p; c.st = SIT; c.sth = c.th - p.ang; c.depth = -0.02; c.tn = lerp(3, 8, rnd(c, 51));
+        p.wob = Math.max(p.wob, 0.75); p.wt2 = 0; oc.ripple(c.x, c.y, 0.3, true);
+      } else { c.st = SWIM; c.depth = 0.03; c.v = 30 * sc; c.sk = 0.3; c.swT = lerp(4, 9, rnd(c, 52)); oc.ripple(c.x, c.y, 0.8); }
+      oc.resort();
+    }
+    return;
+  }
+  // schwimmen: Beinschlag (schnell strecken, langsam anziehen), zum nächsten freien Blatt; dort hinaufspringen
+  c.ss += (1 - c.ss) * Math.min(1, dt * 3);
+  const ph = c.sk; c.sk += dt / 1.05; const u = c.sk % 1;
+  if (Math.floor(c.sk) > Math.floor(ph)) c.v += 70 * sc;
+  c.kk = u < 0.26 ? smooth(0, 0.26, u) : 1 - smooth(0.26, 1, u);
+  c.v *= Math.exp(-dt * 1.5);
+  c.swT -= dt;
+  if (!c.hpad || c.hpad.dead || taken(oc, c.hpad, c)) c.hpad = c.swT <= 0 ? freePad(c, oc, 1e9) : null;
+  let tx, ty;
+  if (c.hpad) { const s = seatPos(c, c.hpad); tx = s.x; ty = s.y; }
+  else { tx = c.x + Math.cos(c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2) * 100; ty = c.y + Math.sin(c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2) * 100; }
+  const m = 30 * sc + L0; let want = Math.atan2(ty - c.y, tx - c.x);
+  if (c.x < m || c.x > oc.W - m || c.y < m || c.y > oc.H - m) want = Math.atan2(oc.H / 2 - c.y, oc.W / 2 - c.x);
+  turnTo(c, want, 1.6, dt);
+  c.x += Math.cos(c.th) * c.v * dt; c.y += Math.sin(c.th) * c.v * dt;
+  if (c.hpad && Math.hypot(tx - c.x, ty - c.y) < c.hpad.len * 0.5 + L0 * 0.35) { const p = c.hpad; seatOn(c, p); const s = seatPos(c, p); hop(c, oc, p, s.x, s.y, true); c.hT = 0.45; }
+}
+
+TM.kinds.frosch = {
+  label: 'Frosch', count: 2, len: [80, 94], speed: [0, 0], depth: [-0.02, -0.02], rigid: true, ext: 1.3, wext: 0.88, every: 2, slowV: 1,
+  tapTip: 'springt im Bogen zum nächsten Blatt',   // Hinweis beim Antippen (Vorschauseite)
+  //        grün       Flecken    Rückenleiste Iris      Pupille    Schallblase Zunge      braun      Flecken    Leiste
+  colors: ['#62a24a', '#2f5b2b', '#a3cf6b', '#e8bf4f', '#151b14', '#dfe9b8', '#e98a98', '#a07a4a', '#5c4126', '#cfae73'],
+  light: ['#3f7d2c', '#1e3b1b', '#6c9c3a', '#b8860f', '#101410', '#8ea65c', '#c24f62', '#7a5630', '#3e2a16', '#a07c40'],
+  init(c, R) {
+    c.var = c.var || (R() < 0.7 ? 'gruen' : 'braun');
+    c.len0 = c.len; c.st = SIT; c.pad = null; c.hpad = null; c.sr = 0; c.sp = 0; c.sth = R() * TAU; c.turn = 0;
+    c.tn = lerp(1.5, 6, R()); c.cro = 0; c.cp = 0; c.blk = lerp(1, 6, R()); c.tcd = lerp(2, 6, R()); c.tg = 0; c.tgt = null; c.tgx = 0; c.tgy = 0;
+    c.hu = 0; c.pre = 0; c.hT = 1; c.hx0 = 0; c.hy0 = 0; c.hd0 = 0; c.htx = 0; c.hty = 0; c.kk = 0; c.ss = 0; c.sk = 0; c.swT = 0; c.v = 0;
+    c.rn = 0; c.started = 0; c.px0 = R() * 97; c.py0 = R() * 89; c.vb = c.var === 'braun' ? 7 : 0;
+    c.J = new Float32Array(14); c.mko = []; c.sac = 0;
+    // Testzustände für Probebilder: fpose = sit | jump | croak | swim | tongue
+    const fp = Q.get('fpose');
+    if (fp) { c.solo = 1; c.kk = fp === 'jump' ? 1 : fp === 'swim' ? 0.5 : 0; c.ss = fp === 'swim' ? 1 : 0; if (fp === 'croak') { c.cro = 1; c.cp = 0.25; } if (fp === 'tongue') { c.tg = 0.45; c.tgx = 1e9; } }
+  },
+  update,
+  tap(c, oc, x, y) {
+    const d = Math.hypot(c.x - x, c.y - y) || 1, away = { x: (c.x - x) / d, y: (c.y - y) / d };
+    if (c.st === SIT) leave(c, oc, away, true);
+    else if (c.st === SWIM) { c.v += 110 * oc.scale; c.th = Math.atan2(away.y, away.x); c.sk = Math.floor(c.sk) + 0.01; }
+  },
+  prep(c, oc) {
+    // Gelenke der aktuellen Haltung: Sitzen ↔ gespreizt (Schwimmen), dazu gestreckt (Sprung, Beinschlag)
+    const J = c.J, s = c.ss, k = c.kk;
+    for (let i = 0; i < 14; i++) J[i] = lerp(lerp(P_SIT[i], P_TUCK[i], s), P_EXT[i], k);
+    c.ext = 0.68 + 0.64 * k; c.wext = 0.8 + 0.07 * s;   // nur so viel abtasten, wie die Beine gerade reichen
+    c.sac = c.cro > 0 ? Math.max(0, Math.sin(c.cp * Math.PI)) * Math.min(1, c.cro * 3) : 0;
+    c.shut = c.blk < 0;
+    // Zunge: Ziel im Körpermaß
+    if (c.tg > 0) {
+      const L = c.len, dx = c.tgx - c.x, dy = c.tgy - c.y;
+      c.ta = c.tgx > 1e8 ? 1.6 : (dx * c.hx + dy * c.hy) / L; c.tb = c.tgx > 1e8 ? 0.15 : (dy * c.hx - dx * c.hy) / L;
+    }
+  },
+  cell(a, b, c, o) {
+    if (a > 0.62 || a < -1.32) { o.f = -0.1; return; }
+    const side = b < 0 ? -1 : 1, bb = b * side, J = c.J, vb = c.vb;
+    // Rumpf
+    const w = bodyW(a); let f = w - bb, part = 0, pt = 0, pq = 0, pr = 1;
+    // Augen
+    const de = Math.hypot(a - 0.32, bb - 0.2), fe = 0.105 - de;
+    if (fe > f) { f = fe; part = 1; }
+    // Schallblasen
+    if (c.sac > 0.03) { const r = 0.125 * c.sac, ds = Math.hypot(a - 0.12, bb - (0.25 + 0.07 * c.sac)), fs = r - ds; if (fs > f) { f = fs; part = 2; pq = (bb - 0.25 - 0.07 * c.sac) / r; } }
+    // Beine
+    if (bb > 0.05 || a < -0.4) {
+      for (let i = 0; i < 5; i++) {
+        const S = SEG[i], j0 = S[0] * 2, j1 = S[1] * 2, d = seg(a, bb, J[j0], J[j0 + 1], J[j1], J[j1 + 1]), fl = S[2] - d.d;
+        if (fl > f) { f = fl; part = i < 3 ? 3 : 4; pt = d.t + i; pq = d.q / S[2]; pr = S[2]; }
+      }
+      // Schwimmhäute am Fuß, Finger an der Hand
+      const ff = 0.09 - Math.hypot(a - J[6], bb - J[7]); if (ff > f) { f = ff; part = 5; }
+      const fh = 0.065 - Math.hypot(a - J[12], bb - J[13]); if (fh > f) { f = fh; part = 5; }
+    }
+    o.f = f;
+    if (f <= 0) return;
+    o.line = 1;
+    switch (part) {
+      case 0: {   // Rücken: rund schattiert, Leisten, Flecken
+        const t = b / Math.max(w, 1e-3);
+        o.lit = TM.shade(t, c) - 0.12 * ((a - 0.03) / 0.47) ** 2 + 0.06 * (noise2(a * 19 + c.px0, b * 19) - 0.5);
+        o.col = vb;
+        if (a < 0.3 && noise2(a * 7 + c.px0, b * 7 + c.py0) > 0.7) o.col = vb + 1;   // wenige dunkle Flecken
+        return;
+      }
+      case 1:   // Auge (zu: Lid in Körperfarbe)
+        if (c.shut) { o.col = vb; o.lit = 0.55; } else { o.col = 3; o.lit = 0.95 - 0.25 * Math.max(0, de / 0.105 - 0.5); }
+        return;
+      case 2: o.col = 5; o.lit = 0.55 + 0.4 * Math.sqrt(Math.max(0, 1 - pq * pq)); return;   // Schallblase, kugelig
+      case 3: case 4: {   // Beine: rund, mit dunklen Ringeln
+        o.lit = (0.3 + 0.5 * Math.sqrt(Math.max(0, 1 - pq * pq)) + 0.12 * pq * side * c.lx) * 0.8;   // etwas dunkler als der Rücken
+        o.col = Math.sin(pt * Math.PI * 2.2 + 1) > 0.7 ? vb + 1 : vb;
+        return;
+      }
+      default: o.col = vb; o.lit = 0.42; return;   // Füße, Hände
+    }
+  },
+  marks(c) {
+    const m = c.mko; m.length = 0;
+    if (!c.shut) m.push([0.33, -0.215, 64, 4, 1], [0.33, 0.215, 64, 4, 1]);   // Pupillen
+    if (c.tg > 0) {   // Zunge: vom Maul zum Ziel und zurück, Spitze klebrig rund
+      const e = c.tg < 0.4 ? c.tg / 0.4 : 1 - (c.tg - 0.4) / 0.6, a0 = 0.47, ta = lerp(a0, c.ta, e), tb = c.tb * e;
+      const n = Math.max(2, Math.ceil(Math.hypot(ta - a0, tb) * c.len / 4));
+      for (let i = 1; i <= n; i++) { const s = i / n; m.push([lerp(a0, ta, s), tb * s, i === n ? 111 : TM.dirGlyph(c, ta - a0, tb), 6, i === n ? 1 : 0.8]); }
+    }
+    return m;
+  },
+};
+})();
 
 // Hai von oben: schlanker Torpedo, spitze Schnauze, große starre Brustflossen, Rückenflosse als Grat,
 // langer Schwanz mit längerem Oberlappen. Zieht tief und ruhig weite Bögen, Futter ist ihm egal.
@@ -1544,6 +1808,167 @@ function edges(c, oc, dt) {
   if (c.x < pad) c.dvx += (pad - c.x) * dt; else if (c.x > oc.W - pad) c.dvx -= (c.x - oc.W + pad) * dt;
   if (c.y < pad) c.dvy += (pad - c.y) * dt; else if (c.y > oc.H - pad) c.dvy -= (c.y - oc.H + pad) * dt;
 }
+})();
+
+// Libellen (Teich): fliegen hoch über dem Wasser (größer, Schatten weit weg), schießen ruckartig von Punkt zu Punkt,
+// stehen kurz in der Luft und landen ab und zu auf einem Seerosenblatt. Die Flügel sind durchscheinend (blasse
+// Kacheln, nur lichter Schatten) und flirren im Flug. Schlanker Hinterleib mit dunklen Ringen, große Augen.
+// Antippen (oder eine Froschzunge): im Zickzack davon.
+(function () {
+const { TAU, clamp, lerp, hash2 } = TM.util;
+const Q = TM.Q || new URLSearchParams('');
+const FLY = 0, HOVER = 1, REST = 2;
+const rnd = (c, k) => hash2(c.seed, (c.rn += 1) * 7919 + k);
+
+// Flügel: Wurzel [a, b], Neigung nach vorn (rad), Länge, größte halbe Breite, wo sie am breitesten ist (0..1)
+const WINGS = [[0.245, 0.035, 0.14, 0.47, 0.05, 0.45], [0.165, 0.035, -0.2, 0.45, 0.064, 0.3]];
+const W = { f: 0, u: 0, v: 0 };
+function wing(a, bb, ra, rb, psi, len, wmax, peak) {
+  const da = a - ra, db = bb - rb, s = Math.sin(psi), co = Math.cos(psi);
+  const u = da * s + db * co, v = da * co - db * s;   // u: längs des Flügels nach außen, v: nach vorn
+  W.u = u / len; W.v = v;
+  if (u <= 0 || u >= len) { W.f = -Math.max(-u, u - len) - Math.abs(v); return W; }
+  const x = W.u, prof = x < peak ? Math.sin(x / peak * Math.PI / 2) : Math.cos((x - peak) / (1 - peak) * Math.PI / 2);
+  const w = wmax * (0.35 + 0.65 * Math.sqrt(Math.max(0, prof)));
+  W.f = w * Math.min(1, 6 * (1 - x)) - Math.abs(v); return W;
+}
+
+const pads = oc => oc.list.filter(d => d.name === 'seerose' && !d.dead);
+const SP = { x: 0, y: 0 };
+function seatPos(c, p) {
+  const ca = Math.cos(p.ang), sa = Math.sin(p.ang), lx = Math.cos(c.sp) * c.sr * p.len, ly = Math.sin(c.sp) * c.sr * p.len;
+  SP.x = p.px + ca * lx - sa * ly; SP.y = p.py + sa * lx + ca * ly; return SP;
+}
+function aim(c, oc, x, y) { const m = 60 * oc.scale; c.tx = clamp(x, m, oc.W - m); c.ty = clamp(y, m, oc.H - m); c.st = FLY; }
+// nächstes Ziel: meist ein Stück weiter in neuer Richtung (scharfe Wende), manchmal auf ein Blatt
+function next(c, oc) {
+  if (c.dart > 0) {
+    c.dart--; const ang = c.th + (rnd(c, 1) < 0.5 ? -1 : 1) * lerp(0.9, 2.2, rnd(c, 2)), d = lerp(90, 200, rnd(c, 3)) * oc.scale;
+    aim(c, oc, c.x + Math.cos(ang) * d, c.y + Math.sin(ang) * d); return;
+  }
+  const ps = pads(oc).filter(p => !oc.list.some(d => d !== c && (d.name === 'frosch' || d.name === 'libelle') && (d.pad === p || d.lpad === p || d.hpad === p)));
+  if (ps.length && rnd(c, 4) < 0.3) {
+    const p = ps[(rnd(c, 5) * ps.length) | 0];
+    c.lpad = p; c.sr = lerp(0.18, 0.38, rnd(c, 6)); c.sp = rnd(c, 7) * TAU; c.sth = rnd(c, 8) * TAU;
+    const s = seatPos(c, p); aim(c, oc, s.x, s.y); return;
+  }
+  c.lpad = null;
+  const ang = c.th + (rnd(c, 9) < 0.5 ? -1 : 1) * lerp(0.7, 2.6, rnd(c, 10)), d = lerp(150, 430, rnd(c, 11)) * oc.scale;
+  let x = c.x + Math.cos(ang) * d, y = c.y + Math.sin(ang) * d;
+  if (x < 80 || x > oc.W - 80 || y < 80 || y > oc.H - 80) { x = lerp(0.15, 0.85, rnd(c, 12)) * oc.W; y = lerp(0.15, 0.85, rnd(c, 13)) * oc.H; }
+  aim(c, oc, x, y);
+}
+// erschrecken (Antippen, Zunge, Finger): im Zickzack davon, vom Blatt sofort auf
+function scare(c, oc, x, y, delay = 0) {
+  const d = Math.hypot(c.x - x, c.y - y) || 1;
+  c.pad = null; c.lpad = null; c.dart = 2 + ((rnd(c, 21) * 2) | 0); c.boost = 1;
+  c.th = Math.atan2(c.y - y, c.x - x) + lerp(-0.5, 0.5, rnd(c, 22));
+  aim(c, oc, c.x + (c.x - x) / d * 170 * oc.scale, c.y + (c.y - y) / d * 170 * oc.scale);
+  c.late = delay;
+}
+
+function update(c, dt, oc) {
+  const sc = oc.scale;
+  c.flap += dt;
+  if (c.solo) return;
+  if (!c.started) { c.started = 1; next(c, oc); }
+  if (c.late > 0) { c.late -= dt; return; }   // die Zunge kommt erst an, dann geht es los
+  // Finger oder Stift kommen zu nah: auf und davon
+  const P = oc.ptr; if (oc.t - P.t < 0.3 && Math.hypot(c.x - P.x, c.y - P.y) < 70 * sc && c.boost < 0.5) scare(c, oc, P.x, P.y);
+  c.boost = Math.max(0, c.boost - dt * 0.6);
+  let alt = 1;
+  if (c.st === REST) {
+    const p = c.pad;
+    if (!p || p.dead) { c.pad = null; next(c, oc); return; }
+    const s = seatPos(c, p); c.x = s.x; c.y = s.y; c.th = p.ang + c.sth; c.vx = c.vy = 0;
+    c.tm -= dt; alt = 0; c.v = c.alt > 0.05 ? 99 : 0;   // sitzt still: jedes zweite Bild reicht
+    if (c.tm <= 0) { c.pad = null; c.st = HOVER; c.tm = 0.5; }
+  } else if (c.st === HOVER) {
+    c.vx *= Math.exp(-dt * 6); c.vy *= Math.exp(-dt * 6); c.v = 99;   // Flügel flirren: jedes Bild
+    c.x += c.vx * dt + Math.sin(oc.t * 2.3 + c.seed) * 3 * dt; c.y += c.vy * dt + Math.cos(oc.t * 1.9 + c.seed) * 3 * dt;
+    c.th += Math.sin(oc.t * 0.9 + c.seed) * 0.25 * dt;
+    c.tm -= dt; if (c.tm <= 0) next(c, oc);
+  } else {
+    let tx = c.tx, ty = c.ty;
+    if (c.lpad) { if (c.lpad.dead) c.lpad = null; else { const s = seatPos(c, c.lpad); tx = s.x; ty = s.y; } }
+    const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy) || 1;
+    const vmax = (120 + 90 * c.boost) * sc * Math.min(1, 0.25 + d / (70 * sc));   // vor dem Ziel abbremsen
+    c.vx += (dx / d * vmax - c.vx) * Math.min(1, dt * 5); c.vy += (dy / d * vmax - c.vy) * Math.min(1, dt * 5);
+    c.x += c.vx * dt; c.y += c.vy * dt; c.v = 99;
+    const sp = Math.hypot(c.vx, c.vy);
+    if (sp > 15) { let da = Math.atan2(c.vy, c.vx) - c.th; da -= Math.round(da / TAU) * TAU; c.th += clamp(da, -9 * dt, 9 * dt); }
+    if (c.lpad && d < 26 * sc) alt = d / (26 * sc);   // im Sinkflug aufs Blatt
+    if (d < 6) {
+      if (c.lpad) { c.pad = c.lpad; c.lpad = null; c.st = REST; c.tm = lerp(4, 11, rnd(c, 31)); c.sth = c.th - c.pad.ang; }
+      else { c.st = HOVER; c.tm = c.dart > 0 ? lerp(0.08, 0.25, rnd(c, 32)) : lerp(0.4, 2, rnd(c, 33)); }
+    }
+  }
+  // Höhe: gleitet zwischen Flug (hoch, größer) und Sitzen (knapp über dem Blatt)
+  c.alt += (alt - c.alt) * Math.min(1, dt * 4);
+  const dep = -0.03 - 0.42 * c.alt;
+  if (Math.abs(dep - c.depth) > 0.004) { c.depth = dep; c.len = c.len0 * (1 + 0.12 * c.alt); oc.resort(); }
+}
+
+TM.kinds.libelle = {
+  label: 'Libelle', count: 2, len: [64, 80], speed: [0, 0], depth: [-0.45, -0.45], rigid: true, ext: 0.54, wext: 0.54, every: 2, slowV: 1,
+  tapTip: 'schießt im Zickzack davon',   // Hinweis beim Antippen (Vorschauseite)
+  //        Flügel     Flügelmal  blau       Ringe      Brust      Augen      rot        Ringe      Brust      Augen
+  colors: ['#cfe3ea', '#3a3f44', '#58b8e6', '#1d3b4f', '#3f8aa6', '#7fd0ff', '#e2533e', '#5a1d16', '#a8402f', '#ff7a5c'],
+  light: ['#7d9aa6', '#22262a', '#1f86c2', '#0f2a3a', '#25627a', '#1b7fd0', '#c23a26', '#3d120d', '#7d2b1e', '#d23b22'],
+  init(c, R) {
+    c.var = c.var || (R() < 0.55 ? 'blau' : 'rot');
+    c.len0 = c.len / (1 + 0.12); c.st = HOVER; c.tm = R() * 1.5; c.tx = c.x; c.ty = c.y; c.vx = 0; c.vy = 0;
+    c.pad = null; c.lpad = null; c.sr = 0; c.sp = 0; c.sth = 0; c.dart = 0; c.boost = 0; c.late = 0; c.alt = 1;
+    c.flap = R() * 10; c.rn = 0; c.started = 0; c.cb = c.var === 'rot' ? 6 : 2;
+    c.wp = new Float32Array(4); c.wl = 1; c.hwA = 0.03; c.rp = 0.2; c.fly = 1;
+    // Testzustand für Probebilder: lpose = rest (Flügel still, knapp über dem Blatt)
+    if (Q.get('lpose')) { c.solo = 1; if (Q.get('lpose') === 'rest') { c.st = REST; c.alt = 0; } }
+  },
+  update,
+  tap(c, oc, x, y) { scare(c, oc, x, y); },
+  scare,
+  prep(c, oc) {
+    // Flügel: im Flug flirren sie (jedes Bild ein anderer Schlagwinkel) und wirken etwas kürzer; sitzend flach und still
+    const fly = c.fly = c.st !== REST || c.alt > 0.2 ? 1 : 0, wp = c.wp;
+    for (let i = 0; i < 4; i++) wp[i] = fly ? (hash2(oc.fn * 4 + i, c.seed) - 0.5) * 0.5 : 0;
+    c.wl = fly ? 0.86 + 0.14 * hash2(oc.fn, c.seed + 7) : 1;
+    // Hinterleib: so dünn wie gezeichnet, aber nie dünner als eine Zelle quer zur Richtung (sonst reißt er ab)
+    c.hwA = 0.5 * (Math.abs(c.hy) * oc.cw + Math.abs(c.hx) * oc.ch) / c.len * 1.02;
+    // Ringe: Abstand nach der Zellgröße längs der Richtung (gut zwei Zellen), sonst trifft jede Zelle dieselbe Stelle
+    c.rp = 2.3 * (Math.abs(c.hx) * oc.cw + Math.abs(c.hy) * oc.ch) / c.len;
+  },
+  cell(a, b, c, o) {
+    const side = b < 0 ? -1 : 1, bb = b * side, cb = c.cb;
+    // Hinterleib: von der Brust bis zur Spitze, schmal, mit dunklen Ringen
+    let f = -1, part = -1, t = 0;
+    if (a < 0.14 && a > -0.52 && bb < 0.08) {
+      const hw = Math.max(c.hwA, lerp(0.026, 0.04, clamp((a + 0.5) / 0.62, 0, 1))), e = Math.min(hw - bb, a + 0.5);
+      if (e > f) { f = e; part = 0; t = (0.13 - a) / 0.62; }
+    }
+    // Brust und Augen
+    const ft = 0.065 - Math.hypot((a - 0.215) * 0.76, bb); if (ft > f) { f = ft; part = 1; }
+    const fe = 0.055 - Math.hypot(a - 0.322, bb - 0.042); if (fe > f) { f = fe; part = 2; }
+    // Flügel (durchscheinend): nur wo nichts vom Körper liegt
+    if (f <= 0 && a > -0.12 && a < 0.5) {
+      for (let i = 0; i < 2; i++) {
+        const G = WINGS[i], ww = wing(a, bb, G[0], G[1], G[2] + c.wp[i * 2 + (side > 0 ? 1 : 0)], G[3] * c.wl, G[4], G[5]);
+        if (ww.f > f) {
+          f = ww.f; o.f = f; if (f <= 0) continue;
+          o.line = 1; o.sh = 1; o.col = 0;
+          o.lit = (ww.v > G[4] * 0.45 ? 0.27 : 0.15) + (c.fly ? 0.06 * hash2(c.seed + i, (a * 40) | 0) : 0);   // Vorderkante etwas kräftiger
+          if (ww.u > 0.8 && ww.u < 0.9 && ww.v > 0) { o.col = 1; o.lit = 0.7; }   // Flügelmal nahe der Spitze
+        }
+      }
+      if (f > 0) return;
+    }
+    o.f = f;
+    if (f <= 0) return;
+    o.line = 1; o.solid = 1;
+    if (part === 0) { const k = ((0.13 - a) / c.rp + 0.7) % 1, ring = k < 0.4 || t > 0.93; o.col = ring ? cb + 1 : cb; o.lit = ring ? 0.6 : 0.85; }   // gleichmäßig hell, dunkle Ringe
+    else if (part === 1) { o.col = cb + 2; o.lit = TM.shade(b / 0.065, c); }
+    else { o.col = cb + 3; o.lit = 0.65 + 0.35 * Math.max(0, 1 - Math.hypot(a - 0.33, bb - 0.05) / 0.055); }
+  },
+};
 })();
 
 // Oktopus von oben: runder Mantel, Augen am Armansatz, acht Arme mit eigener Welle und eingerollten Spitzen,
@@ -2797,7 +3222,7 @@ function place(c, oc) {
   const W = oc.W, H = oc.H, R = c.len * 0.5;
   for (let i = 0; i < 40; i++) {
     let x, y;
-    const near = pads.length && rnd(c, i) < 0.7;
+    const near = pads.length && rnd(c, i) < 0.4;   // meist einzeln, manchmal zu zweit
     if (near) {
       const p = pads[(rnd(c, i + 50) * pads.length) | 0], a = rnd(c, i + 90) * TAU, d = (p.len * 0.5 + R) * (0.95 + 0.12 * rnd(c, i + 130));
       x = p.px + Math.cos(a) * d; y = p.py + Math.sin(a) * d;
@@ -2879,7 +3304,7 @@ function padCell(x, y, c, o) {
 }
 
 TM.kinds.seerose = {
-  label: 'Seerosen', count: 6, len: [70, 150], speed: [1.5, 3.5], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
+  label: 'Seerosen', count: 6, len: [85, 160], speed: [1.5, 3.5], depth: [0, 0], rigid: true, ext: 0.52, wext: 0.52, every: 2,
   tapTip: 'das Blatt wippt, Wellen laufen',   // Hinweis beim Antippen (Vorschauseite)
   //        Blatt      Ader       Blatt dunkel  -          -          -          Welle
   colors: ['#4f7d47', '#7fa463', '#36593a', '#4f7d47', '#4f7d47', '#4f7d47', '#a6cfc8'],
@@ -3015,9 +3440,11 @@ TM.scenes = {
     label: 'Teich',
     theme: { dark: 'teichDark', light: 'teichLight' },
     kinds: [
-      ['seerose', 6],                          // Blätter treiben oben, manche mit Blüte
+      ['seerose', 5],                          // Blätter treiben oben, manche mit Blüte
       ['koi', 3],
       ['schwarm', 10, { var: 'goldfisch', len: 42 }],   // ein Trupp Goldfische, etwas größer als Sardinen, sonst nur Krümel
+      ['frosch', 2],                           // sitzen auf den Blättern (nach den Seerosen, die müssen schon da sein)
+      ['libelle', 2],                          // fliegen hoch über allem
     ],
   },
 };
