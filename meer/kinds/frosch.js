@@ -1,7 +1,7 @@
-// Frösche (Teich): sitzen auf den Seerosenblättern und treiben mit ihnen, quaken (zwei Schallblasen blähen sich
-// seitlich am Kopf auf), springen im Bogen zum nächsten freien Blatt (im Sprung größer, der Schatten rückt weg,
-// das Blatt wippt beim Landen) und schwimmen mit Beinschlägen, wenn sie im Wasser landen. Kommt eine Libelle oder
-// Futter in Reichweite, schnellt die Zunge vor. Antippen: springt weg.
+// Frösche (Teich): schwimmen meist mit Beinschlägen durchs Wasser (ab und zu treiben sie still), klettern ab und zu
+// auf ein freies Seerosenblatt und sitzen dort kurz: treiben mit, quaken (zwei Schallblasen blähen sich seitlich am
+// Kopf auf), dann springen sie im Bogen zurück ins Wasser (im Sprung größer, der Schatten rückt weg, das Blatt
+// wippt). Kommt eine Libelle oder Futter in Reichweite, schnellt die Zunge vor. Antippen: springt bzw. stößt sich weg.
 (function () {
 const { TAU, clamp, lerp, smooth, noise2, hash2 } = TM.util;
 const Q = TM.Q || new URLSearchParams('');
@@ -74,26 +74,37 @@ function waterSpot(c, oc, away) {
   }
   return { x: clamp(c.x + L * 1.8, m, oc.W - m), y: clamp(c.y, m, oc.H - m) };
 }
-function leave(c, oc, away, quick) {
-  const p = freePad(c, oc, c.len0 * 4.6 + 80 * oc.scale, away);
+// vom Blatt springen: meist ins Wasser (vom Blatt weg), selten gleich aufs nächste freie Blatt
+function leave(c, oc, away, quick, toPad) {
+  const p = toPad ? freePad(c, oc, c.len0 * 4.6 + 80 * oc.scale, away) : null;
   if (p) { seatOn(c, p); const s = seatPos(c, p); hop(c, oc, p, s.x, s.y, quick); return; }
   const w = waterSpot(c, oc, away); hop(c, oc, null, w.x, w.y, quick);
+}
+// Zunge nach Libelle oder Futter in Reichweite (vor dem Maul, ±50°); die Libelle entwischt knapp
+function snap(c, oc) {
+  if (c.tcd > 0 || c.tg !== 0 || c.cro > 0) return;
+  const L0 = c.len0, mx = c.x + c.hx * L0 * 0.47, my = c.y + c.hy * L0 * 0.47;
+  let tgt = null, bd = L0 * 2.1;
+  for (const d of oc.list) if (d.name === 'libelle' && d.st !== 2) { const e = Math.hypot(d.x - mx, d.y - my); if (e < bd && ((d.x - mx) * c.hx + (d.y - my) * c.hy) > e * 0.64) { bd = e; tgt = d; } }
+  for (const f of oc.food) { const e = Math.hypot(f.x - mx, f.y - my); if (e < bd && ((f.x - mx) * c.hx + (f.y - my) * c.hy) > e * 0.64) { bd = e; tgt = f; } }
+  if (!tgt) return;
+  c.tg = 1e-3; c.tgt = tgt; c.tgx = tgt.x; c.tgy = tgt.y; c.tcd = lerp(3, 7, rnd(c, 31));
+  if (tgt.kind && TM.kinds.libelle && TM.kinds.libelle.scare) TM.kinds.libelle.scare(tgt, oc, c.x, c.y, 0.12);
 }
 
 function update(c, dt, oc) {
   const L0 = c.len0, sc = oc.scale;
   c.blk -= dt; if (c.blk < -0.16) c.blk = lerp(2.5, 7, rnd(c, 21));
   c.tcd -= dt;
-  if (!c.started) { c.started = 1; if (c.solo) return; const p = freePad(c, oc, 1e9); if (p) { seatOn(c, p); c.pad = p; } else { c.st = SWIM; c.depth = 0.03; c.swT = 0; oc.resort(); } }
   if (c.solo) return;
+  if (!c.started) { c.started = 1; c.swT = lerp(4, 18, rnd(c, 61)); }   // jeder Frosch will zu einer anderen Zeit aufs Blatt
   // Zunge: raus in 0.12 s, zurück in 0.18 s; am weitesten draußen wird Futter gefressen
   if (c.tg > 0) {
     c.tg += dt / 0.3; const T = c.tgt;
-    if (T && T.age != null) { c.tgx = T.x; c.tgy = T.y; if (c.tg > 0.4 && oc.food.includes(T)) oc.eat(T, c); }
-    else if (T) { c.tgx = T.x; c.tgy = T.y; }
+    if (T) { c.tgx = T.x; c.tgy = T.y; if (T.age != null && c.tg > 0.4 && oc.food.includes(T)) oc.eat(T, c); }
     if (c.tg >= 1) { c.tg = 0; c.tgt = null; }
   }
-  if (c.st === SIT) {
+  if (c.st === SIT) {   // kurz auf dem Blatt: quaken, umschauen, dann zurück ins Wasser
     c.v = c.tg > 0 || c.turn || c.cro > 0 ? 99 : 0;   // still sitzen: jedes zweite Bild abtasten reicht (every: 2)
     const p = c.pad;
     if (!p || p.dead) { c.pad = null; c.st = SWIM; c.depth = 0.03; oc.resort(); return; }
@@ -103,23 +114,17 @@ function update(c, dt, oc) {
     c.kk += (0 - c.kk) * Math.min(1, dt * 8); c.ss += (0 - c.ss) * Math.min(1, dt * 3);
     // quaken: Schallblasen pumpen 3–5 Mal, jedes Mal ein kleiner Ring im Wasser
     if (c.cro > 0) { const ph = c.cp; c.cp += dt / 0.42; c.cro -= dt; if (Math.floor(c.cp) > Math.floor(ph)) oc.ripple(c.x, c.y, 0.22, true); }
-    // Zunge nach Libelle oder Futter in Reichweite (vor dem Maul, ±50°)
-    if (c.tcd <= 0 && c.tg === 0 && c.cro <= 0) {
-      const mx = c.x + c.hx * L0 * 0.47, my = c.y + c.hy * L0 * 0.47, reach = L0 * 2.1;
-      let tgt = null, bd = reach;
-      for (const d of oc.list) if (d.name === 'libelle' && d.st !== 2) { const e = Math.hypot(d.x - mx, d.y - my); if (e < bd && ((d.x - mx) * c.hx + (d.y - my) * c.hy) > e * 0.64) { bd = e; tgt = d; } }
-      for (const f of oc.food) { const e = Math.hypot(f.x - mx, f.y - my); if (e < bd && ((f.x - mx) * c.hx + (f.y - my) * c.hy) > e * 0.64) { bd = e; tgt = f; } }
-      if (tgt) {
-        c.tg = 1e-3; c.tgt = tgt; c.tgx = tgt.x; c.tgy = tgt.y; c.tcd = lerp(4, 8, rnd(c, 31));
-        if (tgt.kind && TM.kinds.libelle && TM.kinds.libelle.scare) TM.kinds.libelle.scare(tgt, oc, c.x, c.y, 0.12);   // entwischt knapp
-      }
+    snap(c, oc);
+    c.sitT -= dt;
+    if (c.sitT <= 0 && c.tg === 0 && c.cro <= 0) {
+      const d = Math.hypot(c.x - p.px, c.y - p.py) || 1;
+      leave(c, oc, { x: (c.x - p.px) / d, y: (c.y - p.py) / d }, false, rnd(c, 62) < 0.2); return;
     }
     c.tn -= dt;
     if (c.tn <= 0) {
-      const r = rnd(c, 41); c.tn = lerp(3, 9, rnd(c, 42));
-      if (r < 0.36) { c.cro = lerp(1.2, 2.1, rnd(c, 43)); c.cp = 0; }
-      else if (r < 0.62) c.turn = (rnd(c, 44) < 0.5 ? -1 : 1) * lerp(0.4, 1.3, rnd(c, 45));
-      else if (r < 0.86) leave(c, oc, null, false);
+      const r = rnd(c, 41); c.tn = lerp(1.5, 4, rnd(c, 42));
+      if (r < 0.5) { c.cro = lerp(1.2, 2.1, rnd(c, 43)); c.cp = 0; }
+      else if (r < 0.8) c.turn = (rnd(c, 44) < 0.5 ? -1 : 1) * lerp(0.4, 1.3, rnd(c, 45));
     }
     return;
   }
@@ -139,41 +144,53 @@ function update(c, dt, oc) {
     c.kk = u < 0.12 ? u / 0.12 : u > 0.76 ? Math.max(0.2, 1 - (u - 0.76) / 0.24) : 1;
     if (u >= 1) {
       c.len = L0;
-      if (c.hpad) {   // auf dem Blatt: es wippt unter dem Gewicht
-        const p = c.hpad; c.hpad = null; c.pad = p; c.st = SIT; c.sth = c.th - p.ang; c.depth = -0.02; c.tn = lerp(3, 8, rnd(c, 51));
+      if (c.hpad) {   // auf dem Blatt: es wippt unter dem Gewicht; bleibt nur kurz
+        const p = c.hpad; c.hpad = null; c.pad = p; c.st = SIT; c.sth = c.th - p.ang; c.depth = -0.02;
+        c.sitT = lerp(3.5, 8, rnd(c, 51)); c.tn = lerp(0.8, 2.5, rnd(c, 53));
         p.wob = Math.max(p.wob, 0.75); p.wt2 = 0; oc.ripple(c.x, c.y, 0.3, true);
-      } else { c.st = SWIM; c.depth = 0.03; c.v = 30 * sc; c.sk = 0.3; c.swT = lerp(4, 9, rnd(c, 52)); oc.ripple(c.x, c.y, 0.8); }
+      } else { c.st = SWIM; c.depth = 0.03; c.v = 30 * sc; c.sk = 0.3; c.flt = 0; c.swT = lerp(8, 22, rnd(c, 52)); oc.ripple(c.x, c.y, 0.8); }
       oc.resort();
     }
     return;
   }
-  // schwimmen: Beinschlag (schnell strecken, langsam anziehen), zum nächsten freien Blatt; dort hinaufspringen
+  // schwimmen: Beinschlag (schnell strecken, langsam anziehen), ab und zu still an der Oberfläche treiben;
+  // Futter in der Nähe anschwimmen und schnappen; nach einer Weile zu einem freien Blatt und hinauf
   c.ss += (1 - c.ss) * Math.min(1, dt * 3);
-  const ph = c.sk; c.sk += dt / 1.05; const u = c.sk % 1;
-  if (Math.floor(c.sk) > Math.floor(ph)) c.v += 70 * sc;
-  c.kk = u < 0.26 ? smooth(0, 0.26, u) : 1 - smooth(0.26, 1, u);
-  c.v *= Math.exp(-dt * 1.5);
+  let food = null, fd = 280 * sc;
+  for (const f of oc.food) { const e = Math.hypot(f.x - c.x, f.y - c.y); if (e < fd) { fd = e; food = f; } }
+  if (food) c.flt = 0;
+  if (c.flt > 0) {   // treiben, Beine halb gespreizt
+    c.flt -= dt; c.kk += (0.12 - c.kk) * Math.min(1, dt * 3); c.v *= Math.exp(-dt * 1.4);
+  } else {
+    const ph = c.sk; c.sk += dt / 1.05; const u = c.sk % 1;
+    if (Math.floor(c.sk) > Math.floor(ph)) { if (!food && rnd(c, 71) < 0.12) c.flt = lerp(1.5, 4.5, rnd(c, 72)); else c.v += 70 * sc; }
+    if (c.flt <= 0) c.kk = u < 0.26 ? smooth(0, 0.26, u) : 1 - smooth(0.26, 1, u);
+    c.v *= Math.exp(-dt * 1.5);
+  }
   c.swT -= dt;
-  if (!c.hpad || c.hpad.dead || taken(oc, c.hpad, c)) c.hpad = c.swT <= 0 ? freePad(c, oc, 1e9) : null;
+  if (c.hpad && (c.hpad.dead || taken(oc, c.hpad, c))) c.hpad = null;
+  if (!c.hpad && c.swT <= 0) { c.hpad = freePad(c, oc, 1e9); if (!c.hpad) c.swT = lerp(5, 10, rnd(c, 73)); else c.flt = 0; }
   let tx, ty;
-  if (c.hpad) { const s = seatPos(c, c.hpad); tx = s.x; ty = s.y; }
-  else { tx = c.x + Math.cos(c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2) * 100; ty = c.y + Math.sin(c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2) * 100; }
+  if (food) { tx = food.x; ty = food.y; }
+  else if (c.hpad) { const s = seatPos(c, c.hpad); tx = s.x; ty = s.y; }
+  else { const w = c.th + (noise2(c.seed, oc.t * 0.2) - 0.5) * 2; tx = c.x + Math.cos(w) * 100; ty = c.y + Math.sin(w) * 100; }
   const m = 30 * sc + L0; let want = Math.atan2(ty - c.y, tx - c.x);
   if (c.x < m || c.x > oc.W - m || c.y < m || c.y > oc.H - m) want = Math.atan2(oc.H / 2 - c.y, oc.W / 2 - c.x);
-  turnTo(c, want, 1.6, dt);
+  turnTo(c, want, c.flt > 0 ? 0.3 : 1.6, dt);
   c.x += Math.cos(c.th) * c.v * dt; c.y += Math.sin(c.th) * c.v * dt;
-  if (c.hpad && Math.hypot(tx - c.x, ty - c.y) < c.hpad.len * 0.5 + L0 * 0.35) { const p = c.hpad; seatOn(c, p); const s = seatPos(c, p); hop(c, oc, p, s.x, s.y, true); c.hT = 0.45; }
+  snap(c, oc);
+  if (!food && c.hpad && Math.hypot(tx - c.x, ty - c.y) < c.hpad.len * 0.5 + L0 * 0.35) { const p = c.hpad; seatOn(c, p); const s = seatPos(c, p); hop(c, oc, p, s.x, s.y, true); c.hT = 0.45; }
 }
 
 TM.kinds.frosch = {
-  label: 'Frosch', count: 2, len: [80, 94], speed: [0, 0], depth: [-0.02, -0.02], rigid: true, ext: 1.3, wext: 0.88, every: 2, slowV: 1,
-  tapTip: 'springt im Bogen zum nächsten Blatt',   // Hinweis beim Antippen (Vorschauseite)
+  label: 'Frosch', count: 2, len: [80, 94], speed: [0, 0], depth: [0.03, 0.03], rigid: true, ext: 1.3, wext: 0.88, every: 2, slowV: 1,
+  tapTip: 'springt ins Wasser oder stößt sich weg',   // Hinweis beim Antippen (Vorschauseite)
   //        grün       Flecken    Rückenleiste Iris      Pupille    Schallblase Zunge      braun      Flecken    Leiste
   colors: ['#62a24a', '#2f5b2b', '#a3cf6b', '#e8bf4f', '#151b14', '#dfe9b8', '#e98a98', '#a07a4a', '#5c4126', '#cfae73'],
   light: ['#3f7d2c', '#1e3b1b', '#6c9c3a', '#b8860f', '#101410', '#8ea65c', '#c24f62', '#7a5630', '#3e2a16', '#a07c40'],
   init(c, R) {
     c.var = c.var || (R() < 0.7 ? 'gruen' : 'braun');
-    c.len0 = c.len; c.st = SIT; c.pad = null; c.hpad = null; c.sr = 0; c.sp = 0; c.sth = R() * TAU; c.turn = 0;
+    c.len0 = c.len; c.st = SWIM; c.sitT = 0; c.flt = 0; c.pad = null; c.hpad = null; c.sr = 0; c.sp = 0; c.sth = R() * TAU; c.turn = 0;
     c.tn = lerp(1.5, 6, R()); c.cro = 0; c.cp = 0; c.blk = lerp(1, 6, R()); c.tcd = lerp(2, 6, R()); c.tg = 0; c.tgt = null; c.tgx = 0; c.tgy = 0;
     c.hu = 0; c.pre = 0; c.hT = 1; c.hx0 = 0; c.hy0 = 0; c.hd0 = 0; c.htx = 0; c.hty = 0; c.kk = 0; c.ss = 0; c.sk = 0; c.swT = 0; c.v = 0;
     c.rn = 0; c.started = 0; c.px0 = R() * 97; c.py0 = R() * 89; c.vb = c.var === 'braun' ? 7 : 0;
@@ -185,8 +202,8 @@ TM.kinds.frosch = {
   update,
   tap(c, oc, x, y) {
     const d = Math.hypot(c.x - x, c.y - y) || 1, away = { x: (c.x - x) / d, y: (c.y - y) / d };
-    if (c.st === SIT) leave(c, oc, away, true);
-    else if (c.st === SWIM) { c.v += 110 * oc.scale; c.th = Math.atan2(away.y, away.x); c.sk = Math.floor(c.sk) + 0.01; }
+    if (c.st === SIT) leave(c, oc, away, true, false);
+    else if (c.st === SWIM) { c.v += 110 * oc.scale; c.th = Math.atan2(away.y, away.x); c.sk = Math.floor(c.sk) + 0.01; c.flt = 0; }
   },
   prep(c, oc) {
     // Gelenke der aktuellen Haltung: Sitzen ↔ gespreizt (Schwimmen), dazu gestreckt (Sprung, Beinschlag)
