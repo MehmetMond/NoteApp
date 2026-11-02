@@ -347,8 +347,9 @@ class Ocean {
   }
   eat(p, c) { const i = this.food.indexOf(p); if (i >= 0) this.food.splice(i, 1); this.ripple(p.x, p.y, 0.35); }
   // under: Welle unter den Tieren malen (nur im Wasser sichtbar), z. B. beim Antippen eines Tiers
-  // r0: Ring beginnt schon so weit draußen (px), z. B. um einen Frosch herum statt unter ihm
-  ripple(x, y, s = 1, under = false, r0 = 0) { this.rip.push({ x, y, age: 0, s, life: 1.6 + s * 1.2, under, r0 }); }
+  // Wellenring. Er läuft immer unter den Tieren (übers Wasser zwischen ihnen), nie durch einen Körper; under ist
+  // nur noch der Vollständigkeit halber da. r0: Ring beginnt schon so weit draußen (px), z. B. um einen Frosch herum
+  ripple(x, y, s = 1, under = true, r0 = 0) { this.rip.push({ x, y, age: 0, s, life: 1.6 + s * 1.2, under, r0 }); }
   hit(x, y) {
     const q = Math.floor(x / this.cw), r = Math.floor(y / this.ch);
     for (const [dq, dr] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
@@ -585,9 +586,8 @@ class Ocean {
       }
     }
   }
-  drawRipples(under) {
+  drawRipples() {
     for (const w of this.rip) {
-      if (!w.under !== !under) continue;
       const f = w.age / w.life, lv = clamp(Math.round((1 - f) * (LV - 1) * (0.55 + 0.45 * w.s)), 0, LV - 1); if (!lv) continue;
       this.ring(w.x, w.y, w.r0 + (4 + w.age * 42) * w.s * this.scale + 3, this.ripCol[lv]);
       if (w.age > 0.4 && lv > 2) this.ring(w.x, w.y, w.r0 + (4 + (w.age - 0.4) * 34) * w.s * this.scale + 3, this.ripCol[lv - 2]);
@@ -630,13 +630,13 @@ class Ocean {
     for (const c of this.list) this.shadow(c);
     const fx = this.fx.filter(e => e.under);
     for (const e of fx) e.draw(this);
-    this.drawWakes(); this.drawRipples(true);
+    this.drawWakes(); this.drawRipples(); this.drawBubbles();   // Wasser: alles unter den Tieren
     // Tiere von tief nach flach, Effekte mit Tiefe dazwischen
     const over = this.fx.filter(e => !e.under).sort((p, q) => q.depth - p.depth);
     let j = 0;
     for (const c of this.list) { while (j < over.length && over[j].depth > c.depth) over[j++].draw(this); this.write(c); }
     while (j < over.length) over[j++].draw(this);
-    this.drawBubbles(); this.drawFood(); this.drawRipples(false); this.dtR = 0;
+    this.drawFood(); this.dtR = 0;
     this.blit(); this.fn++;
     this.stats.ms = this.stats.ms * 0.9 + (performance.now() - t0) * 0.1;
   }

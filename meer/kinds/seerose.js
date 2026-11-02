@@ -102,7 +102,7 @@ function tapPad(c, oc, x, y) {
   const k = c.kind, R0 = c.len * 0.5, cx = c.x, cy = c.y;
   for (let i = 0; i < 2; i++) {
     let age = -i * 0.45;
-    oc.fx.push({ depth: c.depth + 0.003, under: false,
+    oc.fx.push({ depth: c.depth + 0.003, under: true,   // unter allen Tieren: die Welle läuft nicht durch Fische
       update(dt) { age += dt; return age < 2.6; },
       draw(oc) { if (age < 0) return; const f = age / 2.6, lv = clamp(Math.round((1 - f) * 6), 0, 7); if (lv) oc.ring(cx, cy, R0 * (0.98 + age * 0.38) + age * 8, oc.pal(k)[6][lv]); } });
   }
