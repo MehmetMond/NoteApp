@@ -1,5 +1,11 @@
 # Notizen für das Surface Pro 11 (Version 1.5.8)
 
+## Bald in 1.6.0: Aquarium auf der Startseite (schon in der Browser-Version zum Ausprobieren)
+- **Tiere im Hintergrund:** Hinter dem Regal und den Seiten schwimmt ein Meer aus Schriftzeichen, von oben gesehen: Hai, Mantarochen, Quallen, Meeresschildkröte, Kugelfisch, Oktopus und ein Sardinenschwarm. Im **Teich** sind es Seerosen, Koi und Goldfische. Jedes Tier ist aus kleinen farbigen Kacheln mit Zeichen darauf gebaut, mit Schatten; am Rand und in der Tiefe wirken sie durchscheinend.
+- **Mitmachen:** Ins Wasser tippen streut Futter, die Fische schwimmen hin. Ein Tier antippen lässt es reagieren: der Kugelfisch bläst sich auf, der Oktopus spritzt Tinte, die Schildkröte zieht den Kopf ein, der Schwarm stiebt auseinander. Maus und Stift scheuchen die Fische. Bücher und Seiten öffnen sich beim Antippen wie immer.
+- **Einstellen:** Knopf **Aquarium** oben auf der Startseite: Aus, Meer oder Teich, dazu der Stil Kacheln oder Linien (feine Striche aus Zeichen). Hell und dunkel folgen dem Darkmode.
+- **Akku:** Es läuft nur, solange die Startseite zu sehen ist, mit 15 Bildern pro Sekunde, und malt nur, was sich bewegt. Beim Schreiben, im Hintergrund und während der Buch-Animation steht es still; mit „Animationen reduzieren“ in Windows bleibt es ein stehendes Bild. Wer ganz sparen will, stellt es auf Aus.
+
 ## Neu in 1.5.8: Tape mit Figuren, Knopf für die Einstellungen
 - **Tape mit Figuren:** drei neue Muster, **Kätzchen** (im Stil von Hello Kitty), **Hündchen** (im Stil von Cinnamoroll) und **Teufelchen** (im Stil von Kuromi). Die Figuren laufen wie bei gedrucktem Washi-Tape entlang des Tapes, folgen Bögen und stehen nie auf dem Kopf; dazwischen kleine Verzierungen (Schleifen, Sterne, Totenköpfe). Auswahl im Menü des Tapes (gewählte Dicke nochmal antippen) unter „Muster“: die einfachen Muster in der ersten Reihe, die Figuren in der zweiten. Dickere Tapes zeigen größere Figuren.
 - **Passende Farbe gleich mit:** Wer eine Figur wählt, bekommt ihre Tape-Farbe dazu: Kätzchen Rosa, Hündchen Hellblau, Teufelchen Lila. Danach lässt sich die Farbe wie immer frei ändern.
@@ -106,6 +112,7 @@
 | Exportieren | „⋯“: Als PDF exportieren oder Als Bild exportieren (PNG) |
 | Hintergrund | Punkte-Knopf: Punkte, Kariert, Liniert, Leer |
 | Darkmode | Mond-Knopf |
+| Aquarium | Startseite, Fisch-Knopf: Meer, Teich oder Aus, Stil Kacheln oder Linien; ins Wasser tippen gibt Futter |
 | Vollbild | „⋯“ → Vollbild oder F11 (ohne Titelleiste und Taskleiste), Esc beendet es |
 
 Der Handballen wird beim Schreiben ignoriert. Wer mit dem Finger zeichnen will, schaltet das unter „⋯“ ein.

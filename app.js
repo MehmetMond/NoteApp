@@ -2431,6 +2431,7 @@ function applyDark() {
   $('#hDark span').textContent = S.dark ? 'Hellmodus' : 'Darkmode';
   patCache.clear(); clearTiles(); renderColors();
   if (S.note) { draw(); drawLive(); }
+  seaDark();
 }
 function toggleDark() { S.dark = !S.dark; store.set('dark', S.dark); applyDark(); }
 $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
@@ -3098,9 +3099,10 @@ let homeAnim = false;
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 async function animate(fn) {
   homeAnim = navBusy = true;   // gilt als Navigation: nichts anderes öffnen, bis es fertig ist
+  seaRun();   // das Meer hält solange still: das Standbild der Startseite zeigt genau sein letztes Bild
   const fx = document.createElement('div'); fx.id = 'fx'; document.body.appendChild(fx);   // fängt Klicks ab, solange es läuft
   try { await fn(fx); } catch (e) { console.error(e); renderHome(); }
-  finally { fx.remove(); homeAnim = navBusy = false; }
+  finally { fx.remove(); homeAnim = navBusy = false; seaRun(); }
 }
 // Warten auf der Zeitachse der Animationen (läuft genau mit ihnen, nicht mit setTimeout daneben)
 const wait = ms => document.documentElement.animate([], { duration: Math.max(0, ms) }).finished;
@@ -3275,6 +3277,7 @@ function snapshot(fx) {
   const g = $('#grid'), s = $('#home').cloneNode(true);
   s.classList.add('fxsnap'); fx.prepend(s);
   s.querySelector('#grid').scrollTop = g.scrollTop;
+  const sc = s.querySelector('#sea canvas'); if (sc && sea.oc) sc.getContext('2d').drawImage(sea.oc.cv, 0, 0);   // Kopie zeigt sonst leeres Wasser
   return s;
 }
 // Bilder der neuen Ansicht fertig dekodieren, bevor sich etwas bewegt (höchstens 200 ms warten)
@@ -3409,6 +3412,7 @@ async function warmUpBookFx() {
   try {
     // wie beim echten Öffnen: unten die Buchansicht (Kopf und Seitenkarten), darüber das Regal, das ausblendet
     const view = $('#home').cloneNode(true), shelf = $('#home').cloneNode(true), vg = view.querySelector('#grid');
+    for (const h of [view, shelf]) h.querySelector('#sea').remove();   // unsichtbar: die große Leinwand nicht mitkopieren
     vg.innerHTML = ''; if (book.id) renderBook(vg, book, homeData.notes, view);
     fx.append(view, shelf);
     shelf.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, fill: 'forwards' });
@@ -3746,8 +3750,83 @@ $('#fRestore').onchange = async e => {
 document.addEventListener('visibilitychange', () => { if (document.hidden && S.note) flushNote(); });
 window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
 
+/* ---------- Meer im Hintergrund der Startseite ---------- */
+// Tintenmeer (meer/, setzt build.py ein): Tiere aus Schriftzeichen schwimmen hinter Regal und Seiten. Es läuft nur,
+// solange die Startseite zu sehen ist (nicht im Editor, nicht im Hintergrund, nicht während einer Buch-Animation;
+// bei „Bewegung reduzieren“ steht es still), mit 15 Bildern/s, gemalt werden nur geänderte Zellen.
+// Ins Wasser tippen streut Futter, ein Tier antippen lässt es reagieren, Maus und Stift scheuchen die Fische.
+const SEA_SCENES = [['off', 'Aus'], ['meer', 'Meer'], ['teich', 'Teich']], SEA_STYLES = [['tiles', 'Kacheln'], ['lines', 'Linien']];
+const sea = { scene: 'meer', style: 'tiles', oc: null, w: 0, h: 0, down: null, rt: 0 };
+{
+  const v = store.get('sea', {}) || {};
+  if (SEA_SCENES.some(([k]) => k === v.scene)) sea.scene = v.scene;
+  if (SEA_STYLES.some(([k]) => k === v.style)) sea.style = v.style;
+}
+const seaReady = () => !!(window.TM && TM.Ocean && TM.scenes);   // ohne build.py (app.src.html direkt) fehlt das Meer
+// Kacheln: größere Zellen, damit Kästchen und Zeichen gut zu sehen sind; Linien: feiner Strich aus Zeichen
+const seaOpt = () => sea.style === 'tiles' ? { tiles: true, font: 11, lh: 1.05 } : { tiles: false, font: 8, lh: 1.1 };
+const seaTheme = () => TM.themeFor(sea.scene, S.dark ? 'dark' : 'light');
+// an, wenn eingeschaltet und die Startseite zu sehen ist; sonst angehalten (aus: ganz abgebaut)
+function seaRun() {
+  const home = $('#home'), box = $('#sea'), want = sea.scene !== 'off' && seaReady();
+  home.classList.toggle('sea', want); box.classList.toggle('hidden', !want);
+  if (!want) { if (sea.oc) { sea.oc.stop(); sea.oc.cv.remove(); sea.oc = null; } return; }
+  if (home.classList.contains('hidden') || document.hidden || homeAnim) { if (sea.oc) sea.oc.stop(); return; }
+  if (!sea.oc) {
+    sea.oc = new TM.Ocean(box, Object.assign({ theme: seaTheme(), seed: (Date.now() % 1e5) | 0 }, seaOpt()));
+    TM.populate(sea.oc, sea.scene); sea.w = box.clientWidth; sea.h = box.clientHeight;
+  } else if (box.clientWidth !== sea.w || box.clientHeight !== sea.h) {   // Fenster hat sich geändert, solange es weg war
+    sea.w = box.clientWidth; sea.h = box.clientHeight; sea.oc.layout(); sea.oc.full = true;
+  }
+  if (reduceMotion()) { sea.oc.stop(); sea.oc.render(); } else sea.oc.start();
+}
+function seaSet(scene, style) {
+  const newScene = scene && scene !== sea.scene, newStyle = style && style !== sea.style;
+  if (scene) sea.scene = scene; if (style) sea.style = style;
+  store.set('sea', { scene: sea.scene, style: sea.style });
+  if (sea.oc && sea.scene !== 'off') {
+    if (newStyle) { Object.assign(sea.oc.opt, seaOpt()); sea.oc.layout(); }
+    if (newScene) { sea.oc.clear(); TM.populate(sea.oc, sea.scene); sea.oc.setTheme(seaTheme()); }
+    sea.oc.full = true;
+  }
+  seaRun();
+  if (sea.oc && !sea.oc.on) sea.oc.render();
+}
+function seaDark() {
+  if (!sea.oc) return;
+  sea.oc.setTheme(seaTheme()); sea.oc.full = true;
+  if (!sea.oc.on && !$('#home').classList.contains('hidden')) sea.oc.render();
+}
+function seaMenu() {
+  const items = () => [
+    ...SEA_SCENES.map(([k, l]) => ({ icon: sea.scene === k ? 'ic-check' : 'ic-blank', label: l, keep: true, run: () => { seaSet(k); fillMenu(items()); } })),
+    '-',
+    ...SEA_STYLES.map(([k, l]) => ({ icon: sea.style === k ? 'ic-check' : 'ic-blank', label: l, keep: true, run: () => { seaSet(null, k); fillMenu(items()); } })),
+  ];
+  homeMenu($('#hSea'), 'sea', items());
+}
+$('#hSea').onclick = seaMenu;
+// Tippen ins Wasser, nicht auf Bücher, Seiten oder Knöpfe: kurzer Druck ohne Bewegung (Wischen rollt nur das Regal).
+// Schließt der Tipp nur ein offenes Menü (homeSwallow), gibt es kein Futter.
+const seaWater = e => !e.target.closest('button,input,a,.book,.card,.addtile,.menu,#dlg');
+$('#home').addEventListener('pointerdown', e => {
+  if (!sea.oc) return;
+  sea.down = !homeSwallow && seaWater(e) ? { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId } : null;
+  sea.oc.point(e.clientX, e.clientY);
+});
+$('#home').addEventListener('pointermove', e => { if (sea.oc && sea.oc.on) sea.oc.point(e.clientX, e.clientY); }, { passive: true });
+$('#home').addEventListener('pointerup', e => {
+  const d = sea.down; sea.down = null;
+  if (!sea.oc || !d || d.id !== e.pointerId || !seaWater(e)) return;
+  if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 12 && performance.now() - d.t < 600) { sea.oc.tap(e.clientX, e.clientY); if (!sea.oc.on) sea.oc.render(); }
+});
+new MutationObserver(seaRun).observe($('#home'), { attributes: true, attributeFilter: ['class'] });   // Editor auf/zu
+document.addEventListener('visibilitychange', seaRun);
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', seaRun);
+addEventListener('resize', () => { clearTimeout(sea.rt); sea.rt = setTimeout(seaRun, 150); });
+
 /* ---------- Start ---------- */
-applyDark();
+applyDark(); seaRun();
 openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome().then(scheduleWarmUp); })
   .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
 // Browser-Version im Netz (GitHub Pages): Offline-Start über sw.js; das Windows-Programm lädt die Datei lokal
