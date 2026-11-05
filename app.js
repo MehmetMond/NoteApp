@@ -2143,7 +2143,7 @@ function setTool(t) {
   if (GROUP[t]) setGroupTool(t);
   $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   if (t !== 'lasso') clearSel();
-  $('#sizeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
+  $('#sizeMenu').classList.add('hidden'); $('#colorMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes(); fitBar();
 }
@@ -2178,13 +2178,120 @@ function renderColors() {
     box.appendChild(b);
   }
   const custom = !(k === 'tape' ? TAPE_PALETTE : PALETTE).includes(S.color[k]);
-  const cb = document.createElement('label'); cb.className = 'sw custom' + (custom ? ' on' : ''); cb.title = 'Eigene Farbe';
+  const cb = document.createElement('button'); cb.className = 'sw custom' + (custom ? ' on has' : ''); cb.title = 'Eigene Farbe';
   if (custom) cb.style.background = S.color[k];
-  const inp = document.createElement('input'); inp.type = 'color'; inp.value = custom ? S.color[k] : '#3366ff';
-  inp.oninput = () => { S.color[k] = inp.value; cb.style.background = inp.value; };
-  inp.onchange = pick;
-  cb.appendChild(inp); box.appendChild(cb);
+  cb.onclick = openColorMenu;
+  box.appendChild(cb);
 }
+
+/* Eigene Farbe: ein Farbwähler im Stil der App statt des Fensters von Windows/Chrome. Feld für Sättigung (nach
+   rechts) und Helligkeit (nach oben), darunter der Farbton; Ziehen mit Stift, Finger oder Maus gilt sofort (der
+   nächste Strich hat die Farbe schon), gespeichert wird beim Loslassen. Dazu die zuletzt benutzten eigenen Farben
+   und abgestimmte Vorschläge (kräftig, sanft, gedeckt; auf hellem und dunklem Papier gut zu sehen). */
+const CP_SUGGEST = [
+  '#dc4a4a', '#e8793a', '#e3a72f', '#4c9a4f', '#1f9a8f', '#3576d4', '#6a5acd', '#c7457f',
+  '#f3a5a5', '#f6c29a', '#f2dc85', '#b4dba6', '#a3dbd3', '#a9c7ee', '#c8bdf0', '#efb6d3',
+  '#8c6a54', '#b39672', '#7f8f62', '#5d8a87', '#617b9b', '#83769f', '#9b6f84', '#7c8189',
+];
+const cp = { h: 215, s: 0.6, v: 0.8, hex: '#3576d4', k: 'pen', drag: null };
+let recentColors = (store.get('recentColors', []) || []).filter(c => /^#[0-9a-f]{6}$/.test(c)).slice(0, 8);
+const hsvHex = (h, s, v) => {
+  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return '#' + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+};
+const hexRgb = hex => { const n = parseInt(hex.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+// Farbe übernehmen; bei Grau (keine Sättigung) bleibt der Farbton, sonst spränge die Leiste an den Anfang
+function cpFrom(hex) {
+  const [r, g, b] = hexRgb(hex).map(x => x / 255), mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  if (d > 1e-4) cp.h = 60 * (mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4);
+  cp.s = mx ? d / mx : 0; cp.v = mx; cp.hex = hex;
+}
+function cpShow() {
+  const hex = cp.hex, f = $('#cpField'), knob = $('#cpKnob'), hk = $('#cpHueKnob');
+  f.style.setProperty('--hue', `hsl(${cp.h} 100% 50%)`);
+  knob.style.left = cp.s * 100 + '%'; knob.style.top = (1 - cp.v) * 100 + '%'; knob.style.background = hex;
+  hk.style.left = cp.h / 360 * 100 + '%'; hk.style.background = `hsl(${cp.h} 100% 50%)`;
+  $('#cpHue').setAttribute('aria-valuenow', Math.round(cp.h));
+  $('#cpChip').style.background = hex;
+  if (document.activeElement !== $('#cpHex')) $('#cpHex').value = hex;
+  $$('#colorMenu .cpsw button').forEach(b => b.classList.toggle('on', b.dataset.c === hex));
+}
+// zuletzt benutzt: vorne die neueste; fast gleiche Farbe (beim Nachstellen) ersetzt die vorige statt sich anzureihen
+function cpRemember(hex) {
+  const near = (a, b) => { const p = hexRgb(a), q = hexRgb(b); return Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) < 24; };
+  if (recentColors[0] && near(recentColors[0], hex)) recentColors.shift();
+  recentColors = [hex, ...recentColors.filter(c => c !== hex)].slice(0, 8);
+  store.set('recentColors', recentColors);
+}
+function cpRows() {
+  const fill = (box, list) => {
+    box.innerHTML = '';
+    for (const c of list) {
+      const b = document.createElement('button'); b.dataset.c = c; b.style.background = c; b.title = c.toUpperCase();
+      b.onclick = () => { cpFrom(c); cpApply(true, c); };
+      box.appendChild(b);
+    }
+  };
+  fill($('#cpRecent'), recentColors); fill($('#cpSugg'), CP_SUGGEST);
+  $('#cpRecentBox').hidden = !recentColors.length;
+}
+// gilt sofort für das Werkzeug; commit: speichern, merken und die Leiste neu zeichnen. exact: genau dieser Farbwert
+// (Vorschlag, eingetippt), sonst der aus Farbton, Sättigung und Helligkeit
+function cpApply(commit, exact) {
+  const hex = cp.hex = exact || hsvHex(cp.h, cp.s, cp.v), sw = $('#colors .sw.custom');
+  S.color[cp.k] = hex;
+  if (sw) { sw.style.background = hex; $$('#colors .sw').forEach(b => b.classList.toggle('on', b === sw)); sw.classList.add('has'); }
+  if (commit) { store.set('color', S.color); cpRemember(hex); cpRows(); renderColors(); }
+  cpShow();
+}
+function openColorMenu() {
+  const m = $('#colorMenu'), was = !m.classList.contains('hidden'); closeMenus(); if (was) return;
+  if (!penLike()) setTool(toolKind());   // vom Radierer aus: zurück zum Stift (wie die anderen Farben)
+  const k = cp.k = toolKind(), cur = S.color[k], pal = k === 'tape' ? TAPE_PALETTE : PALETTE;
+  // Start: die gewählte Farbe (zum Abwandeln); die zuletzt benutzten eigenen stehen darunter zum Antippen
+  cpFrom(pal.includes(cur) ? colorOf(cur) : cur);
+  cpRows(); m.classList.remove('hidden'); cpShow();
+  // unter der ganzen Leiste, mittig unter dem Punkt (wie die Einstellungen des Werkzeugs); in niedrigen Fenstern scrollbar
+  const r = $('#colors .sw.custom').getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 8;
+  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
+  m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
+}
+// Ziehen im Feld bzw. auf der Leiste (Stift, Finger, Maus); der Zeiger bleibt gefangen, auch wenn er hinausfährt
+function cpDrag(el, set) {
+  el.addEventListener('pointerdown', e => {
+    if (cp.drag != null) return;
+    e.preventDefault(); el.setPointerCapture(e.pointerId); cp.drag = e.pointerId;
+    const at = ev => { const r = el.getBoundingClientRect(); set(clamp((ev.clientX - r.left) / r.width, 0, 1), clamp((ev.clientY - r.top) / r.height, 0, 1)); cpApply(false); };
+    const move = ev => { if (ev.pointerId === cp.drag) at(ev); };
+    const up = ev => {
+      if (ev.pointerId !== cp.drag) return;
+      cp.drag = null; el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      cpApply(true);
+    };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    at(e);
+  });
+}
+cpDrag($('#cpField'), (x, y) => { cp.s = x; cp.v = 1 - y; });
+cpDrag($('#cpHue'), x => { cp.h = x * 360; });
+// Tastatur: Pfeile verschieben (mit Umschalt in großen Schritten)
+$('#cpField').addEventListener('keydown', e => {
+  const d = e.shiftKey ? 0.1 : 0.02, m = { arrowleft: [-d, 0], arrowright: [d, 0], arrowup: [0, d], arrowdown: [0, -d] }[e.key.toLowerCase()];
+  if (!m) return; e.preventDefault(); cp.s = clamp(cp.s + m[0], 0, 1); cp.v = clamp(cp.v + m[1], 0, 1); cpApply(true);
+});
+$('#cpHue').addEventListener('keydown', e => {
+  const d = { arrowleft: -1, arrowdown: -1, arrowright: 1, arrowup: 1 }[e.key.toLowerCase()];
+  if (!d) return; e.preventDefault(); cp.h = clamp(cp.h + d * (e.shiftKey ? 15 : 2), 0, 360); cpApply(true);
+});
+// Farbwert eintippen: #3a7bd5 oder kurz #3ad; gilt, sobald er vollständig ist
+$('#cpHex').addEventListener('input', e => {
+  let v = e.target.value.trim().toLowerCase(); if (v[0] !== '#') v = '#' + v;
+  if (/^#[0-9a-f]{3}$/.test(v)) v = '#' + [...v.slice(1)].map(x => x + x).join('');
+  if (/^#[0-9a-f]{6}$/.test(v)) { cpFrom(v); cpApply(false, v); }
+});
+$('#cpHex').addEventListener('change', () => cpApply(true, cp.hex));
+$('#cpHex').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+$('#cpHex').addEventListener('blur', cpShow);   // Unvollständiges verwerfen: wieder die gewählte Farbe zeigen
 const fmtSize = v => String(v).replace('.', ',');
 const fmtSmooth = v => v ? Math.round(v * 100) + ' %' : 'Aus';
 const dotPx = (k, v) => k === 'tape' ? clamp(2 + v * 0.42, 6, 26) : k === 'hl' ? clamp(2 + v * 0.55, 4, 26) : clamp(1.5 + v * 1.65, 3, 24);
@@ -2445,7 +2552,7 @@ function openMenu(menu, btn) {
   menu.style.left = clamp(r.right - menu.offsetWidth, 8, innerWidth - menu.offsetWidth - 8) + 'px';
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
