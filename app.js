@@ -2179,7 +2179,7 @@ function renderColors() {
   }
   const custom = !(k === 'tape' ? TAPE_PALETTE : PALETTE).includes(S.color[k]);
   const cb = document.createElement('button'); cb.className = 'sw custom' + (custom ? ' on has' : ''); cb.title = 'Eigene Farbe';
-  if (custom) cb.style.background = S.color[k];
+  if (custom) cb.style.setProperty('--cc', S.color[k]);   // innen die Farbe, außen der Regenbogen-Ring (CSS)
   cb.onclick = openColorMenu;
   box.appendChild(cb);
 }
@@ -2223,49 +2223,72 @@ function cpRemember(hex) {
   recentColors = [hex, ...recentColors.filter(c => c !== hex)].slice(0, 8);
   store.set('recentColors', recentColors);
 }
-function cpRows() {
-  const fill = (box, list) => {
-    box.innerHTML = '';
-    for (const c of list) {
-      const b = document.createElement('button'); b.dataset.c = c; b.style.background = c; b.title = c.toUpperCase();
-      b.onclick = () => { cpFrom(c); cpApply(true, c); };
-      box.appendChild(b);
-    }
-  };
-  fill($('#cpRecent'), recentColors); fill($('#cpSugg'), CP_SUGGEST);
-  $('#cpRecentBox').hidden = !recentColors.length;
+// kleines Federn (angetippter Tupfer, neue Farbe in „Zuletzt“, Punkt in der Leiste)
+function cpPop(el, from = 0.7) {
+  if (el && !reduceMotion()) el.animate([{ transform: `scale(${from})` }, { transform: 'none' }], sp(spring(0.5, 420)));
 }
+function cpSwatch(c) {
+  const b = document.createElement('button'); b.dataset.c = c; b.style.background = c; b.title = c.toUpperCase();
+  b.onclick = () => { cpFrom(c); cpApply(true, c); if (b.isConnected) cpPop(b); };
+  return b;
+}
+// Vorschläge stehen fest; „Zuletzt“ ist immer da (leer mit Hinweis), damit beim ersten Mal nichts unter dem
+// Finger wegrutscht. pop: die neue vorderste Farbe ploppt herein
+function cpRecentRow(pop) {
+  const box = $('#cpRecent'); box.innerHTML = '';
+  if (!recentColors.length) { box.innerHTML = '<span class="cpempty">Hier erscheinen deine eigenen Farben</span>'; return; }
+  for (const c of recentColors) box.appendChild(cpSwatch(c));
+  if (pop) cpPop(box.firstChild, 0.2);
+}
+CP_SUGGEST.forEach(c => $('#cpSugg').appendChild(cpSwatch(c)));
 // gilt sofort für das Werkzeug; commit: speichern, merken und die Leiste neu zeichnen. exact: genau dieser Farbwert
 // (Vorschlag, eingetippt), sonst der aus Farbton, Sättigung und Helligkeit
 function cpApply(commit, exact) {
   const hex = cp.hex = exact || hsvHex(cp.h, cp.s, cp.v), sw = $('#colors .sw.custom');
   S.color[cp.k] = hex;
-  if (sw) { sw.style.background = hex; $$('#colors .sw').forEach(b => b.classList.toggle('on', b === sw)); sw.classList.add('has'); }
-  if (commit) { store.set('color', S.color); cpRemember(hex); cpRows(); renderColors(); }
+  if (sw) { sw.style.setProperty('--cc', hex); $$('#colors .sw').forEach(b => b.classList.toggle('on', b === sw)); sw.classList.add('has'); }
+  if (commit) { const first = recentColors[0]; store.set('color', S.color); cpRemember(hex); cpRecentRow(recentColors[0] !== first); renderColors(); }
   cpShow();
 }
 function openColorMenu() {
-  const m = $('#colorMenu'), was = !m.classList.contains('hidden'); closeMenus(); if (was) return;
+  const m = $('#colorMenu'), was = !m.classList.contains('hidden') && !m.dataset.closing; closeMenus(); if (was) return;
   if (!penLike()) setTool(toolKind());   // vom Radierer aus: zurück zum Stift (wie die anderen Farben)
   const k = cp.k = toolKind(), cur = S.color[k], pal = k === 'tape' ? TAPE_PALETTE : PALETTE;
   // Start: die gewählte Farbe (zum Abwandeln); die zuletzt benutzten eigenen stehen darunter zum Antippen
   cpFrom(pal.includes(cur) ? colorOf(cur) : cur);
-  cpRows(); m.classList.remove('hidden'); cpShow();
+  m.getAnimations().forEach(a => a.cancel()); delete m.dataset.closing;   // war es gerade beim Schließen
+  cpRecentRow(); m.classList.remove('hidden'); cpShow();
   // unter der ganzen Leiste, mittig unter dem Punkt (wie die Einstellungen des Werkzeugs); in niedrigen Fenstern scrollbar
-  const r = $('#colors .sw.custom').getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 8;
-  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
-  m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
+  const sw = $('#colors .sw.custom'), r = sw.getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 8;
+  const left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8);
+  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px'; m.style.left = left + 'px';
+  if (reduceMotion()) return;
+  // Auftritt: die Karte federt aus dem Punkt heraus, die Farbtupfer ploppen kurz nacheinander auf
+  m.style.transformOrigin = `${r.left + r.width / 2 - left}px -12px`;
+  m.animate([{ transform: 'scale(.5)' }, { transform: 'none' }], sp(spring(0.42, 500)));
+  m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
+  cpPop(sw, 0.8);
+  $$('#colorMenu .cpsw button').forEach((b, i) => b.animate([{ transform: 'scale(.2)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+    sp(spring(0.45, 420), { delay: 90 + i * 9, fill: 'backwards' })));
+}
+// Abgang: kurz zusammen und ausblenden (bei „Bewegung reduzieren“ sofort)
+function cpClose(m) {
+  if (m.classList.contains('hidden') || m.dataset.closing) return;
+  if (reduceMotion()) { m.classList.add('hidden'); return; }
+  m.dataset.closing = '1';
+  m.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.94)' }], { duration: 120, easing: 'ease-in', fill: 'forwards' })
+    .onfinish = () => { if (m.dataset.closing) { delete m.dataset.closing; m.classList.add('hidden'); } };
 }
 // Ziehen im Feld bzw. auf der Leiste (Stift, Finger, Maus); der Zeiger bleibt gefangen, auch wenn er hinausfährt
 function cpDrag(el, set) {
   el.addEventListener('pointerdown', e => {
     if (cp.drag != null) return;
-    e.preventDefault(); el.setPointerCapture(e.pointerId); cp.drag = e.pointerId;
+    e.preventDefault(); el.setPointerCapture(e.pointerId); cp.drag = e.pointerId; el.classList.add('drag');   // Griff wird größer
     const at = ev => { const r = el.getBoundingClientRect(); set(clamp((ev.clientX - r.left) / r.width, 0, 1), clamp((ev.clientY - r.top) / r.height, 0, 1)); cpApply(false); };
     const move = ev => { if (ev.pointerId === cp.drag) at(ev); };
     const up = ev => {
       if (ev.pointerId !== cp.drag) return;
-      cp.drag = null; el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      cp.drag = null; el.classList.remove('drag'); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
       cpApply(true);
     };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
@@ -2543,7 +2566,7 @@ function applyDark() {
 function toggleDark() { S.dark = !S.dark; store.set('dark', S.dark); applyDark(); }
 $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
 
-function closeMenus() { $$('.menu').forEach(m => m.classList.add('hidden')); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
+function closeMenus() { $$('.menu').forEach(m => m.id === 'colorMenu' ? cpClose(m) : m.classList.add('hidden')); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
 function openMenu(menu, btn) {
   const was = !menu.classList.contains('hidden'); closeMenus(); if (was) return;
   menu.classList.remove('hidden');
