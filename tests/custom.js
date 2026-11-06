@@ -79,12 +79,14 @@ const DEMO = {
   }, bg);
   const items = () => p.evaluate(() => S.items.map(s => s.t === 's' ? { t: 's', id: s.id, k: s.k || null, g: s.g || null, c: s.c, w: s.w, hl: s.hl, pts: Array.from(s.pts) } : { t: 'i', id: s.id }));
   const geo = list => { const b = [Infinity, Infinity, -Infinity, -Infinity]; for (const s of list) for (let i = 0; i < s.pts.length; i += 3) { b[0] = Math.min(b[0], s.pts[i]); b[1] = Math.min(b[1], s.pts[i + 1]); b[2] = Math.max(b[2], s.pts[i]); b[3] = Math.max(b[3], s.pts[i + 1]); } return b; };
-  const vis = sel => p.evaluate(s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }, sel);
+  // sichtbar = da und nicht gerade beim Zugehen (Menüs huschen kurz zusammen, bevor sie verschwinden)
+  const vis = sel => p.evaluate(s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden') && !e.dataset.closing && getComputedStyle(e).display !== 'none'; }, sel);
+  const settled = sel => p.evaluate(s => Promise.all(document.querySelector(s).getAnimations().map(a => a.finished.catch(() => {}))), sel);   // Aufploppen fertig
   const shapesDB = () => p.evaluate(async () => (await dbShapesAll()).sort(byCreated).map(r => ({ id: r.id, name: r.name, created: r.created, w: r.w, h: r.h, f32: r.strokes.every(s => s.pts instanceof Float32Array), strokes: r.strokes.map(s => ({ c: s.c, w: s.w, hl: s.hl, pts: Array.from(s.pts) })) })));
   // öffnen; schließt es ein gleichzeitiges Anpassen an die Fenstergröße (gleich nach einer neuen Seite) wieder, nochmal
   const openMenu = async () => {
     for (let i = 0; i < 3 && !(await vis('#shapeMenu')); i++) { await p.evaluate(() => { if (S.tool !== 'shape') setTool('shape'); openGroupMenu(); }); await p.waitForTimeout(150); }
-    await p.waitForSelector('#shapeMenu:not(.hidden)');
+    await p.waitForSelector('#shapeMenu:not(.hidden)'); await settled('#shapeMenu');
   };
   const closeMenu = async () => { if (await vis('#shapeMenu')) await p.click('#bGroup'); };
   const pickCustom = async id => { await openMenu(); await p.click(`#shapeMenu [data-shape="custom:${id}"]`); await frames(); };
@@ -215,7 +217,7 @@ const DEMO = {
   check('menuLibrary', menu1.sections.join() === 'Formen,Graphen,Eigene Formen' && menu1.tiles.length === 1 && menu1.tiles[0][0] === 'custom:' + idHaus && menu1.tiles[0][1] === 'Haus'
     && menu1.canvas[0][0] === 112 && menu1.canvas[0][2] === 56 && menu1.del === 1 && menu1.hint === 'Ziehen zum Zeichnen · Umschalt: gerade/quadratisch' && menu1.tool === 'shape', menu1);
   await p.click(`#customGrid [data-shape="custom:${idHaus}"]`); await frames();
-  const picked = await p.evaluate(() => ({ menu: $('#shapeMenu').classList.contains('hidden'), shape: S.shape, pref: localStorage.getItem('notizen.shape'), title: $('#bGroup').title.split(' · ')[0], tool: S.tool, colors: $('#colors').style.opacity, sizes: $('#sizes').style.opacity }));
+  const picked = await p.evaluate(() => ({ menu: !isOpen($('#shapeMenu')), shape: S.shape, pref: localStorage.getItem('notizen.shape'), title: $('#bGroup').title.split(' · ')[0], tool: S.tool, colors: $('#colors').style.opacity, sizes: $('#sizes').style.opacity }));
   check('pickCustom', picked.menu && picked.shape === 'custom:' + idHaus && picked.pref === JSON.stringify('custom:' + idHaus) && picked.title === 'Formen (F) – Haus' && picked.tool === 'shape' && picked.colors === '0.35' && picked.sizes === '0.35', picked);
   await openMenu();
   const menu2 = await p.evaluate(() => ({ on: $$('#shapeMenu [data-shape].on').map(b => b.dataset.shape), hint: $('#shapeMenu .mhint').textContent }));
@@ -341,10 +343,10 @@ const DEMO = {
     await p.click(`#customGrid .ct:has([data-shape="custom:${idBig}"]) .cdel`); await p.waitForSelector('#dlg:not(.hidden)');
     const askMsg = await p.evaluate(() => [$('#dlgMsg').textContent, $('#dlgOk').textContent, $('#dlgOk').classList.contains('danger')]);
     await p.click('#dlgNo'); await p.waitForTimeout(100);
-    const kept = await p.evaluate(id => [CUSTOM.some(r => r.id === id), !$('#shapeMenu').classList.contains('hidden')], idBig);
+    const kept = await p.evaluate(id => [CUSTOM.some(r => r.id === id), isOpen($('#shapeMenu'))], idBig);
     await p.click(`#customGrid .ct:has([data-shape="custom:${idBig}"]) .cdel`); await p.waitForSelector('#dlg:not(.hidden)');
     await p.click('#dlgOk'); await p.waitForFunction(id => !CUSTOM.some(r => r.id === id), idBig);
-    const gone = await p.evaluate(async id => ({ db: !!(await dbShapeGet(id)), tile: !!document.querySelector(`#customGrid [data-shape="custom:${id}"]`), menu: !$('#shapeMenu').classList.contains('hidden'), shape: S.shape,
+    const gone = await p.evaluate(async id => ({ db: !!(await dbShapeGet(id)), tile: !!document.querySelector(`#customGrid [data-shape="custom:${id}"]`), menu: isOpen($('#shapeMenu')), shape: S.shape,
       pref: localStorage.getItem('notizen.shape'), placed: S.items.filter(i => i.k === 'custom').length, title: $('#bGroup').title.split(' · ')[0] }), idBig);
     check('deleteFromLibrary', askMsg[0] === 'Form „Groß“ löschen?' && askMsg[1] === 'Löschen' && askMsg[2] && kept[0] && kept[1] && !gone.db && !gone.tile && gone.menu
       && gone.shape === 'rect' && gone.pref === '"rect"' && gone.placed === 50 && gone.title === 'Formen (F) – Rechteck', { askMsg, kept, gone });
@@ -409,6 +411,7 @@ const DEMO = {
   await p.evaluate(() => setTool('lasso'));
   await penPath([[150, 450], [560, 450], [560, 690], [150, 690], [150, 455]], { step: 6 });
   await p.waitForTimeout(150);
+  await settled('#selbar');
   await p.screenshot({ path: path.join(OUT, 'custom_selbar.png'), clip: { x: 0, y: 330, width: 760, height: 400 } });
   check('selbarFits', await p.evaluate(() => { const r = $('#selbar').getBoundingClientRect(); return !$('#selbar').classList.contains('hidden') && r.left >= 0 && r.right <= innerWidth && r.top > barBottom(); }));
   await p.keyboard.press('Escape');

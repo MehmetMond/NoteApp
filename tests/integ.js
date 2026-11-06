@@ -34,7 +34,7 @@ const check = (name, ok, detail) => { res.checks++; res[name] = detail === undef
     await p.click(`#shapeMenu [data-shape="${k}"]`); await frames();
   };
   const items = () => p.evaluate(() => S.items.map(s => ({ t: s.t, k: s.k || null, g: s.g || null, n: s.t === 's' ? s.pts.length / 3 : 0, pts: s.t === 's' ? Array.from(s.pts) : null })));
-  const vis = sel => p.evaluate(s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }, sel);
+  const vis = sel => p.evaluate(s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden') && !e.dataset.closing && getComputedStyle(e).display !== 'none'; }, sel);   // beim Zugehen nicht mehr sichtbar
   const cmp = await ctx.newPage(); await cmp.setContent('<body></body>');
   const diff = (a, c) => cmp.evaluate(async ([a, c]) => {
     const load = s => new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = 'data:image/png;base64,' + s; });

@@ -241,6 +241,7 @@ html.dark #colorMenu .cpsw button,html.dark #cpChip{box-shadow:inset 0 0 0 1px r
 #zoom:hover{background:var(--hover)}
 #sheetNo{min-width:46px;padding:0 4px;text-align:center;white-space:nowrap;font-size:14px;font-variant-numeric:tabular-nums;color:var(--muted)}
 .menu{position:absolute;z-index:20;background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:6px;min-width:220px}
+.menu[data-closing]{pointer-events:none}   /* ein Menü, das gerade zugeht, fängt keine Tipps mehr ab */
 .menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px}
 .menu button:hover{background:var(--hover)}
 .menu button.on{color:var(--accent);font-weight:600}
@@ -1844,6 +1845,7 @@ function placeSelbar() {
   if (!S.sel || !S.note || (action && (action.kind === 'move' || action.kind === 'scale'))) { bar.classList.add('hidden'); return; }
   const strokes = S.items.some(it => S.sel.ids.has(it.id) && it.t === 's');
   for (const id of ['#sColor', '#sSize', '#sSave']) $(id).classList.toggle('hidden', !strokes);
+  const appear = bar.classList.contains('hidden');   // nur beim Erscheinen aufploppen, nicht bei jedem Nachführen
   bar.classList.remove('hidden');
   const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]);
   const top = barBottom() + 8, h = bar.offsetHeight, hw = bar.offsetWidth / 2 + 8;
@@ -1852,6 +1854,7 @@ function placeSelbar() {
   if (y + h > VH - 8) y = Math.max(top, Math.min(VH - h - 8, y0 + 12));  // sonst innen oben
   bar.style.left = clamp((x0 + x1) / 2, hw, VW - hw) + 'px';
   bar.style.top = y + 'px';
+  if (appear) popIn(bar, null, 'translateX(-50%)', 0, 0.8);   // die Leiste ist mittig verschoben, das bleibt
 }
 function transformItem(it, s, ox, oy, dx, dy) {
   const f = (x, o) => o + (x - o) * s;
@@ -2574,7 +2577,7 @@ cvLive.addEventListener('pointerdown', e => {
   penDot.style.display = '';
   if (e.pointerType === 'pen') { penLast = true; if (!spaceDown) cvLive.style.cursor = toolCursor(S.tool); }
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
-  if (!$$('.menu').every(m => m.classList.contains('hidden'))) { closeMenus(); return; }
+  if ($$('.menu').some(isOpen)) { closeMenus(); return; }
   if (e.pointerType === 'touch') {
     if (performance.now() < penActiveUntil) return;           // Handballen ignorieren
     if (action && !action.touch) return;                      // Stift/Maus ist schon aktiv
@@ -2743,7 +2746,7 @@ function cpRemember(hex) {
 }
 // kleines Federn (angetippter Tupfer, neue Farbe in „Zuletzt“, Punkt in der Leiste)
 function cpPop(el, from = 0.7) {
-  if (el && !reduceMotion()) el.animate([{ transform: `scale(${from})` }, { transform: 'none' }], sp(spring(0.5, 420)));
+  if (el && !reduceMotion()) el.animate([{ transform: `scale(${from})` }, { transform: 'none' }], sp(spring(0.4, 340)));
 }
 function cpSwatch(c) {
   const b = document.createElement('button'); b.dataset.c = c; b.style.background = c; b.title = c.toUpperCase();
@@ -2769,33 +2772,22 @@ function cpApply(commit, exact) {
   cpShow();
 }
 function openColorMenu() {
-  const m = $('#colorMenu'), was = !m.classList.contains('hidden') && !m.dataset.closing; closeMenus(); if (was) return;
+  const m = $('#colorMenu'), was = isOpen(m); closeMenus(); if (was) return;
   if (!penLike()) setTool(toolKind());   // vom Radierer aus: zurück zum Stift (wie die anderen Farben)
   const k = cp.k = toolKind(), cur = S.color[k], pal = k === 'tape' ? TAPE_PALETTE : PALETTE;
   // Start: die gewählte Farbe (zum Abwandeln); die zuletzt benutzten eigenen stehen darunter zum Antippen
   cpFrom(pal.includes(cur) ? colorOf(cur) : cur);
-  m.getAnimations().forEach(a => a.cancel()); delete m.dataset.closing;   // war es gerade beim Schließen
   cpRecentRow(); m.classList.remove('hidden'); cpShow();
   // unter der ganzen Leiste, mittig unter dem Punkt (wie die Einstellungen des Werkzeugs); in niedrigen Fenstern scrollbar
   const sw = $('#colors .sw.custom'), r = sw.getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 8;
-  const left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8);
-  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px'; m.style.left = left + 'px';
+  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
+  m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
+  // Auftritt wie alle Popups, dazu federt der Punkt mit und die Farbtupfer ploppen kurz nacheinander auf
+  popIn(m, sw);
   if (reduceMotion()) return;
-  // Auftritt: die Karte federt aus dem Punkt heraus, die Farbtupfer ploppen kurz nacheinander auf
-  m.style.transformOrigin = `${r.left + r.width / 2 - left}px -12px`;
-  m.animate([{ transform: 'scale(.5)' }, { transform: 'none' }], sp(spring(0.42, 500)));
-  m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
-  cpPop(sw, 0.8);
-  $$('#colorMenu .cpsw button').forEach((b, i) => b.animate([{ transform: 'scale(.2)', opacity: 0 }, { transform: 'none', opacity: 1 }],
-    sp(spring(0.45, 420), { delay: 90 + i * 9, fill: 'backwards' })));
-}
-// Abgang: kurz zusammen und ausblenden (bei „Bewegung reduzieren“ sofort)
-function cpClose(m) {
-  if (m.classList.contains('hidden') || m.dataset.closing) return;
-  if (reduceMotion()) { m.classList.add('hidden'); return; }
-  m.dataset.closing = '1';
-  m.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.94)' }], { duration: 120, easing: 'ease-in', fill: 'forwards' })
-    .onfinish = () => { if (m.dataset.closing) { delete m.dataset.closing; m.classList.add('hidden'); } };
+  cpPop(sw, 0.85);
+  $$('#colorMenu .cpsw button').forEach((b, i) => b.animate([{ transform: 'scale(.3)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+    sp(spring(0.3, 320), { delay: 40 + i * 6, fill: 'backwards' })));
 }
 // Ziehen im Feld bzw. auf der Leiste (Stift, Finger, Maus); der Zeiger bleibt gefangen, auch wenn er hinausfährt
 function cpDrag(el, set) {
@@ -2850,7 +2842,7 @@ function renderSizes() {
     b.appendChild(d);
     b.onclick = () => {
       if (on && show) { openSizeMenu(k, b); return; }
-      $('#sizeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); setSize(k, i);
+      popOut($('#sizeMenu')); $('#bTune').classList.remove('on'); setSize(k, i);
       if (!show) setTool(k); else renderSizes();
     };
     box.appendChild(b);
@@ -2904,7 +2896,7 @@ function drawSizePreview(k, v) {
 }
 function openSizeMenu(k, btn) {
   const m = $('#sizeMenu');
-  const was = !m.classList.contains('hidden'); closeMenus(); if (was) return;
+  const was = isOpen(m); closeMenus(); if (was) return;
   sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth(); renderTapePats();
   // Stift: Glättung; Textmarker: dazu „Immer gerade“; Tape: Muster, „Immer gerade“, alle auf- und abdecken
   $('#tpBox').hidden = $('#tpAll').hidden = k !== 'tape'; $('#smBox').hidden = k === 'tape'; $('#stBox').hidden = k === 'pen';
@@ -2913,6 +2905,7 @@ function openSizeMenu(k, btn) {
   const r = btn.getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 8;
   m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
   m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
+  popIn(m, btn);
 }
 $('#szRange').oninput = () => {
   const k = sizeKind, v = tToSize(k, +$('#szRange').value);
@@ -2968,6 +2961,7 @@ function openGroupMenu() {
   g.classList.remove('hidden');
   g.style.top = Math.max(r.bottom, barBottom()) + 8 + 'px';
   g.style.left = clamp(r.left + r.width / 2 - g.offsetWidth / 2, 8, innerWidth - g.offsetWidth - 8) + 'px';
+  popIn(g, $('#bGroup'));
   if (S.tool === 'shape') openShapeMenu(g.getBoundingClientRect().bottom + 6);
 }
 function openShapeMenu(top) {
@@ -2976,6 +2970,7 @@ function openShapeMenu(top) {
   m.classList.remove('hidden');
   m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
   m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
+  popIn(m, $('#bGroup'), '', 40);   // kurz nach der Auswahl darüber
 }
 function markShapeMenu() {
   $$('#shapeMenu [data-shape]').forEach(b => b.classList.toggle('on', b.dataset.shape === S.shape));
@@ -2988,7 +2983,7 @@ function shapeTitle() {
 function setShape(k) { S.shape = k; store.set('shape', k); shapeTitle(); renderColors(); renderSizes(); }
 function pickShape(k) { setShape(k); closeMenus(); if (S.tool !== 'shape') setTool('shape'); }
 $('#bGroup').onclick = () => {
-  const t = $('#bGroup').dataset.tool, open = !$('#grpMenu').classList.contains('hidden');
+  const t = $('#bGroup').dataset.tool, open = isOpen($('#grpMenu'));
   if (S.tool !== t) { setTool(t); if (t === 'shape') openGroupMenu(); return; }
   if (open) closeMenus(); else openGroupMenu();
 };
@@ -3084,13 +3079,39 @@ function applyDark() {
 function toggleDark() { S.dark = !S.dark; store.set('dark', S.dark); applyDark(); }
 $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
 
-function closeMenus() { $$('.menu').forEach(m => m.id === 'colorMenu' ? cpClose(m) : m.classList.add('hidden')); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
+/* Aufploppen aller Popups (Menüs, Farbwähler, Dialog, Auswahlleiste): aus dem Knopf heraus, kurz federnd (dieselbe
+   Feder wie bei den Buch-Animationen); beim Schließen huschen Menüs kurz zusammen. Bei „Bewegung reduzieren“ ohne
+   Bewegung. Ein Menü, das gerade zugeht, gilt schon als zu (isOpen): nochmal antippen öffnet es gleich wieder. */
+const POP = { bounce: 0.36, ms: 380, from: 0.58 };
+const isOpen = m => !m.classList.contains('hidden') && !m.dataset.closing;
+// el ist schon sichtbar und an seinem Platz. from: Knopf, aus dem es kommt (sonst aus der Mitte); base: eigenes
+// transform des Elements (Auswahlleiste: zentriert); s0: Startgröße
+function popIn(el, from, base = '', delay = 0, s0 = POP.from) {
+  el.getAnimations().forEach(a => a.cancel()); delete el.dataset.closing;
+  if (reduceMotion()) return;
+  if (from) {
+    const r = from.getBoundingClientRect(), m = el.getBoundingClientRect();
+    const ox = clamp(r.left + r.width / 2 - m.left, 12, m.width - 12), oy = r.top + r.height / 2 < m.top + m.height / 2 ? -10 : m.height + 10;
+    el.style.transformOrigin = `${ox}px ${oy}px`;
+  } else el.style.transformOrigin = '';
+  el.animate([{ transform: `${base} scale(${s0})` }, { transform: base || 'none' }], sp(spring(POP.bounce, POP.ms), { delay, fill: 'backwards' }));
+  el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 110, easing: 'ease-out', delay, fill: 'backwards' });
+}
+function popOut(el) {
+  if (el.classList.contains('hidden') || el.dataset.closing) return;
+  if (reduceMotion()) { el.classList.add('hidden'); return; }
+  el.dataset.closing = '1';
+  el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.95)' }], { duration: 110, easing: 'ease-in', fill: 'forwards' })
+    .onfinish = () => { if (el.dataset.closing) { delete el.dataset.closing; el.classList.add('hidden'); } };
+}
+function closeMenus() { $$('.menu').forEach(popOut); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
 function openMenu(menu, btn) {
-  const was = !menu.classList.contains('hidden'); closeMenus(); if (was) return;
+  const was = isOpen(menu); closeMenus(); if (was) return;
   menu.classList.remove('hidden');
   const r = btn.getBoundingClientRect();
   menu.style.top = (r.bottom + 8) + 'px';
   menu.style.left = clamp(r.right - menu.offsetWidth, 8, innerWidth - menu.offsetWidth - 8) + 'px';
+  popIn(menu, btn);
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom') && e.target !== cvLive) closeMenus(); }, true);
@@ -3111,7 +3132,7 @@ function toggleFullscreen() {
 }
 $('#mFull').onclick = () => { closeMenus(); toggleFullscreen(); };
 // Esc beendet das Vollbild, wenn nichts anderes offen ist (der Browser macht das selbst, das Windows-Programm nicht)
-const escFullscreen = () => { if (document.fullscreenElement && $$('.menu').every(m => m.classList.contains('hidden')) && !S.sel) { document.exitFullscreen().catch(() => {}); return true; } return false; };
+const escFullscreen = () => { if (document.fullscreenElement && !$$('.menu').some(isOpen) && !S.sel) { document.exitFullscreen().catch(() => {}); return true; } return false; };
 $('#mFinger').onclick = () => { S.fingerDraw = !S.fingerDraw; store.set('fingerDraw', S.fingerDraw); liveVis(); closeMenus(); toast(S.fingerDraw ? 'Ein Finger zeichnet jetzt, zwei Finger verschieben und zoomen' : 'Finger verschieben und zoomen nur noch', 2600); };
 $('#mFit').onclick = () => { closeMenus(); fitAll(); };
 $('#mPng').onclick = () => { closeMenus(); exportPNG(); };
@@ -3153,11 +3174,11 @@ document.addEventListener('keydown', e => {
     return;
   }
   if ($('#editor').classList.contains('hidden') && k === 'escape') {   // Startseite: Menü schließen, sonst zurück zum Regal
-    if ($$('.menu').some(m => !m.classList.contains('hidden'))) closeMenus(); else if (homeBook) showShelf(); else escFullscreen();
+    if ($$('.menu').some(isOpen)) closeMenus(); else if (homeBook) showShelf(); else escFullscreen();
     return;
   }
   // Esc schließt offene Menüs auch, wenn ein Regler darin noch den Fokus hat
-  if (k === 'escape' && $$('.menu').some(m => !m.classList.contains('hidden'))) { closeMenus(); if (e.target.blur) e.target.blur(); return; }
+  if (k === 'escape' && $$('.menu').some(isOpen)) { closeMenus(); if (e.target.blur) e.target.blur(); return; }
   if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
   if (k === ' ') { e.preventDefault(); if (!spaceDown && !action) { spaceDown = true; cvLive.style.cursor = 'grab'; } return; }
   if (action) {
@@ -3578,14 +3599,22 @@ function dialog(msg, o = {}) {
       inp.oninput = upd; upd();
     }
     d.classList.remove('hidden');
+    // Auftritt wie die anderen Popups: der Hintergrund blendet ein, die Karte ploppt aus der Mitte
+    d.getAnimations().forEach(a => a.cancel());
+    if (!reduceMotion()) d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: 'ease-out' });
+    popIn(box, null, '', 0, 0.88);
     if (withInput) { inp.focus(); inp.select(); } else ok.focus();
     const done = v => {
-      if (bk && v && !reduceMotion()) {   // Buch angelegt: Vorschau-Einband merken (dort startet die Animation), Dialog blendet aus
-        lastCoverRect = rectOf(prev);
-        const g = d.cloneNode(true); g.querySelector('#dlgPrev').style.visibility = 'hidden'; g.querySelector('#dlgIn').value = inp.value;
+      // Abgang: als Kopie ausblenden, der echte Dialog ist sofort frei. Buch angelegt: Vorschau-Einband merken (dort
+      // startet die Animation), sein Einband fliegt weiter, die Kopie zeigt ihn nicht
+      if (!reduceMotion()) {
+        const book = bk && v, ms = book ? 220 : 130;
+        if (book) lastCoverRect = rectOf(prev);
+        const g = d.cloneNode(true); g.style.pointerEvents = 'none'; g.querySelector('#dlgIn').value = inp.value;
+        if (book) g.querySelector('#dlgPrev').style.visibility = 'hidden';
         document.body.appendChild(g);
-        g.querySelector('#dlgBox').animate([{ transform: 'none' }, { transform: 'scale(.97)' }], { duration: 220, easing: 'ease-out', fill: 'forwards' });
-        g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-out', fill: 'forwards' }).finished.then(() => g.remove());
+        g.querySelector('#dlgBox').animate([{ transform: 'none' }, { transform: book ? 'scale(.97)' : 'scale(.95)' }], { duration: ms, easing: book ? 'ease-out' : 'ease-in', fill: 'forwards' });
+        g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: 'ease-out', fill: 'forwards' }).finished.then(() => g.remove());
       }
       d.classList.add('hidden'); box.onsubmit = $('#dlgNo').onclick = d.onpointerdown = inp.oninput = null; res(v); };
     box.onsubmit = e => { e.preventDefault(); done(pf ? sel : !withInput ? true : bk ? { name: inp.value, color } : inp.value); };
@@ -4080,12 +4109,12 @@ async function warmUpBookFx() {
 /* Menüs der Startseite (⋯ an Büchern und Seiten) */
 let homeMenuKey = null, homeMenuBtn = null;
 function homeMenu(btn, key, items) {
-  const open = !$('#homeMenu').classList.contains('hidden') && homeMenuKey === key;
+  const open = isOpen($('#homeMenu')) && homeMenuKey === key;
   closeMenus(); if (open) return;
   homeMenuKey = key; homeMenuBtn = btn; btn.classList.add('on'); fillMenu(items);
 }
 function fillMenu(items) {
-  const m = $('#homeMenu'); m.innerHTML = '';
+  const m = $('#homeMenu'), opening = !isOpen(m); m.innerHTML = '';   // nur beim Öffnen aufploppen, nicht beim Wechsel ins Untermenü
   for (const it of items) {
     if (it === '-') { m.appendChild(document.createElement('hr')); continue; }
     const b = document.createElement('button'); if (it.cls) b.className = it.cls;
@@ -4101,6 +4130,7 @@ function fillMenu(items) {
   const r = homeMenuBtn.getBoundingClientRect(), h = m.offsetHeight, w = m.offsetWidth;
   let top = r.bottom + 6; if (top + h > innerHeight - 8) top = Math.max(8, r.top - 6 - h);
   m.style.top = top + 'px'; m.style.left = clamp(r.right - w, 8, innerWidth - w - 8) + 'px';
+  if (opening) popIn(m, homeMenuBtn);   // geht es über dem Knopf auf, kommt es von unten
 }
 function bookMenu(b, btn) {
   homeMenu(btn, 'b:' + b.id, [
@@ -4221,7 +4251,7 @@ $('#grid').addEventListener('scroll', () => { if (!$('#homeMenu').classList.cont
 // Ist ein Menü offen, schließt der erste Tipp daneben nur das Menü (öffnet nicht versehentlich ein Buch)
 let homeSwallow = false;
 window.addEventListener('pointerdown', e => {
-  homeSwallow = !$('#home').classList.contains('hidden') && !$('#homeMenu').classList.contains('hidden') && !e.target.closest('.menu,.mbtn,#dlg');
+  homeSwallow = !$('#home').classList.contains('hidden') && isOpen($('#homeMenu')) && !e.target.closest('.menu,.mbtn,#dlg');
 }, true);
 $('#home').addEventListener('click', e => { if (homeSwallow) { homeSwallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
 let navBusy = false;

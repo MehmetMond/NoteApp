@@ -12,7 +12,8 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   await p.evaluate(() => localStorage.clear()); await p.reload(); await p.waitForTimeout(400);
   await p.evaluate(async () => { for (const m of await dbIndexAll()) await dbDeleteNote(m.id); });
   await p.click('#hNewBook'); await p.click('#dlgOk'); await p.click('#hNew'); await p.click('#dlgFmt [data-f="a4"]'); await p.click('#dlgOk'); await p.waitForTimeout(500);
-  const st = () => p.evaluate(() => ({ open: !$('#sizeMenu').classList.contains('hidden'), label: $('#szLabel').textContent, on: $('#bTune').classList.contains('on'), tool: S.tool,
+  // offen = sichtbar und nicht gerade beim Zugehen (Menüs huschen kurz zusammen, bevor sie verschwinden)
+  const st = () => p.evaluate(() => ({ open: isOpen($('#sizeMenu')), label: $('#szLabel').textContent, on: $('#bTune').classList.contains('on'), tool: S.tool,
     smooth: !$('#smBox').hidden, pats: !$('#tpBox').hidden, straight: !$('#stBox').hidden }));
   res.order = await p.$$eval('#bar > *', l => l.map(e => e.id || e.dataset.tool || e.className).join(' '));
   res.group = await p.evaluate(() => [...$('.szgrp').children].map(e => e.id).join());
