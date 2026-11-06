@@ -1,7 +1,7 @@
-// Verbrauch der echten Windows-App (Electron), Schwerpunkt Startseite mit Aquarium: CPU-Zeit je Prozess und GPU-Zeit
+// Verbrauch der echten Windows-App (Electron), Schwerpunkt Startseite: CPU-Zeit je Prozess und GPU-Zeit
 // (App und dwm, über tests/akku/sample.ps1) und Hauptthread-Zeit der Seite, je Ablauf. Leeres Testprofil.
 // Wie measure.py, nur in Node (Playwright verbindet sich über CDP, kein Python-websocket nötig), ohne Tastendrücke ans
-// System. Abläufe: Startseite mit Aquarium (Meer/Kacheln, Teich, Linien, Aus), minimiert (mit echtem Fokus: das Meer
+// System. Abläufe: Startseite (hat die Seite ein Aquarium, auch Meer/Teich/Linien/Aus), minimiert (mit echtem Fokus: das Meer
 // muss stillstehen), Editor (Leerlauf, Schreiben, Verschieben), zurück. Vergleich alt/neu: beide nacheinander messen.
 // node measure_home.js <Notizen.exe> <Profilordner> <Ergebnis.json>
 const { chromium } = require('playwright');

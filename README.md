@@ -1,6 +1,6 @@
 # Notizen
 
-Handschrift-App im Stil von GoodNotes für das Surface Pro 11 (Windows ARM64, Surface Pen). Version 1.5.8.
+Handschrift-App im Stil von GoodNotes für das Surface Pro 11 (Windows ARM64, Surface Pen). Version 1.5.9.
 
 ![Vorschau](docs/vorschau.png)
 
@@ -14,8 +14,7 @@ Bücher mit Seiten, unendliche Arbeitsfläche oder Dokument aus Blättern DIN A4
   open('app.src.html','w').write(h[:i]+'<script>\n'+s+'</script>\n</body>\n</html>\n')
   ```
   (`app.js` beginnt mit `"use strict";`.) Die Platzhalter `@@PDFJS@@` und `@@PDFWORKER@@` nicht anfassen (beide stehen als Text in der Seite, pdf.js wird erst beim ersten PDF ausgeführt).
-- `build.py` – baut `Notizen.html` und fügt pdf.js 3.11.174 aus `pdfjs/` ein, dazu das Aquarium aus `meer/` (Platzhalter `/*@@MEER@@*/`). Die Datei läuft auch direkt im Browser.
-- `meer/` – das Aquarium der Startseite („Tintenmeer“, eigene Engine): `engine.js` (Zeichenraster, Glyphen-Atlas, gemalt werden nur geänderte Zellen, Stil Kacheln oder Linien), `kinds/` die Tiere (je Datei eine Art, die Schnittstelle steht oben in `engine.js`), `scenes.js` die Szenen Meer und Teich. In der App steuert es der Abschnitt „Meer im Hintergrund der Startseite“ in `app.js`: es läuft nur bei sichtbarer Startseite.
+- `build.py` – baut `Notizen.html` und fügt pdf.js 3.11.174 aus `pdfjs/` ein. Die Datei läuft auch direkt im Browser.
 - `Notizen-Browser.html` – die gebaute Datei (wie `Notizen.html`) für GitHub Pages: <https://mehmetmond.github.io/NoteApp/>. Dazu gehören `index.html` (leitet weiter), `sw.js` (Service Worker für den Offline-Start), `manifest.webmanifest` und `icon-180.png` (Home-Bildschirm, iPad). Der Service Worker läuft nur bei `http(s)://`, nicht im Windows-Programm.
 - `electron/` – Windows-Hülle (Electron 38, electron-builder).
 - `tests/` – Playwright-Tests (Chromium); Pfade in den Skripten ggf. anpassen.
