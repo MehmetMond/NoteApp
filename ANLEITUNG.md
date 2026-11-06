@@ -1,11 +1,7 @@
-# Notizen für das Surface Pro 11 (Version 1.5.11)
+# Notizen für das Surface Pro 11 (Version 1.5.10)
 
-## Neu in 1.5.11: Popups sind wieder zu sehen
-- **Popups bleiben sichtbar:** Seit 1.5.9 konnte ein Popup beim Wiederöffnen unsichtbar sein. Es ging kurz auf und verschwand gleich wieder, und das bei jedem weiteren Öffnen bis zum Neustart, zum Beispiel bei den Einstellungen des Tapes, nachdem ein Tape darunter gezogen wurde. Ursache: Die Animation beim Schließen blieb am versteckten Popup hängen, und Chromium holte ihr Ende beim nächsten Öffnen zurück. Jetzt wird sie entfernt, sobald das Popup zu ist. Das gilt für alle Menüs und den Farbwähler.
-- Der Schutz aus 1.5.10 ist wieder entfernt (kurz nach dem Öffnen schloss Antippen nichts): Die Popups gingen gar nicht zu, sie waren nur unsichtbar.
-
-## Neu in 1.5.10: erstes Tape ruckelt weniger
-- **Erstes Tape ruckelt weniger:** Schatten, Muster und Figuren des Tapes werden einmal unsichtbar vorbereitet, kurz nachdem eine Seite offen ist oder das Tape gewählt wird, statt mitten im ersten Strich.
+## Neu in 1.5.10: Popups sind wieder zu sehen
+- **Popups bleiben sichtbar:** In 1.5.9 konnte ein Popup beim Wiederöffnen unsichtbar sein. Es ging kurz auf und verschwand gleich wieder, und das bei jedem weiteren Öffnen bis zum Neustart, zum Beispiel bei den Einstellungen des Tapes, nachdem ein Tape darunter gezogen wurde. Ursache: Die Animation beim Schließen blieb am versteckten Popup hängen, und Chromium holte ihr Ende beim nächsten Öffnen zurück. Jetzt wird sie entfernt, sobald das Popup zu ist. Das gilt für alle Menüs und den Farbwähler.
 
 ## Neu in 1.5.9: eigener Farbwähler, federnde Menüs
 - **Eigene Farbe:** Der Regenbogen-Punkt neben den Farben öffnet jetzt einen Farbwähler im Stil der App statt des Fensters von Windows: ein Farbfeld (nach rechts kräftiger, nach oben heller) und darunter der Farbton, beides mit Stift, Finger oder Maus zu ziehen; die Farbe gilt sofort. Darunter die zuletzt benutzten eigenen Farben und abgestimmte Vorschläge (kräftig, sanft, gedeckt), oben lässt sich der Farbwert auch eintippen (z. B. #3a7bd5). Der Farbwähler springt wie alle Menüs aus dem Punkt heraus, die Farbtupfer ploppen nacheinander auf. Zeigt der Punkt eine eigene Farbe, liegt um sie ein schmaler Regenbogen-Ring. Gilt für Stift, Textmarker und Tape.

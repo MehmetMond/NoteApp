@@ -1318,22 +1318,6 @@ function drawTape(ctx, s, ds = 1) {
   if (!on) { ctx.setLineDash([5 * DPR / ds, 4 * DPR / ds]); ctx.lineWidth = 1.3 * DPR / ds; ctx.strokeStyle = s.c; ctx.stroke(g.edge); }
   ctx.restore();
 }
-// Erstes Tape ohne Ruckeln: beim allerersten Tape bereitet der Browser Schatten, Muster und Figuren vor (am Surface
-// mehrere lange Bilder mitten im Strich). Das geschieht einmal unsichtbar, sobald nach dem Öffnen einer Seite nichts los ist.
-let tapeWarmed = false;
-function warmTape() {
-  if (tapeWarmed || !S.note || action) return; tapeWarmed = true;
-  try {
-    const c = document.createElement('canvas'); c.width = c.height = 320;   // groß genug für eine beschleunigte Leinwand
-    const g = c.getContext('2d'), ds = DPR, pts = [];
-    for (let i = 0; i <= 12; i++) pts.push(16 + i * 11, 80 + Math.sin(i / 2) * 6, 0.5);
-    for (const tp of new Set([S.tapePat, 'streifen', 'kitty'])) {
-      g.setTransform(ds, 0, 0, ds, 0, 0);
-      drawTape(g, makeStroke(pts, S.color.tape, S.size.tape, false, { tp, hid: true }), ds);
-    }
-    g.getImageData(0, 0, 1, 1);   // ausführen lassen, nicht nur vormerken
-  } catch (e) {}
-}
 // Was gezeichnet wird, in welcher Reihenfolge: Bilder, dann Textmarker (unter der Schrift wie auf Papier, außer auf
 // einem Tape), dann alles andere wie gelegt; ohne das, was auf einem aufgedeckten Tape geschrieben wurde
 const orderCache = new WeakMap();
@@ -2713,7 +2697,6 @@ function setTool(t) {
   $('#sizeMenu').classList.add('hidden'); $('#colorMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes(); fitBar();
-  if (t === 'tape' && !tapeWarmed) idle(warmTape, { timeout: 150 });   // spätestens jetzt, vor dem ersten Strich
 }
 // Lasso, Tape und Formen teilen sich einen Knopf, damit die Leiste einzeilig bleibt. Er zeigt das zuletzt gewählte der
 // drei: Antippen wählt es (Formen: mit der Auswahl der Form), ist es schon gewählt, öffnet sich die Auswahl der drei
@@ -4325,7 +4308,6 @@ async function openNote(meta) {
     $('#bSheet').classList.toggle('hidden', !paperSize()); $('#sheetNo').classList.toggle('hidden', !paperSize()); fitBar();
     if (!meta.view) fitAll(0);   // neue Seite mit Format: das ganze erste Blatt zeigen
     if (renumber) markDirty();
-    if (!tapeWarmed) setTimeout(() => idle(warmTape, { timeout: 3000 }), 1200);
   } catch (e) { toast('Notiz konnte nicht geöffnet werden: ' + e.message, 6000); S.note = null; }
   navBusy = false;
 }
