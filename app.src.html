@@ -1276,6 +1276,22 @@ function drawTape(ctx, s, ds = 1) {
   if (!on) { ctx.setLineDash([5 * DPR / ds, 4 * DPR / ds]); ctx.lineWidth = 1.3 * DPR / ds; ctx.strokeStyle = s.c; ctx.stroke(g.edge); }
   ctx.restore();
 }
+// Erstes Tape ohne Ruckeln: beim allerersten Tape bereitet der Browser Schatten, Muster und Figuren vor (am Surface
+// mehrere lange Bilder mitten im Strich). Das geschieht einmal unsichtbar, sobald nach dem Öffnen einer Seite nichts los ist.
+let tapeWarmed = false;
+function warmTape() {
+  if (tapeWarmed || !S.note || action) return; tapeWarmed = true;
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 320;   // groß genug für eine beschleunigte Leinwand
+    const g = c.getContext('2d'), ds = DPR, pts = [];
+    for (let i = 0; i <= 12; i++) pts.push(16 + i * 11, 80 + Math.sin(i / 2) * 6, 0.5);
+    for (const tp of new Set([S.tapePat, 'streifen', 'kitty'])) {
+      g.setTransform(ds, 0, 0, ds, 0, 0);
+      drawTape(g, makeStroke(pts, S.color.tape, S.size.tape, false, { tp, hid: true }), ds);
+    }
+    g.getImageData(0, 0, 1, 1);   // ausführen lassen, nicht nur vormerken
+  } catch (e) {}
+}
 // Was gezeichnet wird, in welcher Reihenfolge: Bilder, dann Textmarker (unter der Schrift wie auf Papier, außer auf
 // einem Tape), dann alles andere wie gelegt; ohne das, was auf einem aufgedeckten Tape geschrieben wurde
 const orderCache = new WeakMap();
@@ -1665,7 +1681,7 @@ function padFor(dpr) {
   return [0, 0];
 }
 function resize() {
-  const oldDPR = DPR;
+  const oldDPR = DPR, oldW = VW, oldH = VH;
   DPR = window.devicePixelRatio || 1;
   const r = $('#stage').getBoundingClientRect(); VW = r.width; VH = r.height;
   const w = Math.round(VW * DPR), h = Math.round(VH * DPR);
@@ -1678,7 +1694,8 @@ function resize() {
   if (cvMain.width !== w + 2 * PADD || cvMain.height !== h + 2 * PADD) { cvMain.width = w + 2 * PADD; cvMain.height = h + 2 * PADD; shownSig = ''; }
   const ms = cvMain.style; ms.left = ms.top = -PADC + 'px'; ms.width = VW + 2 * PADC + 'px'; ms.height = VH + 2 * PADC + 'px';
   if (oldDPR !== DPR) { clearTiles(); patCache.clear(); }
-  closeMenus(); fitBar();
+  if (oldDPR !== DPR || Math.abs(VW - oldW) > 1 || Math.abs(VH - oldH) > 1) closeMenus();   // nur bei echter Größenänderung
+  fitBar();
   if (S.note) { S.view.tx = snap(S.view.tx); S.view.ty = snap(S.view.ty); draw(); drawLive(); }
   liveVis();
 }
@@ -2565,7 +2582,7 @@ cvLive.addEventListener('pointerdown', e => {
   penDot.style.display = '';
   if (e.pointerType === 'pen') { penLast = true; if (!spaceDown) cvLive.style.cursor = toolCursor(S.tool); }
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
-  if ($$('.menu').some(isOpen)) { closeMenus(); return; }
+  if ($$('.menu').some(isOpen)) { if (!notPen(e) && !($$('.menu').some(justOpened) && guarded('Tipp auf die Seite', e))) closeMenus(); return; }
   if (e.pointerType === 'touch') {
     if (performance.now() < penActiveUntil) return;           // Handballen ignorieren
     if (action && !action.touch) return;                      // Stift/Maus ist schon aktiv
@@ -2655,6 +2672,7 @@ function setTool(t) {
   $('#sizeMenu').classList.add('hidden'); $('#colorMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes(); fitBar();
+  if (t === 'tape' && !tapeWarmed) idle(warmTape, { timeout: 150 });   // spätestens jetzt, vor dem ersten Strich
 }
 // Lasso, Tape und Formen teilen sich einen Knopf, damit die Leiste einzeilig bleibt. Er zeigt das zuletzt gewählte der
 // drei: Antippen wählt es (Formen: mit der Auswahl der Form), ist es schon gewählt, öffnet sich die Auswahl der drei
@@ -2760,7 +2778,9 @@ function cpApply(commit, exact) {
   cpShow();
 }
 function openColorMenu() {
-  const m = $('#colorMenu'), was = isOpen(m); closeMenus(); if (was) return;
+  const m = $('#colorMenu');
+  if (justOpened(m) && guarded('Farbwähler')) return;
+  const was = isOpen(m); closeMenus(); if (was) return;
   if (!penLike()) setTool(toolKind());   // vom Radierer aus: zurück zum Stift (wie die anderen Farben)
   const k = cp.k = toolKind(), cur = S.color[k], pal = k === 'tape' ? TAPE_PALETTE : PALETTE;
   // Start: die gewählte Farbe (zum Abwandeln); die zuletzt benutzten eigenen stehen darunter zum Antippen
@@ -2884,6 +2904,7 @@ function drawSizePreview(k, v) {
 }
 function openSizeMenu(k, btn) {
   const m = $('#sizeMenu');
+  if (justOpened(m) && guarded('Einstellungen')) return;
   const was = isOpen(m); closeMenus(); if (was) return;
   sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth(); renderTapePats();
   // Stift: Glättung; Textmarker: dazu „Immer gerade“; Tape: Muster, „Immer gerade“, alle auf- und abdecken
@@ -2973,6 +2994,7 @@ function pickShape(k) { setShape(k); closeMenus(); if (S.tool !== 'shape') setTo
 $('#bGroup').onclick = () => {
   const t = $('#bGroup').dataset.tool, open = isOpen($('#grpMenu'));
   if (S.tool !== t) { setTool(t); if (t === 'shape') openGroupMenu(); return; }
+  if (justOpened($('#grpMenu')) && guarded('Lasso/Tape/Formen')) return;
   if (open) closeMenus(); else openGroupMenu();
 };
 $$('#grpMenu [data-gtool]').forEach(b => b.onclick = () => { const t = b.dataset.gtool; setTool(t); if (t === 'shape') openGroupMenu(); else closeMenus(); });
@@ -3071,10 +3093,22 @@ $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
    Bewegung. Ein Menü, das gerade zugeht, gilt schon als zu (isOpen): nochmal antippen öffnet es gleich wieder. */
 const POP = { bounce: 0.36, ms: 380, from: 0.58 };
 const isOpen = m => !m.classList.contains('hidden') && !m.dataset.closing;
+/* Schutz für Popups am Surface: aus einem Stifttipp können zwei Ereignisse werden (dazu ein Mausklick oder ein
+   zweiter Tipp); das zweite schloss das Popup gleich wieder (auf, sofort zu). Darum schließt ein Popup in den ersten
+   POP_GUARD ms weder ein erneutes Antippen seines Knopfs noch ein Tipp daneben, und Maus oder Finger schließen
+   nichts, solange der Stift aktiv ist (wie beim Handballen auf der Seite). */
+const POP_GUARD = 350;
+const justOpened = m => isOpen(m) && performance.now() - (m._popT || 0) < POP_GUARD;
+const notPen = e => !!e && e.pointerType !== 'pen' && performance.now() < penActiveUntil;
+let guardNotes = 0;   // die ersten Fälle ins Protokoll der Windows-App (dort landen nur Fehlermeldungen der Seite)
+function guarded(what, e = window.event) {
+  if (guardNotes++ < 5) console.error('Hinweis (kein Fehler): ' + what + ' kurz nach dem Öffnen nicht geschlossen (' + ((e && e.pointerType) || (e && e.type) || '?') + ')');
+  return true;
+}
 // el ist schon sichtbar und an seinem Platz. from: Knopf, aus dem es kommt (sonst aus der Mitte); base: eigenes
 // transform des Elements (Auswahlleiste: zentriert); s0: Startgröße
 function popIn(el, from, base = '', delay = 0, s0 = POP.from) {
-  el.getAnimations().forEach(a => a.cancel()); delete el.dataset.closing;
+  el.getAnimations().forEach(a => a.cancel()); delete el.dataset.closing; el._popT = performance.now();
   if (reduceMotion()) return;
   if (from) {
     const r = from.getBoundingClientRect(), m = el.getBoundingClientRect();
@@ -3093,6 +3127,7 @@ function popOut(el) {
 }
 function closeMenus() { $$('.menu').forEach(popOut); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
 function openMenu(menu, btn) {
+  if (justOpened(menu) && guarded(menu.id)) return;
   const was = isOpen(menu); closeMenus(); if (was) return;
   menu.classList.remove('hidden');
   const r = btn.getBoundingClientRect();
@@ -3101,7 +3136,11 @@ function openMenu(menu, btn) {
   popIn(menu, btn);
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => {
+  if (e.target.closest('.menu') || e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom') || e.target === cvLive) return;
+  if (notPen(e) || ($$('.menu').some(justOpened) && guarded('Tipp daneben', e))) return;
+  closeMenus();
+}, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -3606,7 +3645,7 @@ function dialog(msg, o = {}) {
       d.classList.add('hidden'); box.onsubmit = $('#dlgNo').onclick = d.onpointerdown = inp.oninput = null; res(v); };
     box.onsubmit = e => { e.preventDefault(); done(pf ? sel : !withInput ? true : bk ? { name: inp.value, color } : inp.value); };
     $('#dlgNo').onclick = () => done(null);
-    d.onpointerdown = e => { if (e.target === d) done(null); };
+    d.onpointerdown = e => { if (e.target === d && !notPen(e) && !(performance.now() - box._popT < POP_GUARD && guarded('Dialog', e))) done(null); };
   });
 }
 function ask(msg, value, withInput = true, o = {}) { return dialog(msg, { ...o, value, input: withInput }); }
@@ -4093,6 +4132,7 @@ async function warmUpBookFx() {
 /* Menüs der Startseite (⋯ an Büchern und Seiten) */
 let homeMenuKey = null, homeMenuBtn = null;
 function homeMenu(btn, key, items) {
+  if (homeMenuKey === key && justOpened($('#homeMenu')) && guarded('Menü')) return;
   const open = isOpen($('#homeMenu')) && homeMenuKey === key;
   closeMenus(); if (open) return;
   homeMenuKey = key; homeMenuBtn = btn; btn.classList.add('on'); fillMenu(items);
@@ -4262,6 +4302,7 @@ async function openNote(meta) {
     $('#bSheet').classList.toggle('hidden', !paperSize()); $('#sheetNo').classList.toggle('hidden', !paperSize()); fitBar();
     if (!meta.view) fitAll(0);   // neue Seite mit Format: das ganze erste Blatt zeigen
     if (renumber) markDirty();
+    if (!tapeWarmed) setTimeout(() => idle(warmTape, { timeout: 3000 }), 1200);
   } catch (e) { toast('Notiz konnte nicht geöffnet werden: ' + e.message, 6000); S.note = null; }
   navBusy = false;
 }

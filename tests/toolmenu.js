@@ -20,13 +20,14 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   check(/szgrp grow/.test(res.order) && res.group === 'sizes,bTune', 'Knopf direkt neben den Dicken, mit ihnen in einer Gruppe (' + res.order + ' | ' + res.group + ')');
   await p.click('#bTune'); res.pen = await st();
   check(res.pen.open && res.pen.on && res.pen.label === 'Stift' && res.pen.smooth && !res.pen.pats && !res.pen.straight, 'Stift: Menü mit Dicke und Glättung (' + JSON.stringify(res.pen) + ')');
+  await p.waitForTimeout(400);   // wie ein Mensch: direkt nach dem Öffnen (POP_GUARD) schließt ein zweiter Tipp nicht (Doppel-Ereignis am Surface)
   await p.click('#bTune'); res.closed = await st(); check(!res.closed.open && !res.closed.on, 'Nochmal antippen schließt');
   await p.keyboard.press('m'); await p.click('#bTune'); res.hl = await st();
   check(res.hl.open && res.hl.label === 'Textmarker' && res.hl.smooth && res.hl.straight, 'Textmarker: mit Glättung und „Immer gerade“');
   await p.keyboard.press('Escape'); res.esc = await st(); check(!res.esc.open && !res.esc.on, 'Esc schließt, Knopf nicht mehr hervorgehoben');
   await p.keyboard.press('t'); await p.click('#bTune'); res.tape = await st();
   check(res.tape.open && res.tape.label === 'Tape' && res.tape.pats && !res.tape.smooth && res.tape.straight, 'Tape: mit Mustern');
-  await p.mouse.click(400, 700); res.outside = await st();
+  await p.waitForTimeout(400); await p.mouse.click(400, 700); res.outside = await st();
   check(!res.outside.open && !res.outside.on && (await p.evaluate(() => S.items.length)) === 0, 'Tippen daneben schließt, ohne zu zeichnen');
   await p.keyboard.press('e'); res.dim = await p.evaluate(() => $('#bTune').style.opacity);
   await p.click('#bTune'); res.eraser = await st();

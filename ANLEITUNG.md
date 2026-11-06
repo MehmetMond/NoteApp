@@ -1,4 +1,8 @@
-# Notizen für das Surface Pro 11 (Version 1.5.9)
+# Notizen für das Surface Pro 11 (Version 1.5.10)
+
+## Neu in 1.5.10: Popups bleiben offen, erstes Tape ruckelt weniger
+- **Popups gehen nicht mehr sofort wieder zu:** Am Surface ging ein Popup nach einem Stifttipp manchmal auf und gleich wieder zu (zum Beispiel nach dem ersten Tape bei jedem Popup, bis zum Neustart). Ursache: Aus einem Stifttipp können zwei Ereignisse werden, und das zweite schloss das Popup wieder. Jetzt schließt ein Popup in den ersten Augenblicken nach dem Öffnen weder ein erneutes Antippen seines Knopfs noch ein Tipp daneben, und Maus- oder Fingerereignisse, solange der Stift aktiv ist, schließen nichts (wie beim Handballen auf der Seite). Nochmal antippen oder daneben tippen schließt wie gewohnt. Gilt für alle Menüs, den Farbwähler und die Fenster wie „Neue Seite“.
+- **Erstes Tape ruckelt weniger:** Schatten, Muster und Figuren des Tapes werden einmal unsichtbar vorbereitet, kurz nachdem eine Seite offen ist oder das Tape gewählt wird, statt mitten im ersten Strich.
 
 ## Neu in 1.5.9: eigener Farbwähler, federnde Menüs
 - **Eigene Farbe:** Der Regenbogen-Punkt neben den Farben öffnet jetzt einen Farbwähler im Stil der App statt des Fensters von Windows: ein Farbfeld (nach rechts kräftiger, nach oben heller) und darunter der Farbton, beides mit Stift, Finger oder Maus zu ziehen; die Farbe gilt sofort. Darunter die zuletzt benutzten eigenen Farben und abgestimmte Vorschläge (kräftig, sanft, gedeckt), oben lässt sich der Farbwert auch eintippen (z. B. #3a7bd5). Der Farbwähler springt wie alle Menüs aus dem Punkt heraus, die Farbtupfer ploppen nacheinander auf. Zeigt der Punkt eine eigene Farbe, liegt um sie ein schmaler Regenbogen-Ring. Gilt für Stift, Textmarker und Tape.
