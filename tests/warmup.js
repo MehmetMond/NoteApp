@@ -11,6 +11,7 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   await p.goto('file://' + DIR + '/Notizen.html'); await p.waitForTimeout(400);
   await p.evaluate(async () => {
     localStorage.clear(); for (const m of await dbIndexAll()) await dbDeleteNote(m.id);
+    localStorage.setItem('notizen.sea', JSON.stringify({ scene: 'off', style: 'tiles' }));   // Aquarium aus: sonst bewegt sich der Hintergrund zwischen den Bildern
     const now = Date.now(); await dbBookPut({ id: 'wb', name: 'Mathe', color: 'green', created: now });
     for (let k = 0; k < 4; k++) { const items = []; for (let s = 0; s < 40; s++) { const pts = []; for (let i = 0; i < 20; i++) pts.push(80 + (s % 8) * 60 + i, 90 + Math.floor(s / 8) * 40 + Math.sin(i / 3) * 8, 0.5); const st = makeStroke(pts, 'ink', 2, false); st.o = s; st.n = 'w' + k; items.push(st); }
       const meta = { id: 'w' + k, name: 'Seite ' + (k + 1), created: now + k, updated: now + k, thumb: null, bg: 'dots', view: { tx: 0, ty: 0, z: 1 }, book: 'wb' };

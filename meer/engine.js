@@ -642,8 +642,11 @@ class Ocean {
   }
   // Nur geänderte Zellen malen. Die Leinwand ist deckend (Wassergrund selbst gemalt): ein Zeichen ist ein
   // drawImage aus dem Atlas, frei gewordene Zellen einer Zeile werden zusammen mit einem Rechteck gefüllt.
+  // Vorlauf: erst alle neuen Zeichen in den Atlas, dann malen. Wechseln Schreiben in den Atlas und Malen aus ihm ab,
+  // muss der Browser den Atlas jedes Mal neu bereitstellen (erstes Bild ohne Grafikbeschleunigung 16-mal langsamer).
   blit() {
     const g = this.g, A = this.atlas, cw = this.cwD, ch = this.chD, cols = this.cols, G = this.G, C = this.C, PG = this.PG, PC = this.PC, full = this.full;
+    for (let i = 0, len = G.length; i < len; i++) { const gl = G[i]; if (gl && (full || gl !== PG[i] || C[i] !== PC[i])) this.slot(gl, C[i]); }
     g.fillStyle = this.bg;
     if (full) g.fillRect(0, 0, this.cv.width, this.cv.height);
     let n = 0, e0 = 0, en = 0;   // Lauf leerer Zellen: Anfang, Länge

@@ -1201,8 +1201,11 @@ class Ocean {
   }
   // Nur geänderte Zellen malen. Die Leinwand ist deckend (Wassergrund selbst gemalt): ein Zeichen ist ein
   // drawImage aus dem Atlas, frei gewordene Zellen einer Zeile werden zusammen mit einem Rechteck gefüllt.
+  // Vorlauf: erst alle neuen Zeichen in den Atlas, dann malen. Wechseln Schreiben in den Atlas und Malen aus ihm ab,
+  // muss der Browser den Atlas jedes Mal neu bereitstellen (erstes Bild ohne Grafikbeschleunigung 16-mal langsamer).
   blit() {
     const g = this.g, A = this.atlas, cw = this.cwD, ch = this.chD, cols = this.cols, G = this.G, C = this.C, PG = this.PG, PC = this.PC, full = this.full;
+    for (let i = 0, len = G.length; i < len; i++) { const gl = G[i]; if (gl && (full || gl !== PG[i] || C[i] !== PC[i])) this.slot(gl, C[i]); }
     g.fillStyle = this.bg;
     if (full) g.fillRect(0, 0, this.cv.width, this.cv.height);
     let n = 0, e0 = 0, en = 0;   // Lauf leerer Zellen: Anfang, Länge
@@ -7576,7 +7579,10 @@ const seaReady = () => !!(window.TM && TM.Ocean && TM.scenes);   // ohne build.p
 // Kacheln: größere Zellen, damit Kästchen und Zeichen gut zu sehen sind; Linien: feiner Strich aus Zeichen
 const seaOpt = () => sea.style === 'tiles' ? { tiles: true, font: 11, lh: 1.05 } : { tiles: false, font: 8, lh: 1.1 };
 const seaTheme = () => TM.themeFor(sea.scene, S.dark ? 'dark' : 'light');
-// an, wenn eingeschaltet und die Startseite zu sehen ist; sonst angehalten (aus: ganz abgebaut)
+// an, wenn eingeschaltet und die Startseite zu sehen ist; sonst angehalten (aus: ganz abgebaut). Ist das Fenster
+// nicht im Vordergrund (anderes Fenster aktiv, minimiert, verdeckt), bleibt das letzte Bild stehen: die Windows-App
+// erfährt vom Minimieren und Verdecken sonst nichts (Verdeckungsberechnung ist dort aus, document.hidden bleibt
+// false), das Meer liefe unsichtbar weiter und kostete Akku.
 function seaRun() {
   const home = $('#home'), box = $('#sea'), want = sea.scene !== 'off' && seaReady();
   home.classList.toggle('sea', want); box.classList.toggle('hidden', !want);
@@ -7585,10 +7591,11 @@ function seaRun() {
   if (!sea.oc) {
     sea.oc = new TM.Ocean(box, Object.assign({ theme: seaTheme(), seed: (Date.now() % 1e5) | 0 }, seaOpt()));
     TM.populate(sea.oc, sea.scene); sea.w = box.clientWidth; sea.h = box.clientHeight;
+    if (!reduceMotion()) sea.oc.cv.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: 'ease-out' });   // Wasser blendet ein
   } else if (box.clientWidth !== sea.w || box.clientHeight !== sea.h) {   // Fenster hat sich geändert, solange es weg war
     sea.w = box.clientWidth; sea.h = box.clientHeight; sea.oc.layout(); sea.oc.full = true;
   }
-  if (reduceMotion()) { sea.oc.stop(); sea.oc.render(); } else sea.oc.start();
+  if (reduceMotion() || !document.hasFocus()) { sea.oc.stop(); sea.oc.render(); } else sea.oc.start();
 }
 function seaSet(scene, style) {
   const newScene = scene && scene !== sea.scene, newStyle = style && style !== sea.style;
@@ -7632,12 +7639,14 @@ $('#home').addEventListener('pointerup', e => {
 });
 new MutationObserver(seaRun).observe($('#home'), { attributes: true, attributeFilter: ['class'] });   // Editor auf/zu
 document.addEventListener('visibilitychange', seaRun);
+addEventListener('focus', seaRun); addEventListener('blur', seaRun);   // Fenster vorn / nicht mehr vorn
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', seaRun);
 addEventListener('resize', () => { clearTimeout(sea.rt); sea.rt = setTimeout(seaRun, 150); });
 
 /* ---------- Start ---------- */
-applyDark(); seaRun();
-openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome().then(scheduleWarmUp); })
+// Das Meer startet erst, wenn das Regal steht: Bücher und Seiten sind sofort da, das Wasser blendet kurz danach ein
+applyDark();
+openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome().then(() => { requestAnimationFrame(() => setTimeout(seaRun)); scheduleWarmUp(); }); })
   .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
 // Browser-Version im Netz (GitHub Pages): Offline-Start über sw.js; das Windows-Programm lädt die Datei lokal
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
