@@ -1,7 +1,10 @@
-# Notizen für das Surface Pro 11 (Version 1.5.10)
+# Notizen für das Surface Pro 11 (Version 1.5.11)
 
-## Neu in 1.5.10: Popups bleiben offen, erstes Tape ruckelt weniger
-- **Popups gehen nicht mehr sofort wieder zu:** Am Surface ging ein Popup nach einem Stifttipp manchmal auf und gleich wieder zu (zum Beispiel nach dem ersten Tape bei jedem Popup, bis zum Neustart). Ursache: Aus einem Stifttipp können zwei Ereignisse werden, und das zweite schloss das Popup wieder. Jetzt schließt ein Popup in den ersten Augenblicken nach dem Öffnen weder ein erneutes Antippen seines Knopfs noch ein Tipp daneben, und Maus- oder Fingerereignisse, solange der Stift aktiv ist, schließen nichts (wie beim Handballen auf der Seite). Nochmal antippen oder daneben tippen schließt wie gewohnt. Gilt für alle Menüs, den Farbwähler und die Fenster wie „Neue Seite“.
+## Neu in 1.5.11: Popups sind wieder zu sehen
+- **Popups bleiben sichtbar:** Seit 1.5.9 konnte ein Popup beim Wiederöffnen unsichtbar sein. Es ging kurz auf und verschwand gleich wieder, und das bei jedem weiteren Öffnen bis zum Neustart, zum Beispiel bei den Einstellungen des Tapes, nachdem ein Tape darunter gezogen wurde. Ursache: Die Animation beim Schließen blieb am versteckten Popup hängen, und Chromium holte ihr Ende beim nächsten Öffnen zurück. Jetzt wird sie entfernt, sobald das Popup zu ist. Das gilt für alle Menüs und den Farbwähler.
+- Der Schutz aus 1.5.10 ist wieder entfernt (kurz nach dem Öffnen schloss Antippen nichts): Die Popups gingen gar nicht zu, sie waren nur unsichtbar.
+
+## Neu in 1.5.10: erstes Tape ruckelt weniger
 - **Erstes Tape ruckelt weniger:** Schatten, Muster und Figuren des Tapes werden einmal unsichtbar vorbereitet, kurz nachdem eine Seite offen ist oder das Tape gewählt wird, statt mitten im ersten Strich.
 
 ## Neu in 1.5.9: eigener Farbwähler, federnde Menüs
