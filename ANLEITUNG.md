@@ -1,5 +1,10 @@
 # Notizen für das Surface Pro 11 (Version 1.5.10)
 
+## Bald in 1.5.11: Deckkraft, Einstellungen für Koordinatensysteme (schon in der Browser-Version zum Ausprobieren)
+- **Deckkraft:** Im Menü von Stift und Textmarker (Regler-Knopf neben den Dicken) gibt es den Regler **Deckkraft** (10 bis 100 %). Er gilt für neue Striche: Der Stift ist sonst deckend, der Textmarker hat wie bisher 42 %. Wo sich zwei durchsichtige Striche kreuzen, wird es dunkler, ein Strich selbst wird dort, wo er sich überlappt, nicht dunkler. Ist der Stift durchsichtiger eingestellt, sind auch die Punkte der Dicken blasser. „Farbe übernehmen“ in der Leiste einer Auswahl gibt den Strichen Farbe und Deckkraft.
+- **Koordinatensysteme einstellen:** Ist bei den Formen ein Koordinatensystem gewählt, öffnet der Regler-Knopf neben den Dicken seine Einstellungen (auch über „Einstellungen“ im Formen-Menü bei „Graphen“): den **Abstand der Teilstriche** (½, 1, 2, 3, 4 oder 5 Kästchen) und die **Beschriftung der Achsen**, frei eintippbar oder mit einem Tipp (x · y, t · s, t · v, x · f(x)), mit Vorschau. Die Beschriftung kann Buchstaben, Ziffern, Umlaute, griechische Buchstaben (z. B. φ, ω, Δ), hoch- und tiefgestellte Ziffern (t², s₀) und Zeichen wie ( ) / , . − + = ' ° enthalten; sie wird wie die Achsen als Striche gezeichnet. 3D hat eigene Beschriftungen.
+- **Graph nachträglich ändern:** Einen gezeichneten Graphen mit dem Lasso antippen, dann **Graph ändern** in der Leiste darüber. Abstand und Beschriftung lassen sich so jederzeit ändern, das Menü liegt neben dem Graphen und er wird sofort neu gezeichnet, an derselben Stelle (auch verschoben oder vergrößert) und in seiner Farbe und Dicke. Alle Änderungen bis zum Schließen sind ein Schritt beim Rückgängigmachen. Das geht auch mit Graphen, die vor dieser Version gezeichnet wurden.
+
 ## Neu in 1.5.10: Popups sind wieder zu sehen
 - **Popups bleiben sichtbar:** In 1.5.9 konnte ein Popup beim Wiederöffnen unsichtbar sein. Es ging kurz auf und verschwand gleich wieder, und das bei jedem weiteren Öffnen bis zum Neustart, zum Beispiel bei den Einstellungen des Tapes, nachdem ein Tape darunter gezogen wurde. Ursache: Die Animation beim Schließen blieb am versteckten Popup hängen, und Chromium holte ihr Ende beim nächsten Öffnen zurück. Jetzt wird sie entfernt, sobald das Popup zu ist. Das gilt für alle Menüs und den Farbwähler.
 
@@ -97,10 +102,12 @@
 | Strichstärke | Punkte in der Leiste; feiner mit dem Schieberegler in den Einstellungen (Regler-Knopf neben den Dicken) |
 | Eigene Farbe | Regenbogen-Punkt neben den Farben: Farbfeld und Farbton ziehen, zuletzt benutzte oder vorgeschlagene Farbe antippen, Farbwert eintippen |
 | Glättung | Regler-Knopf neben den Dicken: Aus, 25, 50 (wie bisher), 75 oder 100 %, Feineinstellung mit dem Regler |
+| Deckkraft | Regler-Knopf neben den Dicken (Stift, Textmarker): Regler „Deckkraft“, gilt für neue Striche |
 | Lasso, Tape, Formen | Teilen sich einen Knopf (neben dem Textmarker): er zeigt das zuletzt gewählte, nochmal antippen öffnet die Auswahl der drei. Tasten L, T, F |
 | Tape | Tape (T), über den Inhalt ziehen; antippen deckt auf oder ab; am Ende halten = gerade; Muster (auch Kätzchen, Hündchen und Teufelchen) über den Regler-Knopf neben den Dicken |
 | Gerader Textmarker | Am Ende kurz halten, oder „Immer gerade“ in den Einstellungen des Textmarkers (Regler-Knopf) |
 | Formen und Graphen | Formen (F), dann aufziehen; der Knopf nochmal angetippt öffnet die Auswahl der Formen |
+| Koordinatensystem einstellen | Koordinatensystem gewählt: Regler-Knopf neben den Dicken (Abstand der Teilstriche, Beschriftung der Achsen); gezeichneten Graphen ändern: mit dem Lasso antippen, „Graph ändern“ |
 | Am Raster ausrichten | Magnet-Knopf (G) an/aus |
 | Radieren | Radierer-Ende des Stifts, oder Radierer-Werkzeug |
 | Verschieben | Ein Finger ziehen |

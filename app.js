@@ -19,6 +19,14 @@ const TAPE_PATTERNS = [['uni', 'Uni'], ['streifen', 'Streifen'], ['punkte', 'Pun
 // früheren festen Glättung und ist gewählt
 const SMOOTH_PRESETS = [0, 0.25, 0.5, 0.75, 1], SMOOTH_IDX = 2;
 const HL_ALPHA = { light: 0.42, dark: 0.45 };
+// Deckkraft neuer Striche (Regler im Menü von Stift und Textmarker): Stift 1 = deckend, Textmarker wie bisher 0,42 (im
+// Hellmodus; im Darkmode im selben Verhältnis kräftiger). Am Strich steht sie als al, nur wenn sie von der Vorgabe abweicht.
+const ALPHA_DEFAULT = { pen: 1, hl: HL_ALPHA.light };
+// Koordinatensysteme: Abstand der Teilstriche in Kästchen und Beschriftung der Achsen für neue Graphen
+// (2D: lx, ly; 3D für sich: lx3, ly3, lz)
+const GRAPH_STEPS = [0.5, 1, 2, 3, 4, 5];
+const GRAPH_DEFAULT = { step: 1, lx: 'x', ly: 'y', lx3: 'x', ly3: 'y', lz: 'z' };
+const LABEL_MAX = 16;
 const S = {
   note: null,          // Eintrag aus dem Index (Name, Ansicht, Hintergrund, Vorschaubild)
   items: [],           // Striche und Bilder der offenen Notiz, in Zeichenreihenfolge
@@ -33,6 +41,8 @@ const S = {
   shape: 'rect',       // gewählte Form des Formen-Werkzeugs
   snap: false,         // Am Raster ausrichten
   smooth: SMOOTH_PRESETS[SMOOTH_IDX], smoothPresets: [], smoothIdx: SMOOTH_IDX,   // Glättung von Stift und Textmarker
+  alpha: { ...ALPHA_DEFAULT },   // Deckkraft neuer Striche von Stift und Textmarker
+  graph: { ...GRAPH_DEFAULT },   // Einstellungen neuer Koordinatensysteme
 };
 const store = {
   get(k, d) { try { const v = localStorage.getItem('notizen.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -41,6 +51,12 @@ const store = {
 S.dark = store.get('dark', matchMedia('(prefers-color-scheme: dark)').matches);
 S.fingerDraw = store.get('fingerDraw', false);
 S.snap = store.get('snap', false) === true;
+{ const a = store.get('alpha', {}); for (const k of ['pen', 'hl']) if (typeof a[k] === 'number' && a[k] >= 0.1 && a[k] <= 1) S.alpha[k] = a[k]; }
+{
+  const g = store.get('graph', {});
+  if (GRAPH_STEPS.includes(g.step)) S.graph.step = g.step;
+  for (const k of ['lx', 'ly', 'lx3', 'ly3', 'lz']) if (typeof g[k] === 'string') S.graph[k] = g[k].slice(0, LABEL_MAX);
+}
 {
   const ps = store.get('smoothPresets'), i = store.get('smoothIdx');
   S.smoothPresets = Array.isArray(ps) && ps.length === SMOOTH_PRESETS.length && ps.every(v => typeof v === 'number' && v >= 0 && v <= 1) ? ps : [...SMOOTH_PRESETS];
@@ -409,10 +425,17 @@ const itemBox = it => it.t === 's' ? it.bb : [it.x, it.y, it.x + it.w, it.y + it
 const boxHit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 // more: weitere Angaben (Tape: tp, hid; Strich auf einem Tape: on)
 function makeStroke(pts, c, w, hl, more) { const p = Float32Array.from(pts); return { t: 's', id: uid(), c, w, hl: !!hl, pts: p, bb: bboxOf(p, w), ...more }; }
-// Ein Strich mit seinem Pfad: Kacheln, Formvorschau und Vorschaubilder zeichnen alle genau so
+// Deckkraft eines Strichs (oder einer Aktion mit hl und al): ohne al der Stift deckend, der Textmarker wie bisher
+function strokeAlpha(s) {
+  if (s.hl) return s.al ? Math.min(1, s.al * hlAlpha() / HL_ALPHA.light) : hlAlpha();
+  return s.al > 0 && s.al < 1 ? s.al : 1;
+}
+// Ein Strich mit seinem Pfad: Kacheln, Formvorschau und Vorschaubilder zeichnen alle genau so. Der ganze Strich ist ein
+// Pfad: wo er sich selbst überlappt, wird er mit Deckkraft nicht dunkler
 function fillStroke(ctx, s, P) {
   ctx.fillStyle = colorOf(s.c);
-  if (s.hl) { ctx.globalAlpha = hlAlpha(); if (!isDark()) ctx.globalCompositeOperation = 'multiply'; }
+  const a = strokeAlpha(s); if (a < 1) ctx.globalAlpha = a;
+  if (s.hl && !isDark()) ctx.globalCompositeOperation = 'multiply';
   ctx.fill(P);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
@@ -1077,8 +1100,11 @@ function hoverOut(e) {
   clearTimeout(hovers.get(e.pointerId)); hovers.set(e.pointerId, setTimeout(() => forget(e.pointerId), 1500));
 }
 function forget(id) { hovers.delete(id); liveVis(); }
+// Textmarker und Stift mit Deckkraft: die Live-Ebene zeigt den Strich deckend und ist selbst durchsichtig, so wird er
+// beim Schreiben nicht dort dunkler, wo sich seine Stücke überlappen
 function liveStyle(a) {
-  liveOpacity = a && a.hl ? String(hlAlpha()) : '';
+  const al = a ? strokeAlpha(a) : 1;
+  liveOpacity = al < 1 ? String(al) : '';
   cvLive.style.mixBlendMode = a && a.hl && !S.dark ? 'multiply' : '';
   liveVis();
 }
@@ -1326,6 +1352,7 @@ function placeSelbar() {
   if (!S.sel || !S.note || (action && (action.kind === 'move' || action.kind === 'scale'))) { bar.classList.add('hidden'); return; }
   const strokes = S.items.some(it => S.sel.ids.has(it.id) && it.t === 's');
   for (const id of ['#sColor', '#sSize', '#sSave']) $(id).classList.toggle('hidden', !strokes);
+  $('#sGraph').classList.toggle('hidden', !selGraph());
   const appear = bar.classList.contains('hidden');   // nur beim Erscheinen aufploppen, nicht bei jedem Nachführen
   bar.classList.remove('hidden');
   const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]);
@@ -1342,7 +1369,9 @@ function transformItem(it, s, ox, oy, dx, dy) {
   if (it.t === 's') {
     const pts = new Float32Array(it.pts);
     for (let i = 0; i < pts.length; i += 3) { pts[i] = f(pts[i], ox) + dx; pts[i + 1] = f(pts[i + 1], oy) + dy; }
-    return { ...it, pts, w: it.w * s, bb: bboxOf(pts, it.w * s) };
+    const n = { ...it, pts, w: it.w * s, bb: bboxOf(pts, it.w * s) };
+    if (it.gr) { const g = it.gr; n.gr = { ...g, b: [f(g.b[0], ox) + dx, f(g.b[1], oy) + dy, f(g.b[2], ox) + dx, f(g.b[3], oy) + dy], o: [f(g.o[0], ox) + dx, f(g.o[1], oy) + dy], f: (g.f || 1) * s }; }
+    return n;
   }
   return { ...it, x: f(it.x, ox) + dx, y: f(it.y, oy) + dy, w: it.w * s, h: it.h * s };
 }
@@ -1452,9 +1481,88 @@ function arrowPts(ax, ay, bx, by, h) {
   const L = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / L, uy = (by - ay) / L, [w1x, w1y, w2x, w2y] = wings(bx, by, ux, uy, h);
   return [ax, ay, bx, by, w1x, w1y, bx, by, w2x, w2y];
 }
-// Buchstaben für die Achsen, Einheitsbox mit Höhe 1 (y nach unten)
-const GLYPHS = { x: [[0, 0, 0.8, 1], [0.8, 0, 0, 1]], y: [[0, 0, 0.56, 0.77], [0.9, 0, 0.3, 1.35]], z: [[0, 0, 0.8, 0, 0, 1, 0.8, 1]] };
-function glyph(out, ch, x, y, h) { for (const g of GLYPHS[ch]) out.push(g.map((v, i) => (i % 2 ? y : x) + v * h)); }
+/* Strichschrift für die Beschriftung der Achsen (eigene Zeichnung, wie Normschrift): jedes Zeichen als Linienzüge in
+   Einheiten, in denen die x-Höhe 10 ist (Grundlinie y = 0, x-Höhe -10, Großbuchstaben und Ziffern -14, Unterlängen bis 4).
+   Ein Linienzug: Punkte „x,y“ und Bögen „(cx,cy,rx,ry,a0,a1)“ (Grad, im Uhrzeigersinn, 0 = rechts, 90 = unten), Linienzüge
+   durch „|“ getrennt. x, y und z sind genau die Buchstaben der bisherigen Koordinatensysteme. */
+const FONT_SRC = {
+  a: '(4,-5,4,5,0,360)|8,-10 8,0', b: '0,-14 0,0|(4,-5,4,5,180,540)', c: '(4.5,-5,4.5,5,320,40)', d: '(4,-5,4,5,0,360)|8,-14 8,0',
+  e: '0.2,-5 8,-5 (4,-5,4,5,0,-320)', f: '(5,-11,2.5,3,300,180) 2.5,0|0,-10 6,-10', g: '(4,-5,4,5,0,360)|8,-10 8,1 (4,1,4,3,0,150)',
+  h: '0,-14 0,0|0,-6 (4,-6,4,4,180,360) 8,0', i: '1,-10 1,0|1,-13.6 1,-13.2', j: '2.5,-10 2.5,1 (0.5,1,2,3,0,150)|2.5,-13.6 2.5,-13.2',
+  k: '0,-14 0,0|7,-10 0,-3.5|2.4,-5.8 7.5,0', l: '1,-14 1,0', m: '0,-10 0,0|0,-7 (2.75,-7,2.75,3,180,360) 5.5,0|5.5,-7 (8.25,-7,2.75,3,180,360) 11,0',
+  n: '0,-10 0,0|0,-6 (4,-6,4,4,180,360) 8,0', o: '(4.5,-5,4.5,5,0,360)', p: '0,-10 0,4|(4,-5,4,5,180,540)', q: '(4,-5,4,5,0,360)|8,-10 8,4',
+  r: '0,-10 0,0|0,-5.5 (4.5,-5.5,4.5,4.5,180,295)', s: '(4,-7.5,3.5,2.5,330,90) (4,-2.5,4,2.5,270,510)', t: '2.5,-13 2.5,-2 (5,-2,2.5,2,180,90)|0,-10 6,-10',
+  u: '0,-10 0,-4 (4,-4,4,4,180,0)|8,-10 8,0', v: '0,-10 4,0 8,-10', w: '0,-10 2.75,0 5.5,-10 8.25,0 11,-10',
+  x: '0,-10 8,0|8,-10 0,0', y: '0,-10 5.6,-2.3|9,-10 3,3.5', z: '0,-10 8,-10 0,0 8,0',
+  A: '0,0 5,-14 10,0|2,-5 8,-5', B: '0,0 0,-14 5,-14 (5,-10.5,3.5,3.5,270,450) 0,-7|0,-7 5.5,-7 (5.5,-3.5,3.5,3.5,270,450) 0,0',
+  C: '(5.5,-7,5.5,7,318,42)', D: '0,0 0,-14 3.5,-14 (3.5,-7,5.5,7,270,450) 0,0', E: '9,-14 0,-14 0,0 9,0|0,-7 7,-7', F: '9,-14 0,-14 0,0|0,-7 7,-7',
+  G: '(5.5,-7,5.5,7,318,0) 6.5,-7', H: '0,-14 0,0|9,-14 9,0|0,-7 9,-7', I: '1,-14 1,0', J: '6,-14 6,-3.5 (3,-3.5,3,3.5,0,180)',
+  K: '0,-14 0,0|9,-14 0,-5|3.2,-8.4 9,0', L: '0,-14 0,0 8,0', M: '0,0 0,-14 5.5,-4 11,-14 11,0', N: '0,0 0,-14 9,0 9,-14',
+  O: '(6,-7,6,7,0,360)', P: '0,0 0,-14 5,-14 (5,-10.5,3.5,3.5,270,450) 0,-7', Q: '(6,-7,6,7,0,360)|7.5,-3.5 11.5,0.5',
+  R: '0,0 0,-14 5,-14 (5,-10.5,3.5,3.5,270,450) 0,-7|4.5,-7 9,0', S: '(5,-10.5,4.5,3.5,330,90) (5,-3.5,5,3.5,270,510)',
+  T: '0,-14 10,-14|5,-14 5,0', U: '0,-14 0,-4.5 (4.5,-4.5,4.5,4.5,180,0) 9,-14', V: '0,-14 5,0 10,-14', W: '0,-14 3.5,0 7,-14 10.5,0 14,-14',
+  X: '0,-14 9,0|9,-14 0,0', Y: '0,-14 5,-7 10,-14|5,-7 5,0', Z: '0,-14 9,-14 0,0 9,0',
+  0: '(4.5,-7,4.5,7,0,360)', 1: '1.5,-11 5,-14 5,0', 2: '(4.5,-9.5,4.5,4.5,200,400) 0,0 9,0', 3: '(4.5,-10.5,4,3.5,200,450) (4.5,-3.5,4.5,3.5,270,520)',
+  4: '7,0 7,-14 0,-4 9.5,-4', 5: '8.5,-14 1,-14 0.5,-8 (4.5,-4.5,4.5,4.5,233,495)', 6: '(8,-5,8,9,258,180) (4.5,-4.5,4.5,4.5,180,540)',
+  7: '0,-14 9,-14 3,0', 8: '(4.5,-10.5,3.8,3.5,0,360)|(4.5,-3.5,4.5,3.5,0,360)', 9: '(4.5,-9.5,4.5,4.5,0,360)|(1,-9,8,9,0,78)',
+  '-': '1,-5 7,-5', '−': '0,-5 8,-5', '+': '0,-5 8,-5|4,-9 4,-1', '=': '0,-7 8,-7|0,-3 8,-3', '(': '(5.5,-5.5,4.5,9,245,115)', ')': '(0,-5.5,4.5,9,295,425)',
+  '[': '4,-14 1,-14 1,3 4,3', ']': '0,-14 3,-14 3,3 0,3', '/': '0,3 7,-14', '|': '1,-14 1,3', ',': '1.4,-0.6 0,2.6', '.': '0.6,-0.4 0.6,0',
+  ':': '0.6,-9.6 0.6,-9.2|0.6,-0.4 0.6,0', ';': '1.2,-9.6 1.2,-9.2|1.4,-0.6 0,2.6', "'": '1.6,-14 0.6,-10.6', '°': '(2.2,-12,2.2,2.2,0,360)',
+  '*': '3,-14 3,-8|0.4,-12.5 5.6,-9.5|5.6,-12.5 0.4,-9.5', '%': '(2,-11.5,2,2.5,0,360)|(8,-2.5,2,2.5,0,360)|9,-14 1,0', '<': '8,-10 0,-5 8,0', '>': '0,-10 8,-5 0,0',
+  '!': '0.8,-14 0.8,-4|0.8,-0.4 0.8,0', '?': '(4,-10.5,4,3.5,200,450) 4,-4|4,-0.4 4,0', '_': '0,3 8,3', '^': '0,-10 3.5,-14 7,-10', '·': '0.6,-5.2 0.6,-4.8',
+  ß: '0,0 0,-11 (3,-11,3,3,180,450) 2,-8|2,-8 (3.5,-4,4,4,270,450) 0.8,0',
+  α: '(4,-5,4,5,0,360)|8.6,-10 7.8,-5 9.6,0', β: '0,4 0,-11 (3,-11,3,3,180,450) 2,-8|2,-8 (3.5,-4,4,4,270,450) 0,-0.5', γ: '0,-10 4,0 4,4|8,-10 4,0',
+  δ: '(4,-4.5,4,4.5,0,360)|4,-9 1.5,-11.5 3,-14 7.5,-14', ε: '(4.5,-7.5,3.5,2.5,330,90) (4.5,-2.5,4.5,2.5,270,30)', η: '0,-10 0,0|0,-6 (4,-6,4,4,180,360) 8,4',
+  θ: '(4,-7,4,7,0,360)|0,-7 8,-7', λ: '0.5,-14 9,0|4.8,-7 0,0', μ: '0,4 0,-10|0,-4 (4,-4,4,4,180,0)|8,-10 8,0', π: '0,-10 10,-10|2.8,-10 2.8,0|7.2,-10 7.2,0',
+  ρ: '(4,-5,4,5,0,360)|0,-5 0,4', σ: '(4,-5,4,5,0,360)|4,-10 10,-10', τ: '0,-10 9,-10|4.5,-10 4.5,-2 (6.5,-2,2,2,180,90)', φ: '(5,-5,4.5,5,0,360)|5,-13 5,4',
+  ψ: '0,-10 0,-6 (5,-6,5,4,180,0) 10,-10|5,-13 5,4', ω: '0,-9 0,-4 (3,-4,3,4,180,0) 6,-7|6,-4 (9,-4,3,4,180,0) 12,-9',
+  Δ: '0,0 5.5,-14 11,0 0,0', Σ: '9,-14 0,-14 5,-7 0,0 9,0', Φ: '(6,-7,5,4.5,0,360)|6,-14 6,0', Ω: '0,0 3.5,0 (6,-8,5.5,6,120,420) 8.5,0 12,0',
+};
+const FONT = {};
+{
+  const parse = src => src.split('|').map(part => {
+    const pts = [];
+    for (const tok of part.match(/\([^)]*\)|-?[\d.]+,-?[\d.]+/g) || []) {
+      if (tok[0] !== '(') { pts.push(...tok.split(',').map(Number)); continue; }
+      const [cx, cy, rx, ry, a0, a1] = tok.slice(1, -1).split(',').map(Number), n = Math.max(2, Math.ceil(Math.abs(a1 - a0) / 10));
+      for (let i = 0; i <= n; i++) { const t = (a0 + (a1 - a0) * i / n) * Math.PI / 180; pts.push(cx + rx * Math.cos(t), cy + ry * Math.sin(t)); }
+    }
+    return pts;
+  });
+  const make = lines => { let w = 0; for (const p of lines) for (let i = 0; i < p.length; i += 2) w = Math.max(w, p[i]); return { lines, w }; };
+  for (const [ch, src] of Object.entries(FONT_SRC)) FONT[ch] = make(parse(src));
+  // Umlaute: Buchstabe mit zwei Punkten; hoch- und tiefgestellte Ziffern: kleiner, über der x-Höhe bzw. unter der Grundlinie
+  const dots = (x1, x2, y) => parse(`${x1},${y} ${x1},${y + 0.4}|${x2},${y} ${x2},${y + 0.4}`);
+  for (const [ch, base, x1, x2, y] of [['ä', 'a', 2, 6, -13], ['ö', 'o', 2.5, 6.5, -13], ['ü', 'u', 2, 6, -13], ['Ä', 'A', 3, 7, -17], ['Ö', 'O', 3.5, 8.5, -17], ['Ü', 'U', 2.5, 6.5, -17]])
+    FONT[ch] = make([...FONT[base].lines, ...dots(x1, x2, y)]);
+  const scaled = (g, s, dy) => make(g.lines.map(p => p.map((v, i) => i % 2 ? v * s + dy : v * s)));
+  for (const [d, sup, sub] of ['0⁰₀', '1¹₁', '2²₂', '3³₃', '4⁴₄', '5⁵₅', '6⁶₆', '7⁷₇', '8⁸₈', '9⁹₉']) { FONT[sup] = scaled(FONT[d], 0.55, -6.5); FONT[sub] = scaled(FONT[d], 0.55, 3.5); }
+  FONT['∆'] = FONT['Δ']; FONT['µ'] = FONT['μ']; FONT['–'] = FONT['−'];
+  // schmale Zeichen stehen etwas eingerückt: rechts gleich viel Luft wie links
+  for (const [c, w] of [['i', 2], ['l', 2], ['I', 2], ['j', 3.5], ['!', 1.6], ['.', 1.2], [':', 1.2], [';', 1.6], ['·', 1.2], ['|', 2], ["'", 2.2]]) FONT[c] = { ...FONT[c], w };
+}
+// Text als Linienzüge in Schrift-Einheiten, dazu Breite und Ober-/Unterkante der Striche; unbekannte Zeichen als „?“
+function textPolys(str) {
+  const lines = []; let x = 0, top = Infinity, bot = -Infinity;
+  for (const ch of String(str || '').trim()) {
+    if (ch === ' ') { x += 5; continue; }
+    const g = FONT[ch] || FONT['?'];
+    for (const p of g.lines) {
+      const q = p.map((v, i) => i % 2 ? v : v + x); lines.push(q);
+      for (let i = 1; i < q.length; i += 2) { top = Math.min(top, q[i]); bot = Math.max(bot, q[i]); }
+    }
+    x += g.w + 2.6;
+  }
+  return { lines, w: Math.max(0, x - 2.6), top, bot };
+}
+// Beschriftung in Weltkoordinaten an out anhängen: x-Höhe h; ax 0 = links bündig an x, 1 = rechts bündig;
+// ay 'top' = Oberkante der Striche bei y, 'mid' = Striche senkrecht mittig um y
+function placeText(out, str, x, y, h, ax, ay) {
+  const t = textPolys(str), k = h / 10;
+  if (!t.lines.length) return;
+  const ox = x - ax * t.w * k, oy = ay === 'mid' ? y - (t.top + t.bot) / 2 * k : y - t.top * k;
+  for (const p of t.lines) out.push(p.map((v, i) => i % 2 ? oy + v * k : ox + v * k));
+}
 // Endpunkte nach Raster, Umschalt (gerade/quadratisch) und sanftem Magnet
 function shapeEnds(a) {
   const k = a.shape, snapOn = S.snap, G = gridSize();
@@ -1512,44 +1620,61 @@ function shapeLines(k, ax, ay, bx, by, w) {
     P.push(P[0], P[1]);
     return [P];
   }
-  return graphLines(k, x0, y0, x1, y1, w);
+  return graphLines(graphParams(k, x0, y0, x1, y1), w);
 }
-// Koordinatensysteme: Achsen mit Pfeilspitzen, Teilstriche im Rasterabstand, Achsenbuchstaben
-function graphLines(k, x0, y0, x1, y1, w) {
-  const G = gridSize(), out = [], th = Math.max(4, w * 1.5), LH = 13 + Math.max(0, w - 2) * 2.5, m = 3;
-  const snx = v => S.snap ? snapX(v) : v, sny = v => S.snap ? snapY(v) : v, half = h => Math.max(th, h * ARROW_S);
-  const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5) return -1; const h = headLen(L, w, 0.35); out.push(arrowPts(fx, fy, tx, ty, h)); return h; };
-  if (k === 'axes3') {
-    // Schrägbild: z nach oben, y nach rechts, x nach vorne (45° nach links unten, halbe Einheiten)
-    const ox = snx(x0 + 0.4 * (x1 - x0)), oy = sny(y0 + 0.6 * (y1 - y0)), d = Math.max(0, Math.min(ox - x0, y1 - oy)), r = Math.SQRT1_2;
+/* Koordinatensysteme: Achsen mit Pfeilspitzen, Teilstriche, Beschriftung der Achsen. Jeder Strich eines Graphen trägt
+   seine Daten (gr): Art k, Rechteck b, Ursprung o, Abstand der Teilstriche step (in Kästchen der Rasterweite G),
+   Maßstab f (1 beim Zeichnen, wächst und schrumpft mit, wenn der Graph mit dem Lasso skaliert wird) und die
+   Beschriftungen lx, ly, lz. Daraus lässt er sich jederzeit neu zeichnen (Einstellungen nachträglich ändern). */
+function graphParams(k, x0, y0, x1, y1) {
+  const snx = v => S.snap ? snapX(v) : v, sny = v => S.snap ? snapY(v) : v;
+  // 3D: Schrägbild, z nach oben, y nach rechts, x nach vorne (45° nach links unten, halbe Einheiten)
+  const o = k === 'axes3' ? [snx(x0 + 0.4 * (x1 - x0)), sny(y0 + 0.6 * (y1 - y0))] : k === 'axes2p' ? [x0, y1] : [snx((x0 + x1) / 2), sny((y0 + y1) / 2)];
+  return { k, b: [x0, y0, x1, y1], o, G: gridSize(), f: 1, ...newGraphSettings(k) };
+}
+// Einstellungen für einen neuen Graphen der Art k (3D hat eigene Beschriftungen)
+function newGraphSettings(k) {
+  const s = S.graph, d3 = k === 'axes3';
+  return { step: s.step, lx: d3 ? s.lx3 : s.lx, ly: d3 ? s.ly3 : s.ly, lz: s.lz };
+}
+// Linienzüge eines Koordinatensystems; w: Strichbreite. Alle Maße wie bei einem neu gezeichneten Graphen der Breite w / f, mal f
+function graphLines(p, w) {
+  const [x0, y0, x1, y1] = p.b, [ox, oy] = p.o, f = p.f > 0 ? p.f : 1, w0 = w / f, out = [];
+  const U = (p.step > 0 ? p.step : 1) * (p.G > 0 ? p.G : gridSize()) * f;   // Abstand der Teilstriche
+  const th = f * Math.max(4, w0 * 1.5), LH = f * (13 + Math.max(0, w0 - 2) * 2.5), m = 3 * f, cap = f * (12 + w0 * 2.5);
+  const gx = f * (7 + w0), gy = f * (8 + w0), half = h => Math.max(th, h * ARROW_S);   // Abstand der Beschriftung zur Achse
+  const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5 * f) return -1; const h = Math.min(L * 0.35, cap); out.push(arrowPts(fx, fy, tx, ty, h)); return h; };
+  if (p.k === 'axes3') {
+    const d = Math.max(0, Math.min(ox - x0, y1 - oy)), r = Math.SQRT1_2;
     const hz = axis(ox, oy, ox, y0), hy = axis(ox, oy, x1, oy), hx = axis(ox, oy, ox - d, oy + d);
-    if (hy >= 0) { for (let i = 1; i <= Math.floor((x1 - ox - hy - m) / G); i++) out.push([ox + i * G, oy - th, ox + i * G, oy + th]); glyph(out, 'y', x1 - 0.9 * LH, oy + half(hy) + 7 + w, LH); }
-    if (hz >= 0) { for (let i = 1; i <= Math.floor((oy - y0 - hz - m) / G); i++) out.push([ox - th, oy - i * G, ox + th, oy - i * G]); glyph(out, 'z', ox - half(hz) - 8 - w - 0.8 * LH, y0, LH); }
+    if (hy >= 0) { for (let i = 1; i <= Math.floor((x1 - ox - hy - m) / U); i++) out.push([ox + i * U, oy - th, ox + i * U, oy + th]); placeText(out, p.ly, x1, oy + half(hy) + gx, LH, 1, 'top'); }
+    if (hz >= 0) { for (let i = 1; i <= Math.floor((oy - y0 - hz - m) / U); i++) out.push([ox - th, oy - i * U, ox + th, oy - i * U]); placeText(out, p.lz, ox - half(hz) - gy, y0, LH, 1, 'top'); }
     if (hx >= 0) {
-      for (let i = 1; i <= Math.floor((d * Math.SQRT2 - hx - m) / (G * r)); i++) { const px = ox - i * G / 2, py = oy + i * G / 2; out.push([px - th * r, py - th * r, px + th * r, py + th * r]); }
-      glyph(out, 'x', ox - d - 0.8 * LH - 8 - w, oy + d - LH / 2, LH);
+      for (let i = 1; i <= Math.floor((d * Math.SQRT2 - hx - m) / (U * r)); i++) { const px = ox - i * U / 2, py = oy + i * U / 2; out.push([px - th * r, py - th * r, px + th * r, py + th * r]); }
+      placeText(out, p.lx, ox - d - gy, oy + d, LH, 1, 'mid');
     }
     return out;
   }
-  const pos = k === 'axes2p', ox = pos ? x0 : snx((x0 + x1) / 2), oy = pos ? y1 : sny((y0 + y1) / 2);
+  const pos = p.k === 'axes2p';
   const hx = axis(x0, oy, x1, oy), hy = axis(ox, y1, ox, y0);
-  let nx = Math.floor((x1 - ox - hx - m) / G), ny = Math.floor((oy - y0 - hy - m) / G);
-  if (!pos) { nx = Math.min(nx, Math.floor((ox - x0 - hx - m) / G)); ny = Math.min(ny, Math.floor((y1 - oy - hy - m) / G)); }
+  let nx = Math.floor((x1 - ox - hx - m) / U), ny = Math.floor((oy - y0 - hy - m) / U);
+  if (!pos) { nx = Math.min(nx, Math.floor((ox - x0 - hx - m) / U)); ny = Math.min(ny, Math.floor((y1 - oy - hy - m) / U)); }
   if (hx >= 0) {
-    for (let i = pos ? 1 : -nx; i <= nx; i++) if (i) out.push([ox + i * G, oy - th, ox + i * G, oy + th]);
-    glyph(out, 'x', x1 - 0.8 * LH, oy + half(hx) + 7 + w, LH);
+    for (let i = pos ? 1 : -nx; i <= nx; i++) if (i) out.push([ox + i * U, oy - th, ox + i * U, oy + th]);
+    placeText(out, p.lx, x1, oy + half(hx) + gx, LH, 1, 'top');
   }
   if (hy >= 0) {
-    for (let i = pos ? 1 : -ny; i <= ny; i++) if (i) out.push([ox - th, oy - i * G, ox + th, oy - i * G]);
-    glyph(out, 'y', ox - half(hy) - 8 - w - 0.9 * LH, y0, LH);
+    for (let i = pos ? 1 : -ny; i <= ny; i++) if (i) out.push([ox - th, oy - i * U, ox + th, oy - i * U]);
+    placeText(out, p.ly, ox - half(hy) - gy, y0, LH, 1, 'top');
   }
   return out;
 }
-function shapeStroke(xy, c, w, k, g) {
+function shapeStroke(xy, c, w, k, g, gr) {
   const n = xy.length / 2, p = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { p[i * 3] = xy[i * 2]; p[i * 3 + 1] = xy[i * 2 + 1]; p[i * 3 + 2] = 0.5; }
   const s = { t: 's', id: uid(), c, w, hl: false, pts: p, bb: bboxOf(p, w), k };
   if (g) s.g = g;
+  if (gr) s.gr = gr;
   return s;
 }
 // Striche + Pfade der Vorschau; neu berechnet nur, wenn sich etwas geändert hat
@@ -1561,7 +1686,9 @@ function shapeGeo(a) {
   const strokes = [];
   if (!small) {
     const [ax, ay, bx, by] = shapeEnds(a);
-    for (const xy of shapeLines(a.shape, ax, ay, bx, by, a.w)) strokes.push(shapeStroke(xy, a.c, a.w, a.shape, a.g));
+    // Koordinatensystem: alle Striche tragen dieselben Daten, damit es sich später neu zeichnen lässt
+    const gr = GRAPHS.has(a.shape) && Math.hypot(bx - ax, by - ay) >= 1e-6 ? graphParams(a.shape, Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)) : null;
+    for (const xy of gr ? graphLines(gr, a.w) : shapeLines(a.shape, ax, ay, bx, by, a.w)) strokes.push(shapeStroke(xy, a.c, a.w, a.shape, a.g, gr));
   }
   return a.geo = { key, strokes, paths: strokes.map(s => buildPath(s.pts, s.w, false)) };
 }
@@ -1600,7 +1727,9 @@ function stampStrokes(r, s, x, y, g) {
   return r.strokes.map(st => {
     const q = st.pts, p = new Float32Array(q.length), w = st.w * s;
     for (let i = 0; i < q.length; i += 3) { p[i] = x + q[i] * s; p[i + 1] = y + q[i + 1] * s; p[i + 2] = q[i + 2]; }
-    return { t: 's', id: uid(), c: st.c, w, hl: st.hl, pts: p, bb: bboxOf(p, w), k: 'custom', g };
+    const k = { t: 's', id: uid(), c: st.c, w, hl: st.hl, pts: p, bb: bboxOf(p, w), k: 'custom', g };
+    if (st.al) k.al = st.al;
+    return k;
   });
 }
 function stampGeo(a) {
@@ -1846,7 +1975,7 @@ function startAction(e) {
   if (tool !== 'lasso' && S.sel) clearSel();
   if (tool === 'pen' || tool === 'hl' || tool === 'tape') {
     const hl = tool === 'hl', tape = tool === 'tape', p = pressureOf(e);
-    action = { kind: 'draw', id: e.pointerId, hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[tool], w: S.size[tool], drawn: 0,
+    action = { kind: 'draw', id: e.pointerId, hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[tool], w: S.size[tool], al: tape ? undefined : S.alpha[tool], drawn: 0,
       ...smoothStart(sx, sy, p, e.timeStamp), start: [sx, sy], still: [sx, sy], straight: !!S.straight[tool] };
     if (!tape) { const t = tapeAt(wx, wy); if (t && covered(t)) action.on = t.id; }   // auf ein abgedecktes Tape geschrieben
     liveClear(); liveStyle(tape ? null : action);
@@ -1924,7 +2053,11 @@ function finishStroke(a) {
     }
     commitLive([makeStroke(a.pts, a.c, a.w, false, { tp: a.tp, hid: true })], true, true); return;
   }
-  commitLive([makeStroke(a.pts, a.c, a.w, a.hl, a.on ? { on: a.on } : undefined)], a.noComposite || a.hl, a.hl);
+  const more = {};
+  if (a.on) more.on = a.on;
+  if (a.al !== undefined && a.al !== ALPHA_DEFAULT[a.hl ? 'hl' : 'pen']) more.al = a.al;
+  const see = a.hl || !!more.al;   // durchsichtig: Kacheln neu zeichnen statt die (deckende) Live-Ebene übernehmen
+  commitLive([makeStroke(a.pts, a.c, a.w, a.hl, more)], a.noComposite || see, see);
 }
 // Fertige Striche übernehmen, die gerade auf der Live-Ebene zu sehen sind (Strich oder Form).
 // Liegen sie ganz im Bild, werden die Pixel von der Live-Ebene übernommen,
@@ -2320,6 +2453,7 @@ function renderSizes() {
     const b = document.createElement('button'); b.className = 'sz' + (on ? ' on' : '');
     b.title = 'Strichstärke ' + fmtSize(v) + (on ? ' (nochmal tippen zum Anpassen)' : '');
     const d = document.createElement('span'); d.style.width = d.style.height = dotPx(k, v) + 'px';
+    const fa = k === 'tape' ? 1 : S.alpha[k] / ALPHA_DEFAULT[k]; if (fa < 1) d.style.opacity = Math.max(0.25, fa);   // durchsichtiger eingestellt
     b.appendChild(d);
     b.onclick = () => {
       if (on && show) { openSizeMenu(k, b); return; }
@@ -2329,11 +2463,17 @@ function renderSizes() {
     box.appendChild(b);
   });
   const t = $('#bTune'); t.style.opacity = box.style.opacity;
-  t.title = 'Einstellungen ' + { pen: 'des Stifts: Dicke, Glättung', hl: 'des Textmarkers: Dicke, Glättung, Immer gerade', tape: 'des Tapes: Dicke, Muster, Immer gerade' }[k];
+  t.title = graphTool() ? 'Einstellungen der Koordinatensysteme: Abstand der Teilstriche, Beschriftung der Achsen'
+    : 'Einstellungen ' + { pen: 'des Stifts: Dicke, Deckkraft, Glättung', hl: 'des Textmarkers: Dicke, Deckkraft, Glättung, Immer gerade', tape: 'des Tapes: Dicke, Muster, Immer gerade' }[k];
 }
 // Einstellungen des Werkzeugs (Dicke, Glättung, Muster …) über einen eigenen Knopf neben den Dicken; das zweite Antippen
-// der gewählten Dicke geht weiterhin. Radierer, Hand: wie beim Antippen einer Dicke erst zum Stift
-$('#bTune').onclick = () => { if (!penLike()) setTool(toolKind()); openSizeMenu(toolKind(), $('#bTune')); };
+// der gewählten Dicke geht weiterhin. Radierer, Hand: wie beim Antippen einer Dicke erst zum Stift. Ist bei den Formen
+// ein Koordinatensystem gewählt: dessen Einstellungen
+function graphTool() { return S.tool === 'shape' && GRAPHS.has(S.shape); }
+$('#bTune').onclick = () => {
+  if (graphTool()) { openGraphMenu($('#bTune'), false); return; }
+  if (!penLike()) setTool(toolKind()); openSizeMenu(toolKind(), $('#bTune'));
+};
 // Schieberegler für die gewählte Voreinstellung, logarithmisch (feine Schritte bei dünnen Stiften)
 let sizeKind = 'pen';
 const sizeToT = (k, v) => { const [lo, hi] = SIZE_RANGE[k]; return Math.round(Math.log(v / lo) / Math.log(hi / lo) * 1000); };
@@ -2342,6 +2482,7 @@ function showSize() {
   const k = sizeKind, v = S.size[k];
   $('#szLabel').textContent = { hl: 'Textmarker', tape: 'Tape' }[k] || 'Stift';
   $('#szVal').textContent = fmtSize(v);
+  if (k !== 'tape') $('#opVal').textContent = Math.round(S.alpha[k] * 100) + ' %';
   $('#smVal').textContent = fmtSmooth(S.smooth);
   $('#stBtn').classList.toggle('on', !!S.straight[k]);
   $('#szHint').textContent = k === 'tape' ? 'Tape antippen deckt auf oder wieder ab, auch mit dem Finger. Was auf dem Tape geschrieben steht, verschwindet beim Aufdecken mit. Am Ende kurz halten macht es gerade.'
@@ -2360,7 +2501,7 @@ function drawSizePreview(k, v) {
   if (k === 'tape' || (k === 'hl' && S.straight.hl)) {
     const pts = [m, H / 2, 0.5, W - m, H / 2, 0.5];
     if (k === 'tape') drawTape(g, { pts, w, c: S.color.tape, tp: S.tapePat, live: true }, DPR);
-    else { g.globalAlpha = hlAlpha(); g.fillStyle = colorOf(S.color.hl); g.fill(buildPath(pts, w, true)); }
+    else { g.globalAlpha = strokeAlpha({ hl: true, al: S.alpha.hl }); g.fillStyle = colorOf(S.color.hl); g.fill(buildPath(pts, w, true)); }
     return;
   }
   let seed = 7, a = null; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647 - 0.5;
@@ -2373,14 +2514,15 @@ function drawSizePreview(k, v) {
   catchUp(a);
   const P = new Path2D();
   for (let i = 0; i < a.pts.length / 3; i++) addPiece(P, a.pts, i, w, k === 'hl');
-  g.globalAlpha = k === 'hl' ? hlAlpha() : 1; g.fillStyle = colorOf(S.color[k]); g.fill(P);
+  g.globalAlpha = strokeAlpha({ hl: k === 'hl', al: S.alpha[k] }); g.fillStyle = colorOf(S.color[k]); g.fill(P);
 }
 function openSizeMenu(k, btn) {
   const m = $('#sizeMenu');
   const was = isOpen(m); closeMenus(); if (was) return;
   sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth(); renderTapePats();
-  // Stift: Glättung; Textmarker: dazu „Immer gerade“; Tape: Muster, „Immer gerade“, alle auf- und abdecken
-  $('#tpBox').hidden = $('#tpAll').hidden = k !== 'tape'; $('#smBox').hidden = k === 'tape'; $('#stBox').hidden = k === 'pen';
+  // Stift: Deckkraft, Glättung; Textmarker: dazu „Immer gerade“; Tape: Muster, „Immer gerade“, alle auf- und abdecken
+  $('#tpBox').hidden = $('#tpAll').hidden = k !== 'tape'; $('#smBox').hidden = $('#opBox').hidden = k === 'tape'; $('#stBox').hidden = k === 'pen';
+  if (k !== 'tape') $('#opRange').value = Math.round(S.alpha[k] * 100);
   m.classList.remove('hidden'); showSize(); $('#bTune').classList.add('on');
   // unter der ganzen Leiste: bricht sie um, verdeckte das Menü sonst Knöpfe der nächsten Zeile; in niedrigen Fenstern scrollbar
   const r = btn.getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 8;
@@ -2392,6 +2534,12 @@ $('#szRange').oninput = () => {
   const k = sizeKind, v = tToSize(k, +$('#szRange').value);
   S.presets[k][S.sizeIdx[k]] = v; S.size[k] = v;
   store.set('presets', S.presets); showSize(); renderSizes();
+};
+// Deckkraft neuer Striche von Stift bzw. Textmarker (10–100 %); „Farbe übernehmen“ gibt sie auch ausgewählten Strichen
+$('#opRange').oninput = () => {
+  const k = sizeKind; if (k === 'tape') return;
+  S.alpha[k] = clamp(Math.round(+$('#opRange').value) / 100, 0.1, 1);
+  store.set('alpha', S.alpha); showSize(); renderSizes();
 };
 // Tape: Muster neuer Tapes, gerade oder frei, alle Tapes der Seite auf- oder abdecken
 function renderTapePats() {
@@ -2473,6 +2621,159 @@ $$('#shapeMenu [data-shape]').forEach(b => b.onclick = () => pickShape(b.dataset
 { const t = store.get('groupTool'); if (GROUP[t]) setGroupTool(t); }
 shapeTitle();
 
+/* ---------- Koordinatensysteme: Einstellungen ----------
+   Abstand der Teilstriche (in Kästchen) und Beschriftung der Achsen, mit Vorschau. Ohne Auswahl gelten sie für neue
+   Graphen (Knopf neben den Dicken, wenn bei den Formen ein Koordinatensystem gewählt ist, oder „Einstellungen“ im
+   Formen-Menü). „Graph ändern“ in der Leiste einer Auswahl ändert einen gezeichneten Graphen: er wird sofort neu
+   gezeichnet, alle Änderungen bis zum Schließen sind ein Schritt beim Rückgängigmachen. */
+const GRAPH_NAMES = { axes2: 'Koordinatensystem', axes2p: 'Koordinatensystem, nur positiv', axes3: 'Koordinatensystem 3D' };
+const GRAPH_PAIRS = [['x', 'y'], ['t', 's'], ['t', 'v'], ['x', 'f(x)']];
+const fmtStep = v => (v === 0.5 ? '½' : String(v)) + ' Kästchen';
+let grEdit = null;   // { g: Gruppe des Graphen, items: Stand nach der letzten Änderung }; null: Einstellungen für neue Graphen
+// Daten eines gezeichneten Graphen (Gruppe g): gespeichert oder, bei Graphen aus früheren Versionen, aus den Strichen abgeleitet
+function graphData(g) {
+  const list = S.items.filter(it => it.g === g && it.t === 's');
+  const s = list.find(it => it.gr && Array.isArray(it.gr.b) && Array.isArray(it.gr.o));
+  return s ? s.gr : graphFromStrokes(list);
+}
+// Früher gezeichnete Graphen hatten keine Daten: Rechteck und Ursprung aus den Achsen (zuerst gezeichnet, je 5 Punkte),
+// Abstand und Maßstab aus den Teilstrichen, Beschriftung x, y, z
+function graphFromStrokes(list) {
+  const k = list.length ? list[0].k : null;
+  if (!GRAPHS.has(k) || !list.every(s => s.k === k)) return null;
+  const P = (s, i) => [s.pts[i * 3], s.pts[i * 3 + 1]], arrow = s => !!s && s.pts.length === 15;
+  const vert = list.filter(s => s.pts.length === 6 && Math.abs(s.pts[0] - s.pts[3]) < 1e-3);   // senkrechte Teilstriche
+  let b, o, gaps;
+  if (k === 'axes3') {
+    const [za, ya, xa] = list; if (!arrow(za) || !arrow(ya) || !arrow(xa)) return null;
+    const [ox, oy] = P(za, 0), [, y0] = P(za, 1), [x1] = P(ya, 1), [xx, xy] = P(xa, 1);
+    o = [ox, oy]; b = [xx, y0, x1, xy]; gaps = vert.map(s => s.pts[0] - ox).filter(v => v > 1e-3);
+  } else {
+    const [xa, ya] = list; if (!arrow(xa) || !arrow(ya)) return null;
+    const [x0, oy] = P(xa, 0), [x1] = P(xa, 1), [ox, y1] = P(ya, 0), [, y0] = P(ya, 1);
+    o = [ox, oy]; b = [x0, y0, x1, y1]; gaps = vert.map(s => Math.abs(s.pts[0] - ox)).filter(v => v > 1e-3);
+  }
+  const ge = gaps.length ? Math.min(...gaps) : gridSize(), G = [28, 34].find(v => Math.abs(ge - v) < 0.05) || gridSize();
+  return { k, b, o, step: 1, G, f: ge / G, lx: 'x', ly: 'y', lz: 'z' };
+}
+// Genau ein Graph in der Auswahl (daneben darf anderes ausgewählt sein, etwa die Kurve darauf): seine Gruppe, sonst null
+function selGraph() {
+  if (!S.sel) return null;
+  let g = null;
+  for (const it of S.items) if (S.sel.ids.has(it.id) && it.g && GRAPHS.has(it.k)) { if (g && it.g !== g) return null; g = it.g; }
+  return g && graphData(g) ? g : null;
+}
+// Graph g mit geänderten Daten neu zeichnen: neue Striche an der Stelle der alten (Reihenfolge), gleiche Farbe, Dicke, Deckkraft
+function rebuildGraph(g, ch) {
+  const old = S.items.filter(it => it.g === g), d = graphData(g), first = old.find(it => it.t === 's');
+  if (!d || !first) return null;
+  const p = { ...d, ...ch };
+  const strokes = graphLines(p, first.w).map(xy => { const s = shapeStroke(xy, first.c, first.w, p.k, g, p); if (first.al) s.al = first.al; return s; });
+  const ids = new Set(old.map(it => it.id)), k = S.items.findIndex(it => ids.has(it.id));
+  const before = S.items.slice(0, k), after = S.items.slice(k).filter(it => !ids.has(it.id));
+  const lo = k > 0 ? before[k - 1].o : (after.length ? after[0].o - strokes.length - 1 : 0), hi = after.length ? after[0].o : lo + strokes.length + 1;
+  strokes.forEach((s, m) => s.o = lo + (hi - lo) * (m + 1) / (strokes.length + 1));
+  return { items: [...before, ...strokes, ...after], old: ids, ids: new Set(strokes.map(s => s.id)) };
+}
+function applyGraphEdit(ch) {
+  const r = rebuildGraph(grEdit.g, ch); if (!r) return;
+  const keep = S.sel ? [...S.sel.ids].filter(id => !r.old.has(id)) : [];
+  if (grEdit.items === S.items) { r.items.sheets = S.items.sheets; setItems(r.items); markDirty(); requestDraw(); prunePaths(); }   // derselbe Schritt
+  else commit(r.items);
+  grEdit.items = S.items;
+  setSel(new Set([...keep, ...r.ids]));
+}
+function grValues() {
+  if (grEdit) return graphData(grEdit.g);
+  const k = GRAPHS.has(S.shape) ? S.shape : 'axes2';
+  return { k, ...newGraphSettings(k) };
+}
+function setGraph(ch) {
+  if (grEdit) applyGraphEdit(ch);
+  else {
+    const d3 = grValues().k === 'axes3';
+    for (const [key, v] of Object.entries(ch)) S.graph[d3 && (key === 'lx' || key === 'ly') ? key + '3' : key] = v;
+    store.set('graph', S.graph); graphShapeLabels();
+  }
+  renderGraphMenu();
+}
+function renderGraphMenu() {
+  const v = grValues(); if (!v) return;
+  $('#grTitle').textContent = GRAPH_NAMES[v.k] || GRAPH_NAMES.axes2;
+  $('#grStepVal').textContent = fmtStep(v.step);
+  const sb = $('#grSteps'); sb.innerHTML = '';
+  for (const s of GRAPH_STEPS) {
+    const b = document.createElement('button'); b.textContent = s === 0.5 ? '½' : s; b.className = s === v.step ? 'on' : '';
+    b.title = fmtStep(s) + ' zwischen den Teilstrichen'; b.onclick = () => setGraph({ step: s });
+    sb.appendChild(b);
+  }
+  for (const [id, key] of [['#grLx', 'lx'], ['#grLy', 'ly'], ['#grLz', 'lz']]) { const inp = $(id); if (document.activeElement !== inp && inp.value !== v[key]) inp.value = v[key]; }
+  $('#grLzRow').hidden = v.k !== 'axes3';
+  const pb = $('#grPairs'); pb.innerHTML = ''; pb.hidden = v.k === 'axes3';
+  for (const [a, c] of GRAPH_PAIRS) {
+    const b = document.createElement('button'); b.textContent = a + ' · ' + c; b.className = v.lx === a && v.ly === c ? 'on' : '';
+    b.title = `Achsen ${a} und ${c}`; b.onclick = () => setGraph({ lx: a, ly: c });
+    pb.appendChild(b);
+  }
+  $('#grHint').textContent = grEdit ? 'Ändert den ausgewählten Graphen.' : 'Gilt für neue Koordinatensysteme. Einen gezeichneten ändern: mit dem Lasso antippen, dann „Graph ändern“.';
+  drawGraphPreview(v);
+}
+// Vorschau: ein kleiner Graph mit den Einstellungen, in Farbe und Dicke des Stifts bzw. des ausgewählten Graphen
+function drawGraphPreview(v) {
+  const cv = $('#grPrev'), W = cv.clientWidth || 248, H = cv.clientHeight || 120;
+  if (cv.width !== Math.round(W * DPR) || cv.height !== Math.round(H * DPR)) { cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); }
+  const g = cv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+  const src = grEdit && S.items.find(it => it.g === grEdit.g && it.t === 's');
+  const z = 0.6, w = src ? src.w / (v.f || 1) : S.size.pen, c = src ? src.c : S.color.pen;
+  const LH = 13 + Math.max(0, w - 2) * 2.5, tw = s => textPolys(s).w * LH / 10, pad = 10;
+  let L = pad, B = pad;   // Platz für Beschriftungen außerhalb des Rechtecks
+  if (v.k === 'axes2p') { L += (tw(v.ly) + 14 + w) * z; B += (LH * 1.5 + 13 + w) * z; }
+  if (v.k === 'axes3') L += (tw(v.lx) + 8 + w) * z;
+  const x0 = L / z, y0 = pad / z, x1 = (W - pad) / z, y1 = (H - B) / z;
+  const o = v.k === 'axes3' ? [x0 + 0.4 * (x1 - x0), y0 + 0.6 * (y1 - y0)] : v.k === 'axes2p' ? [x0, y1] : [(x0 + x1) / 2, (y0 + y1) / 2];
+  g.scale(z, z);
+  for (const xy of graphLines({ ...v, b: [x0, y0, x1, y1], o, f: 1 }, w)) {
+    const s = shapeStroke(xy, c, w, v.k); if (src && src.al) s.al = src.al;
+    fillStroke(g, s, buildPath(s.pts, s.w, false));
+  }
+}
+function openGraphMenu(btn, edit) {
+  const m = $('#graphMenu'), g = edit ? selGraph() : null;
+  const same = isOpen(m) && !!grEdit === !!edit;   // derselbe Knopf nochmal: schließen
+  closeMenus(); if (same || (edit && !g)) return;
+  grEdit = edit ? { g, items: null } : null;
+  m.classList.remove('hidden'); renderGraphMenu();
+  if (!edit) $('#bTune').classList.add('on');
+  const r = btn.getBoundingClientRect(), h = m.offsetHeight, w = m.offsetWidth, top0 = barBottom() + 8;
+  let top = edit ? r.bottom + 8 : Math.max(r.bottom, barBottom()) + 8, left = clamp(r.left + r.width / 2 - w / 2, 8, innerWidth - w - 8);
+  if (edit) {
+    // neben die Auswahl, damit der Graph beim Ändern zu sehen bleibt; geht das nicht, unter (oder über) die Leiste der Auswahl
+    const b = S.sel.bb, [sx0, sy0] = toScreen(b[0], b[1]), [sx1] = toScreen(b[2], b[3]), gap = 20;
+    const t = clamp(sy0, top0, Math.max(top0, innerHeight - h - 8));
+    if (sx1 + gap + w <= innerWidth - 8) { left = sx1 + gap; top = t; }
+    else if (sx0 - gap - w >= 8) { left = sx0 - gap - w; top = t; }
+    else if (top + h > innerHeight - 8 && r.top - 8 - h >= top0) top = r.top - 8 - h;
+  }
+  m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
+  m.style.left = left + 'px';
+  popIn(m, btn);
+}
+for (const [id, key] of [['#grLx', 'lx'], ['#grLy', 'ly'], ['#grLz', 'lz']]) {
+  const inp = $(id); inp.maxLength = LABEL_MAX;
+  inp.oninput = () => setGraph({ [key]: inp.value.slice(0, LABEL_MAX) });
+  inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); };
+}
+$('#sGraph').onclick = () => openGraphMenu($('#sGraph'), true);
+$('#grOpen').onclick = () => openGraphMenu($('#bTune'), false);
+// Namen der Koordinatensysteme im Formen-Menü mit ihrer Beschriftung
+function graphShapeLabels() {
+  const L = s => String(s).trim() || '–', { lx, ly, lx3, ly3, lz } = S.graph;
+  const t = { axes2: `Koordinatensystem (${L(lx)}, ${L(ly)})`, axes2p: `Nur positiv (${L(lx)}, ${L(ly)})`, axes3: `3D (${L(lx3)}, ${L(ly3)}, ${L(lz)})` };
+  for (const k of GRAPHS) { const s = $(`#shapeMenu [data-shape="${k}"] span`); if (s) s.textContent = t[k]; }
+  shapeTitle();
+}
+graphShapeLabels();
+
 /* ---------- Eigene Formen: Bibliothek ----------
    Gespeichert werden die Striche einer Auswahl (Bilder nicht), Punkte relativ zur geometrischen oberen linken Ecke
    (Punkte ohne Strichbreite), w/h = diese Box. Die Bibliothek gilt für alle Bücher und Seiten. */
@@ -2498,7 +2799,9 @@ async function saveCustomShape() {
   const list = strokes.map(s => {
     const p = new Float32Array(s.pts);
     for (let i = 0; i < p.length; i += 3) { p[i] -= x0; p[i + 1] -= y0; }
-    return { c: s.c, w: s.w, hl: !!s.hl, pts: p };
+    const st = { c: s.c, w: s.w, hl: !!s.hl, pts: p };
+    if (s.al) st.al = s.al;
+    return st;
   });
   const b = geoBox(list), rec = { id: uid(), name: name.trim() || 'Form ' + k, created: Date.now(), w: b[2], h: b[3], strokes: list };
   try { await dbShapePut(rec); } catch (e) { toast('Speichern nicht möglich: ' + e.message, 5000); return; }
@@ -2598,7 +2901,7 @@ function openMenu(menu, btn) {
   popIn(menu, btn);
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -2636,9 +2939,16 @@ $('#sDup').onclick = () => {
   setSel(ids);
 };
 $('#sSave').onclick = saveCustomShape;
+// Farbe übernehmen: mit der Deckkraft von Stift bzw. Textmarker
 $('#sColor').onclick = () => {
   if (!S.sel) return;
-  commit(S.items.map(it => S.sel.ids.has(it.id) && it.t === 's' ? { ...it, c: it.tp ? S.color.tape : it.hl ? S.color.hl : S.color.pen } : it)); refreshSel();
+  commit(S.items.map(it => {
+    if (!S.sel.ids.has(it.id) || it.t !== 's') return it;
+    if (it.tp) return { ...it, c: S.color.tape };
+    const k = it.hl ? 'hl' : 'pen', n = { ...it, c: S.color[k] };
+    if (S.alpha[k] !== ALPHA_DEFAULT[k]) n.al = S.alpha[k]; else delete n.al;
+    return n;
+  })); refreshSel();
 };
 $('#sSize').onclick = () => {
   if (!S.sel) return;
@@ -2910,7 +3220,7 @@ async function renderTo(items, box, scale, bg, o = {}) {
     } else if (o.cheap) paint(() => {
       // Vorschaubild: Striche als einfache Linien (schnell), Tapes deckend bzw. aufgedeckt nur als Schimmer
       ctx.strokeStyle = colorOf(it.c); ctx.lineWidth = it.w; ctx.lineCap = ctx.lineJoin = 'round';
-      if (it.hl) { ctx.globalAlpha = hlAlpha(); if (!isDark()) ctx.globalCompositeOperation = 'multiply'; }
+      if (!it.tp) { const a = strokeAlpha(it); if (a < 1) ctx.globalAlpha = a; if (it.hl && !isDark()) ctx.globalCompositeOperation = 'multiply'; }
       if (it.tp) { ctx.lineCap = 'butt'; if (!covered(it)) ctx.globalAlpha = 0.16; }
       ctx.beginPath(); ctx.moveTo(it.pts[0], it.pts[1]);
       const step = Math.max(3, Math.floor(it.pts.length / 3 / 20) * 3);
@@ -3833,7 +4143,8 @@ async function* fileLines(file) {
 function shapeFromBackup(r) {
   if (typeof r.id !== 'string' || !r.id || !Array.isArray(r.strokes)) return null;
   const strokes = r.strokes.filter(st => st && Array.isArray(st.pts) && st.pts.length >= 3 && st.pts.length % 3 === 0 && st.pts.every(Number.isFinite))
-    .map(st => ({ c: typeof st.c === 'string' ? st.c : 'ink', w: st.w > 0 ? +st.w : 2, hl: !!st.hl, pts: Float32Array.from(st.pts) }));
+    .map(st => ({ c: typeof st.c === 'string' ? st.c : 'ink', w: st.w > 0 ? +st.w : 2, hl: !!st.hl, pts: Float32Array.from(st.pts),
+      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}) }));
   if (!strokes.length) return null;
   const [x0, y0] = geoBox(strokes);
   if (x0 || y0) for (const st of strokes) for (let i = 0; i < st.pts.length; i += 3) { st.pts[i] -= x0; st.pts[i + 1] -= y0; }

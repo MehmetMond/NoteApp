@@ -363,11 +363,12 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   {
     const r = {};
     await p.evaluate(() => { localStorage.removeItem('notizen.shape'); S.shape = 'rect'; setTool('lasso'); setTool('pen'); });
-    const vis = () => p.evaluate(() => !$('#shapeMenu').classList.contains('hidden'));
-    const gvis = () => p.evaluate(() => !$('#grpMenu').classList.contains('hidden'));
+    // offen = sichtbar und nicht gerade beim Zugehen (Menüs huschen kurz zusammen, bevor sie verschwinden)
+    const vis = () => p.evaluate(() => isOpen($('#shapeMenu')));
+    const gvis = () => p.evaluate(() => isOpen($('#grpMenu')));
     // Lasso, Tape und Formen in einem Knopf: Antippen wählt das gezeigte Werkzeug, nochmal öffnet die Auswahl der drei
-    await p.click('#bGroup'); r.first = await p.evaluate(() => [S.tool, !$('#grpMenu').classList.contains('hidden')]);
-    await p.click('#bGroup'); r.grp = await p.evaluate(() => [!$('#grpMenu').classList.contains('hidden'), $$('#grpMenu [data-gtool]').map(b => b.dataset.gtool + (b.classList.contains('on') ? '*' : '')).join()]);
+    await p.click('#bGroup'); r.first = await p.evaluate(() => [S.tool, isOpen($('#grpMenu'))]);
+    await p.click('#bGroup'); r.grp = await p.evaluate(() => [isOpen($('#grpMenu')), $$('#grpMenu [data-gtool]').map(b => b.dataset.gtool + (b.classList.contains('on') ? '*' : '')).join()]);
     await p.click('#grpMenu [data-gtool=shape]'); r.open1 = await vis() && await gvis(); r.tool = await p.evaluate(() => S.tool);
     r.below = await p.evaluate(() => $('#shapeMenu').getBoundingClientRect().top >= $('#grpMenu').getBoundingClientRect().bottom && $('#grpMenu').getBoundingClientRect().top >= barBottom());
     await p.click('#bGroup'); r.closed = !(await vis()) && !(await gvis());
@@ -387,8 +388,8 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     await p.keyboard.press('p'); await p.keyboard.press('f'); r.keyF = await p.evaluate(() => [S.tool, cvLive.style.cursor]);
     // Taste T: der Knopf zeigt Tape; danach Stift und wieder Antippen wählt Tape
     await p.keyboard.press('t'); await p.keyboard.press('p'); r.keyT = await p.evaluate(() => [$('#bGroup').dataset.tool, $('#bGroup use').getAttribute('href'), $('#bGroup').classList.contains('on')]);
-    await p.click('#bGroup'); r.tapeAgain = await p.evaluate(() => [S.tool, !$('#grpMenu').classList.contains('hidden')]);
-    await p.click('#bGroup'); await p.click('#grpMenu [data-gtool=lasso]'); r.toLasso = await p.evaluate(() => [S.tool, $('#bGroup').dataset.tool, !$('#grpMenu').classList.contains('hidden')]);
+    await p.click('#bGroup'); r.tapeAgain = await p.evaluate(() => [S.tool, isOpen($('#grpMenu'))]);
+    await p.click('#bGroup'); await p.click('#grpMenu [data-gtool=lasso]'); r.toLasso = await p.evaluate(() => [S.tool, $('#bGroup').dataset.tool, isOpen($('#grpMenu'))]);
     await p.keyboard.press('f'); await p.keyboard.press('Escape');
     await p.keyboard.press('g'); r.keyG = await p.evaluate(() => [S.snap, $('#toast').textContent]); await p.keyboard.press('g');
     r.titles = await p.evaluate(() => [$('#bSnap').title, $('#bGroup').title]);

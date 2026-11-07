@@ -37,7 +37,7 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   res.afterSlider = await p.evaluate(() => ({ size: S.size.pen, presets: S.presets.pen, stored: localStorage.getItem('notizen.presets'), label: $('#szVal').textContent, title: $('#sizes .sz.on').title }));
   await p.screenshot({ path: path.join(__dirname, 'sizes_menu.png'), clip: { x: 0, y: 0, width: 1440, height: 260 } });
   await p.click('#sizes .sz.on'); await p.waitForTimeout(100);
-  res.menuClosedByRetap = await p.evaluate(() => $('#sizeMenu').classList.contains('hidden'));
+  res.menuClosedByRetap = await p.evaluate(() => !isOpen($('#sizeMenu')));   // zu oder gerade beim Zugehen
   await p.click('#sizes .sz:nth-child(1)'); await p.waitForTimeout(100);
   res.pick1 = await p.evaluate(() => ({ idx: S.sizeIdx.pen, size: S.size.pen, menuHidden: $('#sizeMenu').classList.contains('hidden') }));
   await p.click('[data-tool=hl]'); res.hlButtons = await p.$$eval('#sizes .sz', l => l.length);
