@@ -1,5 +1,9 @@
 # Notizen für das Surface Pro 11 (Version 1.5.11)
 
+## Bald in 1.5.12: Einfügen durch Gedrückthalten, lange Achsenbeschriftung an der Achse (schon in der Browser-Version zum Ausprobieren)
+- **Einfügen durch Gedrückthalten:** Einen Finger eine halbe Sekunde auf die Seite halten, dann erscheint die Blase **Einfügen**. Antippen legt das Bild aus der Zwischenablage genau dorthin, mittig unter den Finger (mit Raster auf das Raster). Mit der Maus geht dasselbe per Rechtsklick. Bewegt sich der Finger, verschiebt er wie gewohnt die Seite und die Blase geht zu. Ist „Mit dem Finger zeichnen“ an, schreibt der Finger; dann gibt es die Blase nicht.
+- **Lange Achsenbeschriftung an der Achse:** Hat eine Beschriftung mehr als 2 Zeichen (z. B. „Durchgang i“, „Fehleranteil“, auch „f(x)“), steht sie wie in Büchern mittig an der Achse: unter der waagrechten Achse, an der senkrechten gedreht und von unten nach oben zu lesen links daneben. Liegt der Ursprung in der Mitte, steht sie in der rechten bzw. oberen Hälfte; beim 3D-Achsenkreuz gilt das für die waagrechte und die senkrechte Achse. Kürzere wie x, y, t, t² oder s₀ bleiben an der Pfeilspitze. Schon gezeichnete Graphen ändern sich erst, wenn sie über „Graph ändern“ neu gezeichnet werden.
+
 ## Neu in 1.5.11: Deckkraft, Einstellungen für Koordinatensysteme, Bilder aus der Zwischenablage
 - **Bild aus der Zwischenablage:** Der Bild-Knopf öffnet ein kleines Menü. **Aus der Zwischenablage** fügt ein Bildschirmfoto ein, ohne es vorher als Datei zu speichern: mit Win + Umschalt + S aufnehmen, dann hier einfügen. **Bild aus einer Datei …** öffnet wie bisher die Dateiauswahl. Mit Tastatur geht auch Strg + V. In der Browser-Version fragt der Browser beim ersten Mal, ob die Seite die Zwischenablage lesen darf.
 - **Am Raster ausrichten rastet überall gleich ein:**
@@ -120,7 +124,7 @@
 | Zoomen | Zwei Finger auseinander/zusammen |
 | Rückgängig | Mit zwei Fingern kurz tippen, oder Strg+Z |
 | Auswählen | Lasso-Werkzeug oder die Taste am Stift gedrückt halten: Kreis um Schrift oder Bilder ziehen (mit der Taste antippen wählt einen Strich), dann verschieben, über den blauen Punkt skalieren, löschen, duplizieren, umfärben, Dicke angleichen oder als eigene Form speichern |
-| Bild einfügen | Bild-Knopf (aus der Zwischenablage oder einer Datei), Strg+V oder Datei ins Fenster ziehen |
+| Bild einfügen | Bild-Knopf (aus der Zwischenablage oder einer Datei), Finger auf der Seite halten bzw. Rechtsklick: „Einfügen“, Strg+V oder Datei ins Fenster ziehen |
 | PDF einfügen | PDF-Knopf oder PDF ins Fenster ziehen, jede Seite wird zum Beschriften eingefügt (auf DIN-Seiten: eine PDF-Seite pro Blatt, bei A3 quer links) |
 | Seitenformat | Beim Anlegen einer Seite: Unendlich, DIN A4 oder DIN A3, hoch oder quer |
 | Blatt hinzufügen | DIN-Seiten: Knopf mit Blatt und Plus, neues Blatt hinter dem aktuellen |

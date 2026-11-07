@@ -254,6 +254,8 @@ html.dark #colorMenu .cpsw button,html.dark #cpChip{box-shadow:inset 0 0 0 1px r
 .menu hr{border:0;border-top:1px solid var(--border);margin:6px 4px}
 #imgMenu{width:258px}
 #imgMenu .mhint{font-size:12px;line-height:1.4;color:var(--muted);padding:8px 10px 4px;margin-top:4px;border-top:1px solid var(--border)}
+#pasteMenu{min-width:0;padding:4px;border-radius:12px}
+#pasteMenu button{padding:9px 16px 9px 12px;font-weight:600}
 #selbar{position:absolute;z-index:6;display:flex;gap:2px;padding:4px;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);transform:translateX(-50%)}
 #selbar button{padding:8px 12px;font-size:14px}
 #selbar button:hover{background:var(--hover)}
@@ -417,6 +419,7 @@ html.dark #toast{background:#eee;color:#111}
   <button id="mImgFile"><svg class="i"><use href="#ic-img"/></svg>Bild aus einer Datei …</button>
   <div class="mhint">Bildschirmfoto mit Win + Umschalt + S, dann hier einfügen. Mit Tastatur geht auch Strg + V.</div>
 </div>
+<div id="pasteMenu" class="menu hidden"><button id="pmPaste"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button></div>
 <div id="sizeMenu" class="menu hidden">
   <div class="szhead"><span id="szLabel">Stift</span><b id="szVal"></b></div>
   <input type="range" id="szRange" min="0" max="1000" step="1" aria-label="Strichstärke">
@@ -2140,6 +2143,16 @@ function placeText(out, str, x, y, h, ax, ay) {
   const ox = x - ax * t.w * k, oy = ay === 'mid' ? y - (t.top + t.bot) / 2 * k : y - t.top * k;
   for (const p of t.lines) out.push(p.map((v, i) => i % 2 ? oy + v * k : ox + v * k));
 }
+// Beschriftung um 90° gedreht, von unten nach oben zu lesen (wie an der y-Achse in Büchern), senkrecht mittig um cy;
+// ihre rechte Seite (Grundlinie bzw. Unterlängen, zur Achse hin) liegt bei x = xr
+function placeTextUp(out, str, xr, cy, h) {
+  const t = textPolys(str), k = h / 10;
+  if (!t.lines.length) return;
+  const bx = xr - Math.max(0, t.bot) * k;   // Grundlinie
+  for (const p of t.lines) { const q = []; for (let i = 0; i < p.length; i += 2) q.push(bx + p[i + 1] * k, cy - (p[i] - t.w / 2) * k); out.push(q); }
+}
+// Beschriftungen mit mehr als 2 Zeichen stehen mittig an der Achse, kürzere an der Pfeilspitze
+const longLabel = s => [...String(s || '').trim()].length > 2;
 // Endpunkte nach Raster, Umschalt (gerade/quadratisch) und sanftem Magnet
 function shapeEnds(a) {
   const k = a.shape, snapOn = S.snap, G = snapStep();
@@ -2221,28 +2234,43 @@ function graphLines(p, w) {
   const th = f * Math.max(4, w0 * 1.5), LH = f * (13 + Math.max(0, w0 - 2) * 2.5), m = 3 * f, cap = f * (12 + w0 * 2.5);
   const gx = f * (7 + w0), gy = f * (8 + w0), half = h => Math.max(th, h * ARROW_S);   // Abstand der Beschriftung zur Achse
   const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5 * f) return -1; const h = Math.min(L * 0.35, cap); out.push(arrowPts(fx, fy, tx, ty, h)); return h; };
+  const corner = p.k === 'axes2p';   // Ursprung in der Ecke: daneben ist nichts, eine lange Beschriftung darf dort anfangen
+  // waagrechte Achse mit der Spitze bei tx: kurze Beschriftung unter der Spitze, lange mittig unter der Achse zwischen
+  // Ursprung und Spitze (nicht über den Ursprung hinaus, dort kreuzt sonst die senkrechte Achse)
+  const labelX = (s, tx, h) => {
+    if (!longLabel(s)) { placeText(out, s, tx, oy + half(h) + gx, LH, 1, 'top'); return; }
+    const W = textPolys(s).w * LH / 10, lo = corner ? ox : ox + th + gx;
+    placeText(out, s, Math.max((ox + tx) / 2, lo + W / 2), oy + th + gx, LH, 0.5, 'top');
+  };
+  // senkrechte Achse mit der Spitze bei ty: kurze Beschriftung links neben der Spitze, lange gedreht (von unten nach oben
+  // zu lesen) mittig links neben der Achse zwischen Ursprung und Spitze
+  const labelY = (s, ty, h) => {
+    if (!longLabel(s)) { placeText(out, s, ox - half(h) - gy, ty, LH, 1, 'top'); return; }
+    const W = textPolys(s).w * LH / 10, hi = corner ? oy : oy - th - gx;
+    placeTextUp(out, s, ox - th - gx, Math.min((oy + ty) / 2, hi - W / 2), LH);
+  };
   if (p.k === 'axes3') {
     const d = Math.max(0, Math.min(ox - x0, y1 - oy)), r = Math.SQRT1_2;
     const hz = axis(ox, oy, ox, y0), hy = axis(ox, oy, x1, oy), hx = axis(ox, oy, ox - d, oy + d);
-    if (hy >= 0) { for (let i = 1; i <= Math.floor((x1 - ox - hy - m) / U); i++) out.push([ox + i * U, oy - th, ox + i * U, oy + th]); placeText(out, p.ly, x1, oy + half(hy) + gx, LH, 1, 'top'); }
-    if (hz >= 0) { for (let i = 1; i <= Math.floor((oy - y0 - hz - m) / U); i++) out.push([ox - th, oy - i * U, ox + th, oy - i * U]); placeText(out, p.lz, ox - half(hz) - gy, y0, LH, 1, 'top'); }
+    if (hy >= 0) { for (let i = 1; i <= Math.floor((x1 - ox - hy - m) / U); i++) out.push([ox + i * U, oy - th, ox + i * U, oy + th]); labelX(p.ly, x1, hy); }
+    if (hz >= 0) { for (let i = 1; i <= Math.floor((oy - y0 - hz - m) / U); i++) out.push([ox - th, oy - i * U, ox + th, oy - i * U]); labelY(p.lz, y0, hz); }
     if (hx >= 0) {
       for (let i = 1; i <= Math.floor((d * Math.SQRT2 - hx - m) / (U * r)); i++) { const px = ox - i * U / 2, py = oy + i * U / 2; out.push([px - th * r, py - th * r, px + th * r, py + th * r]); }
       placeText(out, p.lx, ox - d - gy, oy + d, LH, 1, 'mid');
     }
     return out;
   }
-  const pos = p.k === 'axes2p';
+  const pos = corner;
   const hx = axis(x0, oy, x1, oy), hy = axis(ox, y1, ox, y0);
   let nx = Math.floor((x1 - ox - hx - m) / U), ny = Math.floor((oy - y0 - hy - m) / U);
   if (!pos) { nx = Math.min(nx, Math.floor((ox - x0 - hx - m) / U)); ny = Math.min(ny, Math.floor((y1 - oy - hy - m) / U)); }
   if (hx >= 0) {
     for (let i = pos ? 1 : -nx; i <= nx; i++) if (i) out.push([ox + i * U, oy - th, ox + i * U, oy + th]);
-    placeText(out, p.lx, x1, oy + half(hx) + gx, LH, 1, 'top');
+    labelX(p.lx, x1, hx);
   }
   if (hy >= 0) {
     for (let i = pos ? 1 : -ny; i <= ny; i++) if (i) out.push([ox - th, oy - i * U, ox + th, oy - i * U]);
-    placeText(out, p.ly, ox - half(hy) - gy, y0, LH, 1, 'top');
+    labelY(p.ly, y0, hy);
   }
   return out;
 }
@@ -2548,7 +2576,7 @@ function startAction(e) {
   if (penErase(e)) tool = 'eraser';
   else if (penButton(e) || (e.pointerType === 'pen' && tool !== 'hand' && selHit(sx, sy, wx, wy))) tool = 'lasso';
   if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || spaceDown)) tool = 'hand';
-  if (tool === 'hand') { action = { kind: 'pan', id: e.pointerId, sx, sy, tx: S.view.tx, ty: S.view.ty, touch: e.pointerType === 'touch' }; return; }
+  if (tool === 'hand') { action = { kind: 'pan', id: e.pointerId, sx, sy, tx: S.view.tx, ty: S.view.ty, touch: e.pointerType === 'touch', right: e.pointerType === 'mouse' && e.button === 2 }; return; }
   if (tool !== 'lasso' && S.sel) clearSel();
   if (tool === 'pen' || tool === 'hl' || tool === 'tape') {
     const hl = tool === 'hl', tape = tool === 'tape', p = pressureOf(e);
@@ -2675,7 +2703,7 @@ function endAction(cancel) {
     if (cancel) { liveClear(); requestLive(); return; }
     finishShape(a); return;
   }
-  if (a.kind === 'pan') { viewChanged(); requestLive(); return; }
+  if (a.kind === 'pan') { lastPan = { right: a.right, moved: S.view.tx !== a.tx || S.view.ty !== a.ty, t: performance.now() }; viewChanged(); requestLive(); return; }
   if (cancel) {
     if (a.kind === 'erase') for (const id of a.removed) { const it = S.items.find(i => i.id === id); if (it) invalidateBox(it.bb); }
     if ((a.kind === 'move' || a.kind === 'scale') && S.sel) invalidateBox(S.sel.bb);
@@ -2711,6 +2739,7 @@ function gestureMove() {
   if (!g || !pts.length) return;
   const c = pts.length >= 2 ? [(pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2] : [pts[0].x, pts[0].y];
   if (Math.hypot(c[0] - g.c0[0], c[1] - g.c0[1]) > 10) g.moved = true;
+  if (g.held && g.moved) { g.held = false; closeMenus(); }   // nach dem Gedrückthalten doch verschoben: Blase zu
   if (pts.length >= 2 && g.d0 > 0) {
     const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
     if (Math.abs(d - g.d0) > 12) g.moved = true;
@@ -2776,6 +2805,7 @@ cvLive.addEventListener('pointerdown', e => {
     if (S.fingerDraw && touches.size === 1 && S.tool !== 'hand' && !gesture) { startAction(e); return; }
     if (action && action.touch) endAction(action.kind !== 'pan');  // zweiter Finger: Strich verwerfen, Geste starten
     gestureStart();
+    if (touches.size === 1) armPasteHold(gesture);   // gedrückt halten: „Einfügen“
     return;
   }
   if (e.pointerType === 'pen') { penActiveUntil = performance.now() + 600; penArrived(); }
@@ -2828,7 +2858,14 @@ cvLive.addEventListener('pointercancel', pointerEnd);
 cvLive.addEventListener('pointerleave', e => { penDot.style.display = ''; hoverOut(e); });
 cvLive.addEventListener('pointercancel', hoverOut);
 cvLive.addEventListener('lostpointercapture', e => { if (action && action.id === e.pointerId) endAction(false); });
-cvLive.addEventListener('contextmenu', e => e.preventDefault());
+// Rechtsklick mit der Maus: „Einfügen“ wie beim Gedrückthalten mit dem Finger (Finger und Stift lösen hier nichts aus;
+// Windows meldet auch langes Drücken mit dem Finger als Kontextmenü, das übernimmt armPasteHold)
+cvLive.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (!S.note || (e.pointerType && e.pointerType !== 'mouse')) return;
+  if (lastPan && lastPan.right && lastPan.moved && performance.now() - lastPan.t < 1000) return;   // mit der rechten Taste verschoben
+  showPasteMenu(...localXY(e));
+});
 window.addEventListener('blur', () => {
   if (action) endAction(action.kind === 'draw' && action.pts.length < 6);
   touches.clear(); gesture = null; settleZoom();
@@ -3299,15 +3336,15 @@ function drawGraphPreview(v) {
   if (cv.width !== Math.round(W * DPR) || cv.height !== Math.round(H * DPR)) { cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); }
   const g = cv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
   const src = grEdit && S.items.find(it => it.g === grEdit.g && it.t === 's');
-  const z = 0.6, w = src ? src.w / (v.f || 1) : S.size.pen, c = src ? src.c : S.color.pen;
-  const LH = 13 + Math.max(0, w - 2) * 2.5, tw = s => textPolys(s).w * LH / 10, pad = 10;
-  let L = pad, B = pad;   // Platz für Beschriftungen außerhalb des Rechtecks
-  if (v.k === 'axes2p') { L += (tw(v.ly) + 14 + w) * z; B += (LH * 1.5 + 13 + w) * z; }
-  if (v.k === 'axes3') L += (tw(v.lx) + 8 + w) * z;
-  const x0 = L / z, y0 = pad / z, x1 = (W - pad) / z, y1 = (H - B) / z;
+  const z = 0.6, w = src ? src.w / (v.f || 1) : S.size.pen, c = src ? src.c : S.color.pen, pad = 10;
+  // Rechteck so groß wie die Fläche bei 60 %; danach alles mit Beschriftung einpassen (kleiner, wenn sie weit hinausragt)
+  const x0 = 0, y0 = 0, x1 = (W - 2 * pad) / z, y1 = (H - 2 * pad) / z;
   const o = v.k === 'axes3' ? [x0 + 0.4 * (x1 - x0), y0 + 0.6 * (y1 - y0)] : v.k === 'axes2p' ? [x0, y1] : [(x0 + x1) / 2, (y0 + y1) / 2];
-  g.scale(z, z);
-  for (const xy of graphLines({ ...v, b: [x0, y0, x1, y1], o, f: 1 }, w)) {
+  const lines = graphLines({ ...v, b: [x0, y0, x1, y1], o, f: 1 }, w), bb = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const xy of lines) for (let i = 0; i < xy.length; i += 2) { bb[0] = Math.min(bb[0], xy[i]); bb[1] = Math.min(bb[1], xy[i + 1]); bb[2] = Math.max(bb[2], xy[i]); bb[3] = Math.max(bb[3], xy[i + 1]); }
+  const bw = bb[2] - bb[0] + w, bh = bb[3] - bb[1] + w, s = Math.min(z, (W - 2 * pad) / bw, (H - 2 * pad) / bh);
+  g.translate((W - bw * s) / 2 - (bb[0] - w / 2) * s, (H - bh * s) / 2 - (bb[1] - w / 2) * s); g.scale(s, s);
+  for (const xy of lines) {
     const s = shapeStroke(xy, c, w, v.k); if (src && src.al) s.al = src.al;
     fillStroke(g, s, buildPath(s.pts, s.w, false));
   }
@@ -3608,13 +3645,14 @@ async function prepareImage(file) {
   const low = await makeLow(bmp, blob.type); bmp.close();
   return { blob, low, w, h };
 }
-function insertImages(files) {
+// at: Weltpunkt, auf dem das (erste) Bild mittig liegt; sonst die Mitte des Bildschirms
+function insertImages(files, at) {
   const list = [...files].filter(f => f.type.startsWith('image/'));
   if (!list.length || !S.note) return;
   const note = S.note;
   return queueImport(async () => {
     toast('Bild wird eingefügt …', 0);
-    const [cx, cy] = viewCenterWorld(), added = [];
+    const [cx, cy] = at || viewCenterWorld(), added = [];
     let off = 0;
     for (const f of list) {
       try {
@@ -3748,7 +3786,7 @@ async function insertPdfPages(pdf, file, note) {
 // Bild aus der Zwischenablage, ohne es erst als Datei zu speichern (etwa ein Bildschirmfoto mit Win + Umschalt + S).
 // Der Browser fragt dabei evtl. nach Erlaubnis; Strg + V geht auch so (paste-Ereignis unten)
 const CLIP_EMPTY = 'In der Zwischenablage ist kein Bild. Bildschirmfoto: Win + Umschalt + S';
-async function pasteImage() {
+async function pasteImage(at) {
   if (!S.note) return;
   const cb = navigator.clipboard;
   if (!cb || !cb.read) { toast('Hier geht das Einfügen aus der Zwischenablage nur mit Strg + V', 4000); return; }
@@ -3762,8 +3800,33 @@ async function pasteImage() {
     toast(e && e.name === 'NotAllowedError' ? 'Kein Zugriff auf die Zwischenablage. Mit Strg + V geht es auch.' : CLIP_EMPTY, 4500); return;
   }
   if (!files.length) { toast(CLIP_EMPTY, 4500); return; }
-  return insertImages(files);
+  return insertImages(files, at);
 }
+/* Finger auf der Seite gedrückt halten (oder Rechtsklick mit der Maus): Blase „Einfügen“. Sie legt ein Bild aus der
+   Zwischenablage genau dorthin, mittig unter den Finger. Bewegt sich der Finger, verschiebt er wie sonst die Seite und
+   die Blase geht zu. Zeichnet der Finger („Mit dem Finger zeichnen“), gibt es das nicht. */
+const HOLD_MS = 500;
+let pasteAt = null, pasteHoldT = 0, lastPan = null;
+function armPasteHold(g) {
+  clearTimeout(pasteHoldT);
+  pasteHoldT = setTimeout(() => {
+    if (gesture !== g || g.moved || g.cancelled || g.maxN !== 1 || touches.size !== 1 || action || !S.note) return;
+    g.held = true; showPasteMenu(g.c0[0], g.c0[1]);
+  }, HOLD_MS);
+}
+// sx, sy: Punkt auf der Seite wie localXY
+function showPasteMenu(sx, sy) {
+  const m = $('#pasteMenu'), r = cvLive.getBoundingClientRect(), x = r.left + sx, y = r.top + sy;
+  closeMenus(); pasteAt = toWorld(sx, sy);
+  m.classList.remove('hidden');
+  const w = m.offsetWidth, h = m.offsetHeight;
+  let top = y - h - 40;   // über dem Finger, damit er die Blase nicht verdeckt
+  if (top < barBottom() + 8) top = y + 32;
+  m.style.left = clamp(x - w / 2, 8, innerWidth - w - 8) + 'px';
+  m.style.top = clamp(top, 8, innerHeight - h - 8) + 'px';
+  popIn(m, { getBoundingClientRect: () => ({ left: x, top: y, width: 0, height: 0 }) });
+}
+$('#pmPaste').onclick = () => { const at = pasteAt; closeMenus(); pasteImage(at); };
 // Bild-Knopf: kleines Menü, aus der Zwischenablage oder aus einer Datei
 $('#bImg').onclick = () => openMenu($('#imgMenu'), $('#bImg'));
 $('#mImgClip').onclick = () => { closeMenus(); pasteImage(); };
