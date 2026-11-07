@@ -1,6 +1,12 @@
 # Notizen für das Surface Pro 11 (Version 1.5.11)
 
-## Neu in 1.5.11: Deckkraft, Einstellungen für Koordinatensysteme
+## Neu in 1.5.11: Deckkraft, Einstellungen für Koordinatensysteme, Bilder aus der Zwischenablage
+- **Bild aus der Zwischenablage:** Der Bild-Knopf öffnet ein kleines Menü. **Aus der Zwischenablage** fügt ein Bildschirmfoto ein, ohne es vorher als Datei zu speichern: mit Win + Umschalt + S aufnehmen, dann hier einfügen. **Bild aus einer Datei …** öffnet wie bisher die Dateiauswahl. Mit Tastatur geht auch Strg + V. In der Browser-Version fragt der Browser beim ersten Mal, ob die Seite die Zwischenablage lesen darf.
+- **Am Raster ausrichten rastet überall gleich ein:**
+  - Pfeile richten sich beim Verschieben und Skalieren nach ihrem Schaft, nicht mehr nach der Spitze. Vorher lag ein verschobener Pfeil danach etwas neben den Punkten.
+  - Koordinatensysteme richten sich beim Verschieben nach ihrem Ursprung: Achsen und Teilstriche liegen danach auf den Punkten, auch auf einem anderen Blatt, in der anderen Hälfte von A3 quer und bei Graphen, die ohne Raster gezeichnet wurden. Vorher wurden sie nur um ganze Kästchen verschoben und lagen auf dem nächsten Blatt zwischen den Punkten.
+  - Weit herausgezoomt (unter 50 %) zeigt das Muster nur jeden zweiten Punkt. Jetzt rastet dann auch alles nur an den sichtbaren Punkten ein, nicht mehr dazwischen.
+  - Duplizieren legt die Kopie einen Punkt weiter, auf das Raster.
 - **Deckkraft:** Im Menü von Stift und Textmarker (Regler-Knopf neben den Dicken) gibt es den Regler **Deckkraft** (10 bis 100 %). Er gilt für neue Striche: Der Stift ist sonst deckend, der Textmarker hat wie bisher 42 %. Wo sich zwei durchsichtige Striche kreuzen, wird es dunkler, ein Strich selbst wird dort, wo er sich überlappt, nicht dunkler. Ist der Stift durchsichtiger eingestellt, sind auch die Punkte der Dicken blasser. „Farbe übernehmen“ in der Leiste einer Auswahl gibt den Strichen Farbe und Deckkraft.
 - **Koordinatensysteme einstellen:** Ist bei den Formen ein Koordinatensystem gewählt, öffnet der Regler-Knopf neben den Dicken seine Einstellungen (auch über „Einstellungen“ im Formen-Menü bei „Graphen“): den **Abstand der Teilstriche** (½, 1, 2, 3, 4 oder 5 Kästchen) und die **Beschriftung der Achsen**, frei eintippbar oder mit einem Tipp (x · y, t · s, t · v, x · f(x)), mit Vorschau. Die Beschriftung kann Buchstaben, Ziffern, Umlaute, griechische Buchstaben (z. B. φ, ω, Δ), hoch- und tiefgestellte Ziffern (t², s₀) und Zeichen wie ( ) / , . − + = ' ° enthalten; sie wird wie die Achsen als Striche gezeichnet. 3D hat eigene Beschriftungen.
 - **Graph nachträglich ändern:** Einen gezeichneten Graphen mit dem Lasso antippen, dann **Graph ändern** in der Leiste darüber. Abstand und Beschriftung lassen sich so jederzeit ändern, das Menü liegt neben dem Graphen und er wird sofort neu gezeichnet, an derselben Stelle (auch verschoben oder vergrößert) und in seiner Farbe und Dicke. Alle Änderungen bis zum Schließen sind ein Schritt beim Rückgängigmachen. Das geht auch mit Graphen, die vor dieser Version gezeichnet wurden.
@@ -66,7 +72,7 @@
 - **Formen** (Formen-Knopf neben dem Textmarker, Taste F): Linie, Pfeil, Doppelpfeil, Rechteck, Ellipse, Dreieck, rechtwinkliges Dreieck und Raute. Einfach aufziehen. Fast gerade Linien und fast quadratische Formen werden automatisch gerade bzw. quadratisch, mit der Umschalttaste immer.
 - **Graphen:** Im selben Menü gibt es ein Koordinatensystem (x, y), eines nur mit positiven Achsen und ein 3D-Achsenkreuz (x, y, z). Ein Graph lässt sich mit dem Lasso durch einmal Antippen als Ganzes auswählen.
 - **Eigene Formen:** Zeichne etwas, markiere es mit dem Lasso und tippe „Als Form speichern“. Danach steht es im Formen-Menü unter „Eigene Formen“: antippen setzt es in Originalgröße, aufziehen in beliebiger Größe, so oft du willst. Mit dem × löschst du eine Form aus der Liste.
-- **Am Raster ausrichten** (Magnet-Knopf neben dem Hintergrund, Taste G): Formen, Graphen, verschobene Auswahlen, Bilder und PDF-Seiten rasten an den Punkten bzw. Kästchen ein. Normales Schreiben bleibt frei.
+- **Am Raster ausrichten** (Magnet-Knopf neben dem Hintergrund, Taste G): Formen, Graphen, verschobene Auswahlen, Bilder und PDF-Seiten rasten an den Punkten bzw. Kästchen ein, weit herausgezoomt nur an den sichtbaren. Normales Schreiben bleibt frei.
 
 ## Neu in 1.3
 - Ein Strich ist jetzt immer gleich dick, egal bei welchem Zoom er geschrieben wurde (wie bei GoodNotes). Wer reinzoomt, sieht die Schrift größer, aber im Verhältnis gleich dick.
@@ -114,7 +120,7 @@
 | Zoomen | Zwei Finger auseinander/zusammen |
 | Rückgängig | Mit zwei Fingern kurz tippen, oder Strg+Z |
 | Auswählen | Lasso-Werkzeug oder die Taste am Stift gedrückt halten: Kreis um Schrift oder Bilder ziehen (mit der Taste antippen wählt einen Strich), dann verschieben, über den blauen Punkt skalieren, löschen, duplizieren, umfärben, Dicke angleichen oder als eigene Form speichern |
-| Bild einfügen | Bild-Knopf, Strg+V oder Datei ins Fenster ziehen |
+| Bild einfügen | Bild-Knopf (aus der Zwischenablage oder einer Datei), Strg+V oder Datei ins Fenster ziehen |
 | PDF einfügen | PDF-Knopf oder PDF ins Fenster ziehen, jede Seite wird zum Beschriften eingefügt (auf DIN-Seiten: eine PDF-Seite pro Blatt, bei A3 quer links) |
 | Seitenformat | Beim Anlegen einer Seite: Unendlich, DIN A4 oder DIN A3, hoch oder quer |
 | Blatt hinzufügen | DIN-Seiten: Knopf mit Blatt und Plus, neues Blatt hinter dem aktuellen |

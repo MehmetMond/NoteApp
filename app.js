@@ -1335,7 +1335,37 @@ function geoBox(items) {
   }
   return b;
 }
-function selGeoBox(a) { return a.gb || (a.gb = geoBox(S.items.filter(it => S.sel.ids.has(it.id)))); }
+// Schaft eines Pfeils (auch einer Achse eines Koordinatensystems): Indizes von Anfang und Spitze in pts, sonst null.
+// Ein Pfeil ist Ende, Spitze, Flügel, Spitze, Flügel (arrowPts), ein Doppelpfeil Flügel, Anfang, Flügel, Anfang, Ende, …
+function shaftOf(it) {
+  const p = it.pts, same = (i, j) => p[3 * i] === p[3 * j] && p[3 * i + 1] === p[3 * j + 1];
+  if ((it.k === 'arrow' || GRAPHS.has(it.k)) && p.length === 15 && same(1, 3)) return [0, 3];
+  if (it.k === 'arrow2' && p.length === 24 && same(1, 3) && same(4, 6)) return [3, 12];
+  return null;
+}
+// Was mit Raster auf dem Raster liegt (ohne Strichbreite): Bildränder und die Punkte der Striche, bei Pfeilen nur der Schaft
+// (die Spitze ragt seitlich darüber hinaus), bei Koordinatensystemen das aufgezogene Rechteck ohne Teilstriche und Beschriftung
+function gridBox(items) {
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  const add = (x, y) => { if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; };
+  for (const it of items) {
+    if (it.t === 'i') { add(it.x, it.y); add(it.x + it.w, it.y + it.h); continue; }
+    if (it.gr) { const q = it.gr.b; add(q[0], q[1]); add(q[2], q[3]); continue; }
+    const p = it.pts, sh = shaftOf(it);
+    if (sh) { add(p[sh[0]], p[sh[0] + 1]); add(p[sh[1]], p[sh[1] + 1]); continue; }
+    if (GRAPHS.has(it.k)) continue;   // früher gezeichneter Graph: nur die Achsen (eben), nicht Teilstriche und Beschriftung
+    for (let i = 0; i < p.length; i += 3) add(p[i], p[i + 1]);
+  }
+  return b[0] <= b[2] ? b : geoBox(items);
+}
+function selGridBox(a) { return a.gb || (a.gb = gridBox(S.items.filter(it => S.sel.ids.has(it.id)))); }
+// Punkt, der beim Verschieben mit Raster auf dem Raster landet: der Ursprung eines Koordinatensystems (Achsen und
+// Teilstriche liegen dann auf dem Raster, auch auf einem anderen Blatt), sonst die linke obere Ecke von gridBox
+function snapRef(items) {
+  const gi = items.find(it => it.g && GRAPHS.has(it.k)), d = gi && graphData(gi.g);
+  if (d) return d.o;
+  const b = gridBox(items); return [b[0], b[1]];
+}
 function setSel(ids) {
   if (!ids.size) return clearSel();
   const items = S.items.filter(it => ids.has(it.id));
@@ -1452,7 +1482,9 @@ const customOf = k => (isCustom(k) && CUSTOM.find(r => 'custom:' + r.id === k)) 
 S.shape = SHAPE_KINDS.includes(store.get('shape')) || isCustom(store.get('shape')) ? store.get('shape') : 'rect';
 // Rasterabstand wie das sichtbare Muster (Ursprung bei 0,0)
 function gridSize(n = S.note) { return n && n.bg === 'lines' ? 34 : 28; }
-function snapG(v) { const G = gridSize(); return Math.round(v / G) * G; }   // Abstände: ganze Kästchen
+// Abstand, in dem eingerastet wird: wie die sichtbaren Punkte und Linien. Weit herausgezoomt zeigt das Muster nur jeden
+// 2., 4., … davon (fillPattern); dann rastet alles auch nur dort ein, sonst lägen Ecken zwischen den sichtbaren Punkten
+function snapStep() { const G = gridSize(); let m = 1; while (G * m * S.level < 14) m *= 2; return G * m; }
 // Auf Blättern liegt das Muster passend im Blatt: ganze Kästchen, mittig mit gleichem Rand (A3 quer: jede Hälfte
 // für sich, wie zwei A4-Blätter nebeneinander). Liefert die inneren Rechtecke [x0, y0, x1, y1] der Felder von Blatt k;
 // ihre linke obere Ecke ist der Ursprung des Rasters.
@@ -1468,7 +1500,7 @@ function gridOrigin(ax, v) {
   if (ax) return fieldsOf(sheetAt(v))[0][1];
   const fs = fieldsOf(0); return (fs.length > 1 && v >= fs[1][0] - (fs[1][0] - fs[0][2]) / 2 ? fs[1] : fs[0])[0];
 }
-const snapAx = (ax, v, round = Math.round) => { const o = gridOrigin(ax, v), G = gridSize(); return o + round((v - o) / G) * G; };
+const snapAx = (ax, v, round = Math.round) => { const o = gridOrigin(ax, v), G = snapStep(); return o + round((v - o) / G) * G; };
 const snapX = v => snapAx(0, v), snapY = v => snapAx(1, v);
 const ARROW_C = Math.cos(27 * Math.PI / 180), ARROW_S = Math.sin(27 * Math.PI / 180);
 const headLen = (len, w, f) => Math.min(len * f, 12 + w * 2.5);
@@ -1565,7 +1597,7 @@ function placeText(out, str, x, y, h, ax, ay) {
 }
 // Endpunkte nach Raster, Umschalt (gerade/quadratisch) und sanftem Magnet
 function shapeEnds(a) {
-  const k = a.shape, snapOn = S.snap, G = gridSize();
+  const k = a.shape, snapOn = S.snap, G = snapStep();
   let [ax, ay] = a.a0, [bx, by] = a.b;
   if (snapOn) { ax = snapX(ax); ay = snapY(ay); }
   const unit = q => { let ux = Math.cos(q), uy = Math.sin(q); if (Math.abs(ux) < 1e-9) ux = 0; if (Math.abs(uy) < 1e-9) uy = 0; return [ux, uy]; };
@@ -1681,7 +1713,7 @@ function shapeStroke(xy, c, w, k, g, gr) {
 function shapeGeo(a) {
   if (a.custom) return stampGeo(a);
   const small = Math.hypot(a.b[0] - a.a0[0], a.b[1] - a.a0[1]) * S.view.z < 6;
-  const key = small ? 'small' : a.b[0] + ',' + a.b[1] + ',' + a.shift + ',' + S.snap + ',' + gridSize();
+  const key = small ? 'small' : a.b[0] + ',' + a.b[1] + ',' + a.shift + ',' + S.snap + ',' + gridSize() + ',' + snapStep();
   if (a.geo && a.geo.key === key) return a.geo;
   const strokes = [];
   if (!small) {
@@ -1704,7 +1736,7 @@ function stampData(r) {
 }
 // Maßstab und obere linke Ecke der platzierten Form
 function stampPlace(a, tap) {
-  const r = a.custom, G = gridSize();
+  const r = a.custom, G = snapStep();
   if (tap) {
     let x = a.a0[0] - r.w / 2, y = a.a0[1] - r.h / 2;
     if (S.snap) { x = snapX(x); y = snapY(y); }
@@ -1734,7 +1766,7 @@ function stampStrokes(r, s, x, y, g) {
 }
 function stampGeo(a) {
   const r = a.custom, tap = Math.hypot(a.b[0] - a.a0[0], a.b[1] - a.a0[1]) * S.view.z < 6;
-  const key = (tap ? 'tap' : a.b[0] + ',' + a.b[1] + ',' + S.view.z) + ',' + S.snap + ',' + gridSize();
+  const key = (tap ? 'tap' : a.b[0] + ',' + a.b[1] + ',' + S.view.z) + ',' + S.snap + ',' + snapStep();
   if (a.geo && a.geo.key === key) return a.geo;
   const [s, x, y] = stampPlace(a, tap);
   if (!tap && stampData(r).n > STAMP_BIG) {   // große Form: ihre fertigen Pfade nur verschieben und skalieren
@@ -1857,7 +1889,7 @@ function finishShape(a) {
 }
 // Auswahl beim Skalieren: geometrischer rechter (bei hohen Auswahlen unterer) Rand aufs Raster
 function snapScale(a) {
-  const b = selGeoBox(a), [ax, ay] = a.anchor, G = gridSize(), ex = b[2] - ax, ey = b[3] - ay;
+  const b = selGridBox(a), [ax, ay] = a.anchor, G = snapStep(), ex = b[2] - ax, ey = b[3] - ay;
   const e = Math.max(ex, ey), o = ex >= ey ? ax : ay;
   if (!(e >= G / 2)) return a.s;
   let t = snapAx(ex >= ey ? 0 : 1, o + e * a.s);
@@ -1993,7 +2025,7 @@ function startAction(e) {
   } else if (tool === 'lasso') {
     if (S.sel) {
       const h = selHit(sx, sy, wx, wy);
-      if (h === 'scale') { const gb = S.snap ? geoBox(S.items.filter(it => S.sel.ids.has(it.id))) : S.sel.bb;   // mit Raster: an der geometrischen Ecke, die bleibt auf dem Raster
+      if (h === 'scale') { const gb = S.snap ? gridBox(S.items.filter(it => S.sel.ids.has(it.id))) : S.sel.bb;   // mit Raster: an der Ecke, die auf dem Raster liegt
         beginTransform({ kind: 'scale', id: e.pointerId, anchor: [gb[0], gb[1]], s: 1, p0: [wx, wy] }); return; }
       if (h === 'move') { beginTransform({ kind: 'move', id: e.pointerId, wx, wy, sx, sy, dx: 0, dy: 0, moved: false }); return; }
       clearSel();
@@ -2022,11 +2054,9 @@ function moveAction(e) {
     else if (a.kind === 'shape') { a.b[0] = wx; a.b[1] = wy; a.shift = ev.shiftKey; a.mt = performance.now(); a.rest = false; }
     else if (a.kind === 'move') {
       a.dx = wx - a.wx; a.dy = wy - a.wy;
-      if (S.snap) {   // springt von Kästchen zu Kästchen
-        // Koordinatensysteme liegen mit ihren Achsen auf dem Raster, nicht mit der linken Kante der Buchstaben: ganze Kästchen verschieben
-        if (a.graph === undefined) a.graph = S.items.some(it => S.sel.ids.has(it.id) && GRAPHS.has(it.k));
-        if (a.graph) { a.dx = snapG(a.dx); a.dy = snapG(a.dy); }
-        else { const b = selGeoBox(a); a.dx = snapX(b[0] + a.dx) - b[0]; a.dy = snapY(b[1] + a.dy) - b[1]; }
+      if (S.snap) {   // springt von Rasterpunkt zu Rasterpunkt, der Bezugspunkt der Auswahl liegt immer auf dem Raster
+        const r = a.ref || (a.ref = snapRef(S.items.filter(it => S.sel.ids.has(it.id))));
+        a.dx = snapX(r[0] + a.dx) - r[0]; a.dy = snapY(r[1] + a.dy) - r[1];
       }
       if (Math.hypot(sx - a.sx, sy - a.sy) > 3) a.moved = true;
     }
@@ -2901,7 +2931,7 @@ function openMenu(menu, btn) {
   popIn(menu, btn);
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -2929,9 +2959,11 @@ $('#mClear').onclick = async () => { closeMenus(); if (S.items.length && await a
 $('#sDel').onclick = () => { if (!S.sel) return; const ids = S.sel.ids; clearSel(); commit(S.items.filter(it => !ids.has(it.id))); };
 $('#sDup').onclick = () => {
   if (!S.sel) return;
-  const off = S.snap ? gridSize() : 24 / S.view.z, ids = new Set(), groups = new Map();
-  const copies = S.items.filter(it => S.sel.ids.has(it.id)).map(it => {
-    const c = transformItem(it, 1, 0, 0, off, off); c.id = uid(); ids.add(c.id);
+  const sel = S.items.filter(it => S.sel.ids.has(it.id)), ids = new Set(), groups = new Map();
+  let dx = 24 / S.view.z, dy = dx;
+  if (S.snap) { const r = snapRef(sel), st = snapStep(); dx = snapX(r[0] + st) - r[0]; dy = snapY(r[1] + st) - r[1]; }   // einen Rasterpunkt weiter, auf dem Raster
+  const copies = sel.map(it => {
+    const c = transformItem(it, 1, 0, 0, dx, dy); c.id = uid(); ids.add(c.id);
     if (c.g) { if (!groups.has(c.g)) groups.set(c.g, uid()); c.g = groups.get(c.g); }   // Kopie = eigene Gruppe
     return c;
   });
@@ -3122,7 +3154,7 @@ function insertPdf(file) {
     const added = [], failed = [];
     try {
       const [cx] = viewCenterWorld(), [, y0] = toWorld(0, barBottom() + 30);
-      let y = S.snap ? snapG(y0) : y0, x = null;
+      let y = S.snap ? snapY(y0) : y0, x = null;
       for (let i = 1; i <= pdf.numPages; i++) {
         toast(`PDF-Seite ${i} von ${pdf.numPages} …`, 0);
         try {
@@ -3131,7 +3163,7 @@ function insertPdf(file) {
           const imgId = await pdfPageImage(page, vp1, w, note.id);
           if (x === null) x = freeSpot(cx - w / 2, y, w);
           added.push({ t: 'i', id: uid(), img: imgId, x, y, w, h, pdf: file.name, page: i });
-          y += h + 30; if (S.snap) y = Math.ceil(y / gridSize()) * gridSize();
+          y += h + 30; if (S.snap) y = snapAx(1, y, Math.ceil);
           page.cleanup();
         } catch (err) { console.error(err); failed.push(i); }
         await nextFrame();
@@ -3168,7 +3200,29 @@ async function insertPdfPages(pdf, file, note) {
   const last = first + added.length - 1;
   toast((added.length === 1 ? `1 PDF-Seite auf Blatt ${first + 1}` : `${added.length} PDF-Seiten auf Blatt ${first + 1}–${last + 1}`) + ' eingefügt' + bad, 4000);
 }
-$('#bImg').onclick = () => $('#fImg').click();
+// Bild aus der Zwischenablage, ohne es erst als Datei zu speichern (etwa ein Bildschirmfoto mit Win + Umschalt + S).
+// Der Browser fragt dabei evtl. nach Erlaubnis; Strg + V geht auch so (paste-Ereignis unten)
+const CLIP_EMPTY = 'In der Zwischenablage ist kein Bild. Bildschirmfoto: Win + Umschalt + S';
+async function pasteImage() {
+  if (!S.note) return;
+  const cb = navigator.clipboard;
+  if (!cb || !cb.read) { toast('Hier geht das Einfügen aus der Zwischenablage nur mit Strg + V', 4000); return; }
+  const files = [];
+  try {
+    for (const it of await cb.read()) {
+      const type = it.types.find(t => t.startsWith('image/'));
+      if (type) files.push(new File([await it.getType(type)], 'Bild aus der Zwischenablage', { type }));
+    }
+  } catch (e) {
+    toast(e && e.name === 'NotAllowedError' ? 'Kein Zugriff auf die Zwischenablage. Mit Strg + V geht es auch.' : CLIP_EMPTY, 4500); return;
+  }
+  if (!files.length) { toast(CLIP_EMPTY, 4500); return; }
+  return insertImages(files);
+}
+// Bild-Knopf: kleines Menü, aus der Zwischenablage oder aus einer Datei
+$('#bImg').onclick = () => openMenu($('#imgMenu'), $('#bImg'));
+$('#mImgClip').onclick = () => { closeMenus(); pasteImage(); };
+$('#mImgFile').onclick = () => { closeMenus(); $('#fImg').click(); };
 $('#bPdf').onclick = () => $('#fPdf').click();
 $('#fImg').onchange = e => { insertImages(e.target.files); e.target.value = ''; };
 $('#fPdf').onchange = e => { if (e.target.files[0]) insertPdf(e.target.files[0]); e.target.value = ''; };
