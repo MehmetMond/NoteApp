@@ -1,6 +1,6 @@
-# Notizen für das Surface Pro 11 (Version 1.5.11)
+# Notizen für das Surface Pro 11 (Version 1.5.12)
 
-## Bald in 1.5.12: Aussehen wie Windows XP, neue Pfeile (schon in der Browser-Version zum Ausprobieren)
+## Neu in 1.5.12: Aussehen wie Windows XP, neue Pfeile
 - **Aussehen wie Windows XP:** Die ganze App sieht aus wie ein Programm unter Windows XP.
   - Startseite und Buch wie ein Explorer-Fenster: blaue Titelleiste, beige Leiste, grüner Knopf „Neues Buch“, die Seiten als Vorschaubilder.
   - Die Bücher sehen aus wie Computerbücher von damals, jedes in seiner Farbe: Himmel mit Wolken über einem Hügel, der Name groß und durchscheinend im Hintergrund, die Zahl der Seiten auf einem orangen Schild, oben ein Reiter „Notizen“, am Rand eine CD.
