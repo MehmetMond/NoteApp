@@ -29,7 +29,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     if (finish) { await pen('mouseReleased', x1, y1, mods); await frames(); }
   }
   const shape = async (k, ...args) => { await p.evaluate(k => { S.shape = k; setTool('shape'); }, k); return drag(...args); };
-  const last = (n = 1) => p.evaluate(n => S.items.slice(-n).map(s => ({ k: s.k, g: s.g || null, c: s.c, w: s.w, hl: s.hl, pts: Array.from(s.pts) })), n);
+  const last = (n = 1) => p.evaluate(n => S.items.slice(-n).map(s => ({ k: s.k, g: s.g || null, c: s.c, w: s.w, hl: s.hl, pts: Array.from(s.pts), fl: s.fl || null })), n);
   const xy = s => { const r = []; for (let i = 0; i < s.pts.length; i += 3) r.push([s.pts[i], s.pts[i + 1]]); return r; };
   const near = (a, b, e = 0.02) => Math.abs(a - b) <= e;
   const sameXY = (s, list, e = 0.02) => { const q = xy(s); return q.length === list.length / 2 && q.every((v, i) => near(v[0], list[i * 2], e) && near(v[1], list[i * 2 + 1], e)); };
@@ -60,23 +60,28 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
 
   // ---------- 1. Geometrie jeder Form (ohne Raster) ----------
   const geo = {};
-  const head = (len, f) => Math.min(len * f, 12 + W * 2.5);
+  const head = len => Math.min(len * 0.35, 10 + W * 2.5);   // Spitze einer Achse
+  const headF = (len, f) => Math.min(len * f, 10 + W * 4), HEAD_ANG = Math.atan(0.42) * 180 / Math.PI;   // Pfeil: Länge, halber Winkel an der Spitze
+  // Anfang und Spitze einer Achse (Spitze: Punkt 6, mitten in der Fläche)
+  const ends = s => [s.pts[0], s.pts[1], 0.5, s.pts[18], s.pts[19], 0.5];
   const angAt = (tip, a, w) => { const u = [a[0] - tip[0], a[1] - tip[1]], v = [w[0] - tip[0], w[1] - tip[1]]; return Math.acos((u[0] * v[0] + u[1] * v[1]) / Math.hypot(...u) / Math.hypot(...v)) * 180 / Math.PI; };
   {
     await shape('line', 100, 150, 300, 230); const [s] = await last();
     geo.line = sameXY(s, [100, 150, 300, 230]) && s.k === 'line' && allP(s) && s.w === W && s.c === 'ink' && !s.hl && !s.g;
   }
   {
-    await shape('arrow', 100, 150, 300, 230); const [s] = await last(), q = xy(s), len = Math.hypot(200, 80), h = head(len, 0.35);
-    geo.arrow = q.length === 5 && sameXY({ pts: s.pts.slice(0, 6) }, [100, 150, 300, 230]) && near(q[3][0], 300) && near(q[3][1], 230)
-      && near(Math.hypot(q[2][0] - 300, q[2][1] - 230), h, 0.05) && near(Math.hypot(q[4][0] - 300, q[4][1] - 230), h, 0.05)
-      && near(angAt(q[1], q[0], q[2]), 27, 0.05) && near(angAt(q[1], q[0], q[4]), 27, 0.05) && allP(s) && s.k === 'arrow';
+    // gefüllte Speerspitze: Anfang, dann die Fläche ab der Kerbe (fl), Spitze in der Mitte der Fläche (Punkt 6)
+    await shape('arrow', 100, 150, 300, 230); const [s] = await last(), q = xy(s), len = Math.hypot(200, 80), L = headF(len, 0.4);
+    geo.arrow = q.length === 12 && JSON.stringify(s.fl) === '[[1,11]]' && near(q[0][0], 100) && near(q[0][1], 150) && near(q[6][0], 300) && near(q[6][1], 230)
+      && near(Math.hypot(q[1][0] - 300, q[1][1] - 230), 0.88 * L, 0.05) && near(q[1][0], q[11][0]) && near(q[1][1], q[11][1])
+      && near(angAt(q[6], q[0], q[5]), HEAD_ANG, 0.1) && near(angAt(q[6], q[0], q[7]), HEAD_ANG, 0.1) && allP(s) && s.k === 'arrow';
   }
   {
-    await shape('arrow2', 100, 150, 300, 230); const [s] = await last(), q = xy(s), h = head(Math.hypot(200, 80), 0.3);
-    geo.arrow2 = q.length === 8 && near(q[1][0], 100) && near(q[3][1], 150) && near(q[4][0], 300) && near(q[6][1], 230)
-      && near(Math.hypot(q[0][0] - 100, q[0][1] - 150), h, 0.05) && near(angAt(q[1], q[4], q[0]), 27, 0.05) && near(angAt(q[1], q[4], q[2]), 27, 0.05)
-      && near(angAt(q[4], q[1], q[5]), 27, 0.05) && near(angAt(q[4], q[1], q[7]), 27, 0.05) && allP(s);
+    await shape('arrow2', 100, 150, 300, 230); const [s] = await last(), q = xy(s), L = headF(Math.hypot(200, 80), 0.3);
+    geo.arrow2 = q.length === 22 && JSON.stringify(s.fl) === '[[0,10],[11,21]]' && near(q[5][0], 100) && near(q[5][1], 150) && near(q[16][0], 300) && near(q[16][1], 230)
+      && near(Math.hypot(q[0][0] - 100, q[0][1] - 150), 0.88 * L, 0.05) && near(Math.hypot(q[11][0] - 300, q[11][1] - 230), 0.88 * L, 0.05)
+      && near(angAt(q[5], q[16], q[4]), HEAD_ANG, 0.1) && near(angAt(q[5], q[16], q[6]), HEAD_ANG, 0.1)
+      && near(angAt(q[16], q[5], q[15]), HEAD_ANG, 0.1) && near(angAt(q[16], q[5], q[17]), HEAD_ANG, 0.1) && allP(s);
   }
   {
     await shape('rect', 100, 300, 300, 420); const [s] = await last();
@@ -103,7 +108,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   check('geometry', Object.values(geo).every(v => v !== false), geo);
 
   // ---------- 2. Koordinatensysteme ----------
-  const graphOf = async () => p.evaluate(() => { const g = S.items.at(-1).g; return S.items.filter(s => s.g === g).map(s => ({ k: s.k, g: s.g, w: s.w, c: s.c, pts: Array.from(s.pts) })); });
+  const graphOf = async () => p.evaluate(() => { const g = S.items.at(-1).g; return S.items.filter(s => s.g === g).map(s => ({ k: s.k, g: s.g, w: s.w, c: s.c, pts: Array.from(s.pts), fl: s.fl || null })); });
   const th = Math.max(4, W * 1.5);
   const isTick = s => s.pts.length === 6 && near(Math.hypot(s.pts[3] - s.pts[0], s.pts[4] - s.pts[1]), 2 * th, 0.01);
   const gr = {};
@@ -113,11 +118,11 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     const L = await graphOf(), [xa, ya] = L, ticks = L.filter(isTick), G = 28;
     gr.axes2Count = L.length; gr.axes2OneCommit = (await count()) - n0 === L.length;
     gr.axes2Group = L.every(s => s.g && s.g === L[0].g && s.k === 'axes2' && s.w === W && s.c === 'ink');
-    gr.axes2X = sameXY({ pts: xa.pts.slice(0, 6) }, [400, 640, 800, 640]) && xa.pts.length === 15;
-    gr.axes2Y = sameXY({ pts: ya.pts.slice(0, 6) }, [600, 780, 600, 500]) && ya.pts.length === 15;
+    gr.axes2X = sameXY({ pts: ends(xa) }, [400, 640, 800, 640]) && JSON.stringify(xa.fl) === '[[1,11]]';
+    gr.axes2Y = sameXY({ pts: ends(ya) }, [600, 780, 600, 500]) && JSON.stringify(ya.fl) === '[[1,11]]';
     const tx = ticks.filter(s => near(s.pts[0], s.pts[3])).map(s => s.pts[0] - 600).sort((a, b) => a - b);
     const ty = ticks.filter(s => near(s.pts[1], s.pts[4])).map(s => 640 - s.pts[1]).sort((a, b) => a - b);
-    gr.axes2TicksX = tx.length > 6 && tx.every(v => near(v / G, Math.round(v / G), 1e-3) && v !== 0) && tx.every((v, i) => near(v, -tx[tx.length - 1 - i], 1e-3)) && Math.max(...tx) <= 200 - head(400, 0.35);
+    gr.axes2TicksX = tx.length > 6 && tx.every(v => near(v / G, Math.round(v / G), 1e-3) && v !== 0) && tx.every((v, i) => near(v, -tx[tx.length - 1 - i], 1e-3)) && Math.max(...tx) <= 200 - head(400);
     gr.axes2TicksY = ty.length > 4 && ty.every(v => near(v / G, Math.round(v / G), 1e-3) && v !== 0) && ty.every((v, i) => near(v, -ty[ty.length - 1 - i], 1e-3));
     gr.axes2Labels = L.length - 2 - ticks.length === 4;   // x und y je zwei Linien
     gr.axes2ticks = [tx.length, ty.length];
@@ -125,17 +130,17 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   {
     await shape('axes2p', 900, 500, 1200, 780);
     const L = await graphOf(), [xa, ya] = L, ticks = L.filter(isTick);
-    gr.axes2pX = sameXY({ pts: xa.pts.slice(0, 6) }, [900, 780, 1200, 780]);
-    gr.axes2pY = sameXY({ pts: ya.pts.slice(0, 6) }, [900, 780, 900, 500]);
+    gr.axes2pX = sameXY({ pts: ends(xa) }, [900, 780, 1200, 780]);
+    gr.axes2pY = sameXY({ pts: ends(ya) }, [900, 780, 900, 500]);
     gr.axes2pPositive = ticks.length > 6 && ticks.every(s => (near(s.pts[0], s.pts[3]) ? s.pts[0] > 900 : s.pts[1] < 780));
     gr.axes2pK = L.every(s => s.k === 'axes2p');
   }
   {
     await shape('axes3', 100, 500, 400, 800);
-    const L = await graphOf(), ticks = L.filter(isTick), ax = L.filter(s => s.pts.length === 15);
+    const L = await graphOf(), ticks = L.filter(isTick), ax = L.filter(s => s.fl);
     // Ursprung bei 40 % / 60 %, z nach oben, y nach rechts, x 45° nach links unten
     gr.axes3Axes = ax.length === 3 && ax.every(s => near(s.pts[0], 220) && near(s.pts[1], 680));
-    const tips = ax.map(s => [s.pts[3], s.pts[4]]);
+    const tips = ax.map(s => [s.pts[18], s.pts[19]]);
     gr.axes3Tips = JSON.stringify(tips.map(t => t.map(Math.round))) === JSON.stringify([[220, 500], [400, 680], [100, 800]]);
     const diag = ticks.filter(s => !near(s.pts[0], s.pts[3]) && !near(s.pts[1], s.pts[4])).map(s => [(s.pts[0] + s.pts[3]) / 2, (s.pts[1] + s.pts[4]) / 2]);
     gr.axes3XTicks = diag.length >= 5 && diag.every(([x, y], i) => near(220 - x, (i + 1) * 14, 0.01) && near(y - 680, (i + 1) * 14, 0.01));
@@ -187,7 +192,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     // Magnet ohne Umschalt
     await shape('line', 100, 500, 300, 510); [s] = await last(); r.magnet0 = sameXY(s, [100, 500, 100 + Math.hypot(200, 10), 500]);
     await shape('line', 100, 600, 300, 795); [s] = await last(); q = xy(s); r.magnet45 = near(q[1][0] - 100, q[1][1] - 600, 0.01);
-    await shape('arrow', 700, 600, 712, 400); [s] = await last(); q = xy(s); r.magnet90 = near(q[1][0], 700, 0.001);
+    await shape('arrow', 700, 600, 712, 400); [s] = await last(); q = xy(s); r.magnet90 = near(q[6][0], 700, 0.001);
     await shape('line', 100, 700, 300, 780); [s] = await last(); r.noMagnet = sameXY(s, [100, 700, 300, 780]);
     await shape('rect', 800, 150, 1000, 338); [s] = await last(); r.magnetSquare = sameXY(s, [800, 150, 1000, 150, 1000, 350, 800, 350, 800, 150]);
     await shape('ellipse', 800, 400, 1000, 580); [s] = await last(); q = xy(s); r.noMagnet10 = Math.max(...q.map(v => v[1])) < 581;
@@ -211,12 +216,12 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     await shape('rect', 103, 205, 290, 330); let [s] = await last();
     r.rectSnapped = sameXY(s, [112, 196, 280, 196, 280, 336, 112, 336, 112, 196]);
     await shape('line', 405, 210, 611, 333); [s] = await last(); r.lineSnapped = xy(s).every(([x, y]) => m28(x) && m28(y));
-    await shape('arrow', 405, 410, 611, 433, { mods: 8 }); [s] = await last(); r.arrowShiftSnap = near(s.pts[1], s.pts[4]) && m28(s.pts[3]) && m28(s.pts[0]);
-    await shape('arrow', 705, 410, 803, 512, { mods: 8 }); [s] = await last(); r.diagShiftSnap = m28(s.pts[3]) && m28(s.pts[4]) && near(s.pts[3] - s.pts[0], s.pts[4] - s.pts[1]);
+    await shape('arrow', 405, 410, 611, 433, { mods: 8 }); [s] = await last(); r.arrowShiftSnap = near(s.pts[1], s.pts[19]) && m28(s.pts[18]) && m28(s.pts[0]);
+    await shape('arrow', 705, 410, 803, 512, { mods: 8 }); [s] = await last(); r.diagShiftSnap = m28(s.pts[18]) && m28(s.pts[19]) && near(s.pts[18] - s.pts[0], s.pts[19] - s.pts[1]);
     await shape('axes2', 700, 150, 1010, 395); let L = await graphOf();
     const ticks = L.filter(isTick);
     r.graphTicksOnGrid = ticks.every(t => (near(t.pts[0], t.pts[3]) ? m28(t.pts[0]) : m28(t.pts[1])));
-    r.graphOriginOnGrid = m28(L[0].pts[1]) && m28(L[1].pts[0]) && m28(L[0].pts[0]) && m28(L[0].pts[3]);
+    r.graphOriginOnGrid = m28(L[0].pts[1]) && m28(L[1].pts[0]) && m28(L[0].pts[0]) && m28(L[0].pts[18]);
     await shape('axes3', 1000, 450, 1300, 760); L = await graphOf(); r.axes3Origin = m28(L[0].pts[0]) && m28(L[0].pts[1]);
     // liniertes Papier: 34er Raster
     await p.evaluate(() => { S.note.bg = 'lines'; clearTiles(); });

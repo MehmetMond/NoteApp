@@ -1,5 +1,14 @@
 # Notizen für das Surface Pro 11 (Version 1.5.11)
 
+## Bald in 1.5.12: Aussehen wie Windows XP, neue Pfeile (schon in der Browser-Version zum Ausprobieren)
+- **Aussehen wie Windows XP:** Die ganze App sieht aus wie ein Programm unter Windows XP.
+  - Startseite und Buch wie ein Explorer-Fenster: blaue Titelleiste, beige Leiste, grüner Knopf „Neues Buch“, die Seiten als Vorschaubilder.
+  - Die Bücher sehen aus wie Computerbücher von damals, jedes in seiner Farbe: Himmel mit Wolken über einem Hügel, der Name groß und durchscheinend im Hintergrund, die Zahl der Seiten auf einem orangen Schild, oben ein Reiter „Notizen“, am Rand eine CD.
+  - Im Editor oben eine Titelleiste mit dem Namen der Seite; ihr rotes ✕ führt zurück zum Buch. Darunter die beige Werkzeugleiste mit bunten Symbolen und Farben als kleinen Quadraten.
+  - Einstellungen (Stift, Formen, Koordinatensystem, eigene Farbe) und Dialoge sind Fenster mit Titelleiste und rotem ✕, die übrigen Menüs weiße Kontextmenüs mit blauer Markierung, Hinweise gelbe Sprechblasen.
+  - Umschalten: „XP-Stil“ oben auf der Startseite oder „⋯ → Aussehen“. Im XP-Stil gilt der Darkmode nur für die Schreibfläche, die Fenster bleiben hell.
+- **Neue Pfeile:** Pfeil, Doppelpfeil und die Achsen der Koordinatensysteme haben eine gefüllte Spitze wie eine Speerspitze, hinten nach innen gewölbt. Schon gezeichnete Pfeile bleiben, wie sie sind; ein Graph bekommt die neue Spitze, wenn er über „Graph ändern“ neu gezeichnet wird.
+
 ## Neu in 1.5.11: Deckkraft, Einstellungen für Koordinatensysteme, Bilder aus der Zwischenablage
 - **Bild aus der Zwischenablage:** Der Bild-Knopf öffnet ein kleines Menü. **Aus der Zwischenablage** fügt ein Bildschirmfoto ein, ohne es vorher als Datei zu speichern: mit Win + Umschalt + S aufnehmen, dann hier einfügen. **Bild aus einer Datei …** öffnet wie bisher die Dateiauswahl. Mit Tastatur geht auch Strg + V. In der Browser-Version fragt der Browser beim ersten Mal, ob die Seite die Zwischenablage lesen darf.
 - **Einfügen durch Gedrückthalten:** Einen Finger eine halbe Sekunde auf die Seite halten, dann erscheint die Blase **Einfügen**. Antippen legt das Bild aus der Zwischenablage genau dorthin, mittig unter den Finger (mit Raster auf das Raster). Mit der Maus geht dasselbe per Rechtsklick. Bewegt sich der Finger, verschiebt er wie gewohnt die Seite und die Blase geht zu. Ist „Mit dem Finger zeichnen“ an, schreibt der Finger; dann gibt es die Blase nicht.
@@ -115,6 +124,7 @@
 | Tape | Tape (T), über den Inhalt ziehen; antippen deckt auf oder ab; am Ende halten = gerade; Muster (auch Kätzchen, Hündchen und Teufelchen) über den Regler-Knopf neben den Dicken |
 | Gerader Textmarker | Am Ende kurz halten, oder „Immer gerade“ in den Einstellungen des Textmarkers (Regler-Knopf) |
 | Formen und Graphen | Formen (F), dann aufziehen; der Knopf nochmal angetippt öffnet die Auswahl der Formen |
+| Aussehen | „XP-Stil“ oben auf der Startseite oder „⋯ → Aussehen“: Windows XP oder modern |
 | Koordinatensystem einstellen | Koordinatensystem gewählt: Regler-Knopf neben den Dicken (Abstand der Teilstriche, Beschriftung der Achsen); gezeichneten Graphen ändern: mit dem Lasso antippen, „Graph ändern“ |
 | Am Raster ausrichten | Magnet-Knopf (G) an/aus |
 | Radieren | Radierer-Ende des Stifts, oder Radierer-Werkzeug |

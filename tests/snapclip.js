@@ -125,21 +125,22 @@ const onG = (v, o = 0, G = 28) => near((v - o) / G, Math.round((v - o) / G), 1e-
   // Pfeil verschieben: der Schaft bleibt auf dem Raster (früher die Spitze oben, der Schaft lag dann zwischen den Punkten)
   {
     const [a] = await shapeW('arrow', [143, 205], [421, 198]);
-    const s0 = [a.pts[0], a.pts[1], a.pts[3], a.pts[4]];
+    const shaft = id => p.evaluate(id => { const s = S.items.find(i => i.id === id), sh = shaftOf(s); return [s.pts[sh[0]], s.pts[sh[0] + 1], s.pts[sh[1]], s.pts[sh[1] + 1]]; }, id);
+    const s0 = await shaft(a.id);
     await select(a.id); await moveSel(37, 23);
-    const s1 = (await item(a.id)).pts;
-    check('Pfeil verschoben: Schaft auf dem Raster', s0.every(v => onG(v)) && [s1[0], s1[1], s1[3], s1[4]].every(v => onG(v)) && !near(s1[1], s0[1]), { s0, s1: [s1[0], s1[1], s1[3], s1[4]] });
+    const s1 = await shaft(a.id);
+    check('Pfeil verschoben: Schaft auf dem Raster', s0.every(v => onG(v)) && s1.every(v => onG(v)) && !near(s1[1], s0[1]), { s0, s1 });
     // Skalieren am Griff: Anfang bleibt, Spitze aufs Raster, Schaft auf derselben Höhe
     const hb = await p.evaluate(() => { const r = cvLive.getBoundingClientRect(), [x, y] = toScreen(S.sel.bb[2], S.sel.bb[3]); return [r.left + x, r.top + y]; });
     await drag(hb[0], hb[1], hb[0] + 61, hb[1] + 9);
-    const s2 = (await item(a.id)).pts;
-    check('Pfeil skaliert: Schaft bleibt auf dem Raster', near(s2[0], s1[0]) && near(s2[1], s1[1]) && near(s2[4], s1[4]) && onG(s2[3]) && s2[3] > s1[3] + 20, { s1: [s1[0], s1[1], s1[3]], s2: [s2[0], s2[1], s2[3], s2[4]] });
+    const s2 = await shaft(a.id);
+    check('Pfeil skaliert: Schaft bleibt auf dem Raster', near(s2[0], s1[0]) && near(s2[1], s1[1]) && near(s2[3], s1[3]) && onG(s2[2]) && s2[2] > s1[2] + 20, { s1, s2 });
   }
   {
     const [a] = await shapeW('arrow2', [601, 260], [880, 271]);
     await select(a.id); await moveSel(-23, 47);
-    const s = (await item(a.id)).pts;
-    check('Doppelpfeil verschoben: Schaft auf dem Raster', [s[3], s[4], s[12], s[13]].every(v => onG(v)), [s[3], s[4], s[12], s[13]]);
+    const s = await p.evaluate(id => { const s = S.items.find(i => i.id === id), sh = shaftOf(s); return [s.pts[sh[0]], s.pts[sh[0] + 1], s.pts[sh[1]], s.pts[sh[1] + 1]]; }, a.id);
+    check('Doppelpfeil verschoben: Schaft (Spitze zu Spitze) auf dem Raster', s.every(v => onG(v)) && near(s[2] - s[0], 280, 0.6), s);
   }
   // Graph ohne Raster gezeichnet, mit Raster verschoben: Ursprung und Teilstriche springen aufs Raster
   {
@@ -161,7 +162,17 @@ const onG = (v, o = 0, G = 28) => near((v - o) / G, Math.round((v - o) / G), 1e-
   {
     await snapOn(false);
     const L = await shapeW('axes2', [1003, 151], [1281, 387]), g = L[0].g;
-    await p.evaluate(g => commit(S.items.map(it => { if (it.g !== g) return it; const { gr, ...rest } = it; return rest; })), g);
+    await p.evaluate(g => {   // wie vor 1.5.11: ohne Daten, Achsen mit offener Spitze (Ende, Spitze, Flügel, Spitze, Flügel)
+      const C = Math.cos(27 * Math.PI / 180), Sn = Math.sin(27 * Math.PI / 180);
+      const openHead = s => {
+        const sh = shaftOf(s), q0 = [s.pts[sh[0]], s.pts[sh[0] + 1]], q1 = [s.pts[sh[1]], s.pts[sh[1] + 1]];
+        const L = Math.hypot(q1[0] - q0[0], q1[1] - q0[1]), ux = (q1[0] - q0[0]) / L, uy = (q1[1] - q0[1]) / L, h = Math.min(L * 0.35, 17);
+        const xy = [...q0, ...q1, q1[0] - h * (ux * C - uy * Sn), q1[1] - h * (ux * Sn + uy * C), ...q1, q1[0] - h * (ux * C + uy * Sn), q1[1] - h * (-ux * Sn + uy * C)];
+        const pts = new Float32Array(15); for (let i = 0; i < 5; i++) { pts[i * 3] = xy[i * 2]; pts[i * 3 + 1] = xy[i * 2 + 1]; pts[i * 3 + 2] = 0.5; }
+        const { fl, ...rest } = s; return { ...rest, pts, bb: bboxOf(pts, s.w) };
+      };
+      commit(S.items.map(it => { if (it.g !== g) return it; const { gr, ...rest } = it; return rest.fl ? openHead(rest) : rest; }));
+    }, g);
     const o0 = (await graph(g)).o, plain = await p.evaluate(g => S.items.filter(i => i.g === g).every(i => !i.gr), g);
     await snapOn(true); await select(L[0].id); await moveSel(-29, 31);
     const o1 = (await graph(g)).o;

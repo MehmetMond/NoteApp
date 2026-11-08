@@ -12,6 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Notizen">
 <meta name="theme-color" content="#f2f2ef">
+<script>try{if(JSON.parse(localStorage.getItem('notizen.theme'))!=='modern')document.documentElement.classList.add('xp')}catch(e){document.documentElement.classList.add('xp')}</script>
 <style>
 :root{--bg:#f2f2ef;--panel:#ffffff;--text:#1d1d1f;--muted:#6b6b70;--border:#e0e0dc;--accent:#2f6fed;--accent-soft:#e6eefe;--hover:#ececea;--paper:#fcfcfa;--danger:#d93025;--shadow:0 1px 3px rgba(0,0,0,.08),0 6px 20px rgba(0,0,0,.07);--shadow-sm:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);--dot:#dcdcd6;--dash:#cfcfc8;--page:#fbfaf5;--page-edge:#d9d5ca;--label:#fbfaf6;--cover-shadow:0 1px 2px rgba(0,0,0,.16),0 14px 26px -10px rgba(0,0,0,.42);--cover-shadow-lift:0 2px 4px rgba(0,0,0,.14),0 22px 34px -12px rgba(0,0,0,.45);--c1:#5a8ae0;--c2:#2d55a8;--desk:#dcddd8}
 html.dark{--bg:#151618;--panel:#232427;--text:#ececec;--muted:#9a9aa0;--border:#36383c;--accent:#6b97ff;--accent-soft:#2a3550;--hover:#2f3135;--paper:#1c1d20;--danger:#ff6b5e;--shadow:0 1px 3px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);--shadow-sm:0 1px 2px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.2);--dot:#3a3c41;--dash:#44464c;--page:#d9d6cc;--page-edge:#a9a59a;--label:#f1efe8;--cover-shadow:0 1px 2px rgba(0,0,0,.5),0 14px 28px -10px rgba(0,0,0,.75);--cover-shadow-lift:0 2px 4px rgba(0,0,0,.5),0 22px 36px -12px rgba(0,0,0,.8);--desk:#111214}
@@ -30,7 +31,7 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 #home h1{font-size:30px;font-weight:650;letter-spacing:-.015em;line-height:1.15;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #home .sub{font-size:13.5px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .hact{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
-@media (max-width:1180px){#hDark span,#home .sub .opt{display:none}#hDark{padding:9px 12px}}
+@media (max-width:1180px){#hDark span,#hTheme span,#home .sub .opt{display:none}#hDark,#hTheme{padding:9px 12px}}
 .seg{display:flex;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm)}
 .seg .btn{background:none;border:0;box-shadow:none;border-radius:0}
 .seg .btn:first-child{border-radius:11px 0 0 11px}
@@ -340,6 +341,207 @@ html.dark #toast{background:#eee;color:#111}
 .bsw:hover{transform:scale(1.07)}
 .bsw.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--accent)}
 .bsw.on::after{content:'';position:absolute;left:14px;top:13px;width:11px;height:6px;border-left:2.5px solid #fff;border-bottom:2.5px solid #fff;transform:rotate(-45deg)}
+/* ===== Aussehen „Windows XP“ (html.xp): Fenster mit blauer Titelleiste und rotem ✕, beige Flächen, runde Knöpfe mit
+   Verlauf, weiße Kontextmenüs mit blauer Markierung, gelbe Sprechblasen. Eigene Nachbildung des Stils mit CSS, keine
+   Bilder von Windows. Der Schreibbereich folgt weiter Hell/Dunkel, die Fenster bleiben hell wie damals. ===== */
+html.xp,html.xp.dark{--bg:#ece9d8;--panel:#ece9d8;--text:#000;--muted:#55534c;--border:#aca899;--accent:#316ac5;--accent-soft:#c1d2ee;--hover:#e3e2da;--danger:#c0201a;--shadow:2px 3px 6px rgba(0,0,0,.35);--shadow-sm:none;--dash:#aca899;--label:#fff;
+  --xp-title:linear-gradient(180deg,#3d95ff 0,#0a61e8 7%,#0055e5 15%,#0058ee 50%,#0051d9 82%,#0042c4 94%,#003bb0 100%);
+  --xp-frame:#0a55e0;
+  --xp-btn:linear-gradient(180deg,#fff 0,#f4f3ee 40%,#ecebe6 86%,#d6d0c5 100%);
+  --xp-btn-down:linear-gradient(180deg,#d9d7cf 0,#e3e3db 10%,#e5e5de 90%,#f2f2f1 100%);
+  --xp-tool:linear-gradient(180deg,#fff 0,#f3f2ec 60%,#e5e3d9 100%);
+  --xp-x:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='21' height='21'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23f6a27e'/%3E%3Cstop offset='.45' stop-color='%23e2582a'/%3E%3Cstop offset='1' stop-color='%23c23a0d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='.5' y='.5' width='20' height='20' rx='3' fill='url%28%23g%29' stroke='%23fff'/%3E%3Cpath d='M6.5 6.5l8 8M14.5 6.5l-8 8' stroke='%23fff' stroke-width='2.3' stroke-linecap='round'/%3E%3C/svg%3E");
+  --xp-ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect x='2.5' y='1.5' width='11' height='13' rx='1' fill='%23fff' stroke='%23123c9c'/%3E%3Cpath d='M2.5 1.5h2.5v13H2.5z' fill='%232f6fd6'/%3E%3Cpath d='M7 5h5M7 7.5h5M7 10h3.5' stroke='%236f8fcf'/%3E%3C/svg%3E")}
+html.xp body,html.xp button,html.xp input{font-family:Tahoma,Verdana,"Segoe UI",sans-serif}
+html.xp body{font-size:13px}
+html.xp{--icm:none;--icx:inline}   /* bunte Symbole (zweite Gruppe in jedem Symbol) */
+html.xp :is(.rb.back,#hBookMenu,#home :is(#hNewBook,#hNew),.addtile .plus){--icm:inline;--icx:none}
+html.xp .tb:disabled{opacity:1}html.xp .tb:disabled svg.i{filter:grayscale(1) opacity(.45)}
+/* Titelleiste eines Fensters (Einstellungen, Dialog): Verlauf, links Titel, rechts das rote ✕ */
+html.xp :is(#sizeMenu,#graphMenu,#shapeMenu,#colorMenu,#dlgBox)::before{content:attr(data-title);position:sticky;top:0;z-index:2;display:flex;align-items:center;height:30px;padding:0 36px 0 10px;
+  background:var(--xp-x) right 5px center/21px 21px no-repeat,var(--xp-title);color:#fff;font:bold 13.5px "Trebuchet MS",Tahoma,sans-serif;text-shadow:1px 1px 0 #0a1e80;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:6px 6px 0 0}
+html.xp :is(#sizeMenu,#graphMenu,#shapeMenu,#colorMenu){background:#ece9d8;border:3px solid var(--xp-frame);border-top:0;border-radius:8px 8px 0 0;box-shadow:2px 3px 8px rgba(0,0,0,.4);scrollbar-width:auto}
+html.xp :is(#sizeMenu,#graphMenu)::before{margin:-12px -16px 10px;top:-12px}
+html.xp #shapeMenu::before{margin:-10px -10px 8px;top:-10px}
+html.xp #colorMenu::before{margin:-12px -14px 10px;top:-12px}
+/* Kontextmenüs: weiß, schmaler Rand, Zeile unter dem Finger blau */
+html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#grpMenu,#pasteMenu){background:#fff;border:1px solid #8a867a;border-radius:0;box-shadow:2px 2px 3px rgba(0,0,0,.35);padding:2px}
+html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#pasteMenu)>button{border-radius:0;padding:8px 22px 8px 12px;font-size:13px}
+html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#grpMenu,#pasteMenu) button:hover{background:#316ac5;color:#fff}
+html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#grpMenu,#pasteMenu) button:hover :is(svg.i,.sub){color:#fff}
+html.xp .menu button.on{color:#000;font-weight:bold}
+html.xp .menu hr{border-top:1px solid #aca899;margin:3px 2px}
+html.xp #grpMenu button{border-radius:0;padding:8px 12px 7px}
+html.xp #grpMenu button.on{background:#c1d2ee;box-shadow:inset 0 0 0 1px #316ac5}
+html.xp #grpMenu button.on:hover{background:#316ac5}
+html.xp #imgMenu .mhint{border-top:1px solid #aca899;color:#55534c}
+html.xp #pasteMenu button{padding:7px 18px 7px 10px;font-weight:bold}
+html.xp #homeMenu .head{color:#215dc6}
+html.xp #homeMenu .del,html.xp #homeMenu .del svg.i{color:#c0201a}
+html.xp #homeMenu .del:hover,html.xp #homeMenu .del:hover svg.i{color:#fff}
+/* Knöpfe */
+html.xp .btn{min-height:40px;padding:4px 16px;border:1px solid #003c74;border-radius:3px;background:var(--xp-btn);color:#000;box-shadow:none;font-size:13px}
+html.xp .btn:hover{background:var(--xp-btn);box-shadow:inset 0 0 0 1px #fff0cf,inset 0 0 0 2px #f6b43a}
+html.xp .btn:active{background:var(--xp-btn-down)}
+html.xp .btn.primary{color:#000;font-weight:normal;box-shadow:inset 0 0 0 1px #cee7ff,inset 0 0 0 2px #8aabe6}
+html.xp .btn.primary:hover{filter:none;box-shadow:inset 0 0 0 1px #fff0cf,inset 0 0 0 2px #f6b43a}
+html.xp .btn.primary.danger{color:#c0201a;font-weight:bold}
+html.xp .btn svg.i{width:18px;height:18px}
+/* der große Knopf der Startseite: grün wie der berühmte Knopf unten links */
+html.xp #home :is(#hNewBook,#hNew){min-height:40px;padding:3px 18px 3px 12px;border:1px solid #1e641e;border-radius:4px 15px 15px 4px;background:linear-gradient(180deg,#8fd08f 0,#4caf4c 12%,#3a9a3a 45%,#2e8b2e 62%,#3fa43f 88%,#5bbe5b 100%);color:#fff;font:italic bold 15px "Trebuchet MS",Tahoma,sans-serif;text-shadow:1px 1px 1px rgba(0,0,0,.45);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),1px 1px 2px rgba(0,0,0,.3)}
+html.xp #home :is(#hNewBook,#hNew):hover{filter:brightness(1.08)}
+html.xp #home :is(#hNewBook,#hNew) svg.i{stroke-width:3}
+/* Startseite wie ein Explorer-Fenster: blaue Titelleiste, darunter die beige Leiste, weiße Fläche */
+html.xp #home,html.xp #home.inbook,html.xp.dark #home.inbook{background:#fff}
+html.xp #home header{padding:0;gap:0;flex-wrap:wrap;background:#ece9d8;border-bottom:1px solid #aca899}
+html.xp #home .hl{flex:1 0 100%;min-height:42px;padding:4px 12px;gap:10px;background:var(--xp-ico) 10px center/18px 18px no-repeat,var(--xp-title);color:#fff;padding-left:36px}
+html.xp #home #hBookHead{padding-left:8px;background:var(--xp-title)}
+html.xp #home .ttl{display:flex;align-items:baseline;gap:12px}
+html.xp #home h1{font:bold 18px/1.2 "Trebuchet MS",Tahoma,sans-serif;letter-spacing:0;text-shadow:1px 1px 0 #0a1e80}
+html.xp #home .sub{color:#d3e2ff;font-size:12.5px;margin:0}
+html.xp #home .trow{margin:0}
+html.xp #hBookMenu{color:#fff;width:30px;height:30px;border-radius:3px}
+html.xp #hBookMenu:hover,html.xp #hBookMenu.on{background:rgba(255,255,255,.22);color:#fff}
+html.xp .rb.back{width:32px;height:32px;border:1px solid #fff;background:radial-gradient(circle at 35% 30%,#c6f4b8 0,#62c053 42%,#2e8f2e 100%);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.45)}
+html.xp .rb.back:hover{background:radial-gradient(circle at 35% 30%,#d8ffcb 0,#74d064 42%,#33a033 100%)}
+html.xp .rb.back svg.i{stroke-width:3;width:20px;height:20px}
+html.xp .hact{flex:1 0 100%;margin:0;padding:5px 10px;gap:8px;background:linear-gradient(180deg,#fbfbf8,#ece9d8)}
+html.xp .seg{background:none;border:0;box-shadow:none;gap:2px}
+html.xp .seg .btn,html.xp .seg .btn+.btn,html.xp .seg .btn:first-child,html.xp .seg .btn:last-child{min-height:40px;padding:4px 10px;border:1px solid transparent;border-radius:3px;background:none;box-shadow:none}
+html.xp .seg .btn:hover{border-color:#cecec3;background:var(--xp-tool)}
+html.xp .seg .btn.on{border-color:#aca899;background:var(--xp-btn-down);box-shadow:inset 1px 1px 2px rgba(0,0,0,.18)}
+html.xp .seg .btn :is(span){color:#000}
+html.xp #grid{background:#fff}
+html.xp #grid::-webkit-scrollbar{width:17px}
+html.xp #grid::-webkit-scrollbar-track{background:linear-gradient(90deg,#f3f1ec,#fefefb)}
+html.xp #grid::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#c9d7fc,#b8cbfa 50%,#a8bef5);border:1px solid #fff;border-radius:3px;box-shadow:inset 0 0 0 1px #9db5f0}
+/* Bücher: glänzender Einband mit klarer Kante, Schild mit blauem Rand; unter dem Finger blau markiert wie eine Datei */
+html.xp .book .cv:hover{transform:none}
+html.xp .book .cv:hover .cover{box-shadow:0 0 0 1px rgba(0,0,0,.45),0 0 0 4px #316ac5,2px 3px 6px rgba(0,0,0,.35)}
+/* Bücher wie Computerbücher von damals (Taschenbuch): Himmel mit Wolken über einem Hügel, beides in der Farbe des
+   Buchs; dahinter der Name riesig und durchscheinend, oben ein Reiter, links oben ein oranges Schild mit der Seitenzahl,
+   rechts eine CD, unten groß und weiß der Titel. Alles mit CSS gezeichnet (eigene Gestaltung, keine Bilder oder Zeichen). */
+html.xp .book .cv,html.xp .addtile.bk,html.xp #dlgPrev,html.xp .fxbook .lid{border-radius:2px 5px 5px 2px}
+html.xp .cover{background:
+  linear-gradient(90deg,rgba(0,0,0,.28),rgba(0,0,0,0) 4.5%,rgba(255,255,255,.18) 5.5%,rgba(255,255,255,0) 8%),
+  radial-gradient(22% 6% at 22% 17%,rgba(255,255,255,.95),rgba(255,255,255,0) 75%),
+  radial-gradient(15% 5% at 33% 21%,rgba(255,255,255,.85),rgba(255,255,255,0) 75%),
+  radial-gradient(26% 6% at 79% 27%,rgba(255,255,255,.8),rgba(255,255,255,0) 75%),
+  radial-gradient(18% 4.5% at 58% 47%,rgba(255,255,255,.7),rgba(255,255,255,0) 75%),
+  radial-gradient(32% 7% at 24% 57%,rgba(255,255,255,.85),rgba(255,255,255,0) 75%),
+  radial-gradient(24% 5% at 86% 61%,rgba(255,255,255,.75),rgba(255,255,255,0) 75%),
+  radial-gradient(150% 26% at 38% 100%,color-mix(in srgb,var(--c2) 85%,#000) 0,var(--c2) 45%,color-mix(in srgb,var(--c1) 70%,var(--c2)) 80%,color-mix(in srgb,var(--c1) 55%,#fff) 98.5%,rgba(255,255,255,0) 100%),
+  linear-gradient(180deg,color-mix(in srgb,var(--c1) 45%,#fff) 0,color-mix(in srgb,var(--c1) 82%,#fff) 30%,var(--c1) 62%,color-mix(in srgb,var(--c1) 75%,var(--c2)) 100%);
+  box-shadow:0 0 0 1px rgba(0,0,0,.45),2px 3px 5px rgba(0,0,0,.32)}
+html.xp .cover::before{content:attr(data-n);left:20cqw;right:auto;top:7%;bottom:auto;width:120cqw;max-height:47%;overflow:hidden;background:none;box-shadow:none;
+  font:900 30cqw/.84 "Arial Black","Franklin Gothic Heavy",Tahoma,sans-serif;letter-spacing:-.04em;color:rgba(255,255,255,.28);white-space:normal;overflow-wrap:normal;word-break:keep-all}
+html.xp .cover::after{top:19%;bottom:auto;right:-15cqw;width:42cqw;height:42cqw;border-radius:50%;
+  background:radial-gradient(circle,rgba(0,0,0,0) 0 7.5%,rgba(120,130,140,.9) 7.5% 9%,rgba(255,255,255,.92) 9% 17%,rgba(160,170,180,.7) 17% 18.5%,rgba(0,0,0,0) 18.5%),
+    conic-gradient(from 25deg,#dfe3e8,#fff 8%,#b9d4ff 16%,#f2f2f2 24%,#ffd9ec 32%,#e6e6e6 42%,#fff 50%,#d2f5d0 58%,#eee 66%,#fff1c2 74%,#dcdcdc 84%,#dfe3e8);
+  box-shadow:0 0 0 .5cqw rgba(255,255,255,.75),-1cqw 1.6cqw 3cqw rgba(0,0,0,.32)}
+html.xp .cover .gl{background:linear-gradient(118deg,rgba(255,255,255,.22) 0,rgba(255,255,255,0) 38%);box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+html.xp .cover .gl::before{content:'Notizen';position:absolute;top:0;right:6cqw;padding:1.4cqw 3.6cqw 1.9cqw;border-radius:0 0 2cqw 2cqw;
+  background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,.22));color:#fff;font:italic bold 7.2cqw/1 "Trebuchet MS",Tahoma,sans-serif;text-shadow:0 0 1cqw rgba(0,0,0,.35)}
+html.xp .cover .gl::after{content:attr(data-p);position:absolute;top:5cqw;left:8.5cqw;color:#ff6a00;font:900 8.2cqw/1 "Arial Black",Tahoma,sans-serif;text-transform:uppercase;
+  text-shadow:0 0 .7cqw #fff,0 0 .7cqw #fff,0 0 1.4cqw rgba(255,255,255,.9)}
+html.xp .cover .lbl{left:9cqw;right:8cqw;top:57.5%;padding:0;background:none;border:0;border-radius:0;box-shadow:none;text-align:left;color:#fff;
+  font:bold calc(15cqw * var(--kx,1))/1.02 "Franklin Gothic Medium","Trebuchet MS",Tahoma,sans-serif;letter-spacing:-.01em;text-shadow:0 .4cqw 1.2cqw rgba(0,0,0,.45),0 0 .3cqw rgba(0,0,0,.35)}
+html.xp .cover .lbl::after{display:none}
+html.xp .mc .cover::before,html.xp .mc .cover::after,html.xp .mc .gl::before,html.xp .mc .gl::after{display:none}
+html.xp .pgs{background:repeating-linear-gradient(90deg,#fbfbf7 0 1.5px,#d8d4c6 1.5px 2.5px)}
+html.xp .book .cap{padding:0}
+html.xp .book .nm{font-size:13px;font-weight:bold;padding:1px 3px;border-radius:0}
+html.xp .book:hover .nm{background:#316ac5;color:#fff}
+html.xp .dt{font-size:12px;color:#55534c;padding-left:3px}
+html.xp .mbtn{width:30px;height:30px;border-radius:3px;border:1px solid transparent;color:#333}
+html.xp .mbtn:hover,html.xp .mbtn.on{border-color:#cecec3;background:var(--xp-tool);color:#000}
+/* Seiten im Buch: Vorschaubilder wie im Explorer (weiß, feiner Rand, unter dem Finger blau umrandet) */
+html.xp .card{border-radius:0;border:1px solid #aca899;background:#fff;box-shadow:1px 1px 2px rgba(0,0,0,.12)}
+html.xp .card:hover{transform:none;box-shadow:0 0 0 3px #316ac5}
+html.xp .card .meta{min-height:54px;border-top:1px solid #aca899;background:linear-gradient(180deg,#fff,#f3f2ec)}
+html.xp .card .nm{font-size:13px;font-weight:bold}
+html.xp .card :is(.pno,.pfmt){border-radius:2px;background:#ffffe1;box-shadow:0 0 0 1px #8a867a;color:#000;font-weight:normal}
+html.xp .addtile{border:1px dashed #aca899;border-radius:0;background:#fbfbf9;color:#333;font-weight:bold}
+html.xp .addtile.pg{border-radius:0}
+html.xp .addtile:hover{border:1px solid #316ac5;background:#eaf0fb;color:#000}
+html.xp .addtile .plus{background:radial-gradient(circle at 35% 30%,#c6f4b8 0,#62c053 42%,#2e8f2e 100%);color:#fff;border:1px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+html.xp .addtile .plus svg.i{stroke-width:3}
+html.xp .empty h2{font:bold 20px "Trebuchet MS",Tahoma,sans-serif;color:#215dc6}
+/* Editor: oben die Titelleiste eines maximierten Fensters (rotes ✕ = zurück), darunter die beige Werkzeugleiste */
+html.xp #bar{left:0;right:0;top:30px;border:0;border-bottom:1px solid #aca899;border-radius:0;padding:4px 6px;background:linear-gradient(180deg,#fdfdfb 0,#f1efe4 55%,#e3e0cf 100%);box-shadow:inset 0 1px 0 #fff,0 2px 3px rgba(0,0,0,.18)}
+html.xp #bar::before{content:attr(data-title);position:absolute;left:0;right:0;bottom:100%;height:30px;display:flex;align-items:center;padding:0 44px 0 34px;
+  background:var(--xp-x) right 6px center/22px 22px no-repeat,var(--xp-ico) 9px center/17px 17px no-repeat,var(--xp-title);color:#fff;font:bold 14px "Trebuchet MS",Tahoma,sans-serif;text-shadow:1px 1px 0 #0a1e80;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+html.xp :is(.tb,.sz,#zoom){border-radius:3px;border:1px solid transparent}
+html.xp :is(.tb,.sz,#zoom):hover{background:var(--xp-tool);border-color:#cecec3}
+html.xp :is(.tb,.sz).on{background:var(--xp-btn-down);border-color:#aca899;box-shadow:inset 1px 1px 2px rgba(0,0,0,.2)}
+html.xp .tb.on{color:inherit}
+html.xp .tb:disabled{background:none;border-color:transparent}
+html.xp .sz.on span{background:#000}
+html.xp #zoom{color:#000}
+html.xp .sep{width:0;height:30px;border-left:1px solid #aca899;border-right:1px solid #fff;background:none}
+html.xp #title{font:bold 13px Tahoma,Verdana,sans-serif;border-radius:0}
+html.xp #title:hover,html.xp #title:focus{border-color:#7f9db9;background:#fff}
+/* Farben wie die Farbpalette von Paint: kleine Quadrate mit Rand */
+html.xp .sw{width:26px;height:26px;margin:0 2px;border-radius:2px;border:1px solid #fff;box-shadow:0 0 0 1px #6f6f6f}
+html.xp .sw.on{box-shadow:0 0 0 1px #6f6f6f,0 0 0 3px #316ac5}
+html.xp .bsw{border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
+html.xp .bsw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px #316ac5}
+/* Schieberegler wie die Regler von XP */
+html.xp :is(#szRange,#smRange,#opRange){-webkit-appearance:none;appearance:none;background:transparent}
+html.xp :is(#szRange,#smRange,#opRange)::-webkit-slider-runnable-track{height:4px;background:#ecebe4;border:1px solid #9d9c99;border-radius:2px;box-shadow:inset 1px 1px 0 #aca899}
+html.xp :is(#szRange,#smRange,#opRange)::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:23px;margin-top:-10px;border:1px solid #1c5180;border-radius:3px 3px 7px 7px;background:linear-gradient(180deg,#fff 0,#e9e8e0 55%,#d5d3c6 100%);box-shadow:inset 0 -3px 0 #21a121}
+html.xp :is(#szRange,#smRange,#opRange)::-moz-range-track{height:4px;background:#ecebe4;border:1px solid #9d9c99;border-radius:2px}
+html.xp :is(#szRange,#smRange,#opRange)::-moz-range-thumb{width:13px;height:23px;border:1px solid #1c5180;border-radius:3px 3px 7px 7px;background:linear-gradient(180deg,#fff 0,#e9e8e0 55%,#d5d3c6 100%);box-shadow:inset 0 -3px 0 #21a121}
+/* Einstellungen (Stift, Koordinatensystem) */
+html.xp :is(#sizeMenu,#graphMenu) .szhead{color:#000}
+html.xp :is(#sizeMenu,#graphMenu) .szhead b{color:#215dc6}
+html.xp :is(#sizeMenu,#graphMenu) .smchips button,html.xp #dlgFmt .ori button{border:1px solid #003c74;border-radius:3px;background:var(--xp-btn);color:#000;font-size:12.5px}
+html.xp :is(#sizeMenu,#graphMenu) .smchips button:hover,html.xp #dlgFmt .ori button:hover{box-shadow:inset 0 0 0 1px #fff0cf,inset 0 0 0 2px #f6b43a}
+html.xp :is(#sizeMenu,#graphMenu) .smchips button.on,html.xp #dlgFmt .ori button.on{background:var(--xp-btn-down);color:#000;font-weight:bold;box-shadow:inset 1px 1px 2px rgba(0,0,0,.25)}
+html.xp :is(#sizeMenu,#graphMenu) .szprev{border-radius:0;background-color:#fff;box-shadow:inset 1px 1px 0 #808080,inset -1px -1px 0 #fff,inset 2px 2px 0 #404040}
+html.xp :is(#sizeMenu,#graphMenu) .szhint{color:#55534c}
+html.xp #graphMenu .grlab label{color:#000}
+html.xp :is(#graphMenu .grlab input,#dlgIn,#cpHex){border:1px solid #7f9db9;border-radius:0;background:#fff;color:#000;font-family:Tahoma,Verdana,sans-serif}
+html.xp :is(#graphMenu .grlab input,#dlgIn):focus{outline:none;border-color:#316ac5;box-shadow:0 0 0 1px #c1d2ee}
+/* Formen: Abschnitte blau wie die Aufgabenleiste im Explorer, Formen wie große Symbole */
+html.xp #shapeMenu .mh{color:#215dc6;font-size:12px;letter-spacing:0;font-weight:bold}
+html.xp #shapeMenu .shg button,html.xp #shapeMenu .cpick{border-radius:0;border:1px solid transparent;font-size:12px}
+html.xp #shapeMenu .shg button:hover,html.xp #shapeMenu .cpick:hover{background:#eaf0fb;border-color:#c1d2ee}
+html.xp #shapeMenu .shg button.on,html.xp #shapeMenu .cpick.on{background:#c1d2ee;border-color:#316ac5;color:#000;font-weight:bold}
+html.xp #shapeMenu .mhb{color:#215dc6;text-decoration:underline;border-radius:0}
+html.xp #shapeMenu .mhb:hover{background:none;color:#316ac5}
+html.xp #shapeMenu .mhint{border-top:1px solid #aca899;color:#55534c}
+html.xp #shapeMenu .cth{border-radius:0;background:#fff;box-shadow:inset 0 0 0 1px #aca899}
+html.xp #shapeMenu .cempty{border-radius:0}
+/* Eigene Farbe */
+html.xp .cpfield{border-radius:0;box-shadow:inset 1px 1px 0 #808080,inset -1px -1px 0 #fff}
+html.xp .cphue::before{border-radius:0;box-shadow:inset 1px 1px 0 #808080}
+html.xp #colorMenu .cplabel{color:#215dc6;font-weight:bold}
+html.xp #colorMenu .cpsw button{border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.45)}
+html.xp #colorMenu .cpsw button.on{box-shadow:0 0 0 2px #fff,0 0 0 4px #316ac5}
+html.xp #cpChip{border-radius:2px}
+/* Auswahl: kleine Werkzeugleiste */
+html.xp #selbar{gap:1px;padding:3px;border:1px solid #8a867a;border-radius:3px;background:linear-gradient(180deg,#fdfdfb,#ece9d8);box-shadow:2px 2px 3px rgba(0,0,0,.3)}
+html.xp #selbar button{padding:6px 10px;font-size:13px;border-radius:3px;border:1px solid transparent}
+html.xp #selbar button:hover{background:var(--xp-tool);border-color:#cecec3}
+html.xp #selbar .del{color:#c0201a}
+/* Dialog: Fenster mit Titelleiste, Knöpfe unten rechts */
+html.xp #dlg{background:rgba(0,0,0,.15)}
+html.xp #dlgBox{padding:0 14px 14px;gap:12px;border:3px solid var(--xp-frame);border-top:0;border-radius:8px 8px 0 0;background:#ece9d8;box-shadow:2px 3px 10px rgba(0,0,0,.45)}
+html.xp #dlgBox::before{margin:0 -14px;grid-column:1/-1}
+html.xp #dlgBox.bk,html.xp #dlgBox.pf{padding:0 18px 16px}
+html.xp :is(#dlgBox.bk,#dlgBox.pf)::before{margin:0 -18px}
+html.xp #dlgBox.bk #dlgPrev{grid-row:3/5}   /* die Titelleiste ist die erste Zeile */
+html.xp #dlgMsg{font-size:14px}
+html.xp :is(#dlgBox.bk,#dlgBox.pf) #dlgMsg{font:bold 16px "Trebuchet MS",Tahoma,sans-serif;color:#215dc6}
+html.xp #dlgFmt .fmts button{border-radius:0;background:#fff;box-shadow:inset 0 0 0 1px #aca899}
+html.xp #dlgFmt .fmts button:hover{background:#eaf0fb}
+html.xp #dlgFmt .fmts button.on{background:#c1d2ee;box-shadow:inset 0 0 0 1px #316ac5}
+html.xp #dlgFmt .ori{background:none;box-shadow:none;gap:6px;padding:0}
+html.xp #dlgFmtHint{color:#55534c}
+/* Hinweis unten: gelbe Sprechblase mit Info-Zeichen */
+html.xp #toast,html.xp.dark #toast{background:#ffffe1;color:#000;border:1px solid #000;border-radius:8px;box-shadow:2px 3px 5px rgba(0,0,0,.4);font:13px Tahoma,Verdana,sans-serif;padding:9px 14px 9px 36px}
+html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17px;height:17px;margin-top:-8.5px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#a9d2ff 0,#3b82e6 55%,#1d4fbf 100%);color:#fff;font:bold italic 12px/17px Georgia,serif;text-align:center;box-shadow:0 0 0 1px #fff,0 0 0 2px #1d4fbf}
 </style>
 </head>
 <body>
@@ -358,6 +560,7 @@ html.dark #toast{background:#eee;color:#111}
     <div class="hact">
       <div class="seg">
         <button class="btn" id="hDark" title="Hell / Dunkel"><svg class="i"><use href="#ic-moon"/></svg><span>Darkmode</span></button>
+        <button class="btn" id="hTheme" title="Aussehen: Windows XP oder modern"><svg class="i"><use href="#ic-xp"/></svg><span>XP-Stil</span></button>
         <button class="btn" id="hBackup" title="Alle Bücher und Seiten als Datei sichern"><svg class="i"><use href="#ic-down"/></svg>Sichern</button>
         <button class="btn" id="hRestore" title="Gesicherte Bücher und Seiten laden"><svg class="i"><use href="#ic-up"/></svg>Wiederherstellen</button>
       </div>
@@ -420,7 +623,7 @@ html.dark #toast{background:#eee;color:#111}
   <div class="mhint">Bildschirmfoto mit Win + Umschalt + S, dann hier einfügen. Mit Tastatur geht auch Strg + V.</div>
 </div>
 <div id="pasteMenu" class="menu hidden"><button id="pmPaste"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button></div>
-<div id="sizeMenu" class="menu hidden">
+<div id="sizeMenu" class="menu hidden" data-title="Stift">
   <div class="szhead"><span id="szLabel">Stift</span><b id="szVal"></b></div>
   <input type="range" id="szRange" min="0" max="1000" step="1" aria-label="Strichstärke">
   <div id="opBox"><div class="szhead"><span>Deckkraft</span><b id="opVal"></b></div>
@@ -436,7 +639,7 @@ html.dark #toast{background:#eee;color:#111}
   <div id="tpAll" class="smchips"><button id="tpShow">Alle aufdecken</button><button id="tpHide">Alle abdecken</button></div>
   <div class="szhint" id="szHint"></div>
 </div>
-<div id="graphMenu" class="menu hidden" role="dialog" aria-label="Einstellungen des Koordinatensystems">
+<div id="graphMenu" class="menu hidden" data-title="Koordinatensystem" role="dialog" aria-label="Einstellungen des Koordinatensystems">
   <div class="szhead"><span id="grTitle">Koordinatensystem</span></div>
   <div class="szhead grsub"><span>Abstand der Teilstriche</span><b id="grStepVal"></b></div>
   <div id="grSteps" class="smchips"></div>
@@ -450,14 +653,14 @@ html.dark #toast{background:#eee;color:#111}
   <div class="szprev"><canvas id="grPrev"></canvas></div>
   <div class="szhint" id="grHint"></div>
 </div>
-<div id="colorMenu" class="menu hidden" role="dialog" aria-label="Eigene Farbe">
+<div id="colorMenu" class="menu hidden" data-title="Eigene Farbe" role="dialog" aria-label="Eigene Farbe">
   <div class="cphead"><span>Eigene Farbe</span><span class="cpnow"><i id="cpChip"></i><input id="cpHex" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Farbwert, z. B. #3a7bd5"></span></div>
   <div id="cpField" class="cpfield" tabindex="0" role="group" aria-label="Sättigung (nach rechts) und Helligkeit (nach oben)"><i id="cpKnob"></i></div>
   <div id="cpHue" class="cphue" tabindex="0" role="slider" aria-label="Farbton" aria-valuemin="0" aria-valuemax="360"><i id="cpHueKnob"></i></div>
   <div id="cpRecentBox"><div class="cplabel">Zuletzt</div><div id="cpRecent" class="cpsw"></div></div>
   <div class="cplabel">Vorschläge</div><div id="cpSugg" class="cpsw"></div>
 </div>
-<div id="shapeMenu" class="menu hidden">
+<div id="shapeMenu" class="menu hidden" data-title="Formen">
   <div class="mh">Formen</div>
   <div class="shg">
     <button data-shape="line"><svg class="i"><use href="#sh-line"/></svg>Linie</button>
@@ -483,6 +686,7 @@ html.dark #toast{background:#eee;color:#111}
   <button id="mFit">Alles anzeigen</button>
   <button id="mFinger">Mit dem Finger zeichnen: aus</button>
   <button id="mFull">Vollbild</button>
+  <button id="mTheme">Aussehen: Windows XP</button>
   <hr>
   <button id="mPdf">Als PDF exportieren</button>
   <button id="mPng">Als Bild exportieren (PNG)</button>
@@ -499,48 +703,50 @@ html.dark #toast{background:#eee;color:#111}
 <input type="file" id="fImg" accept="image/*" multiple class="hidden">
 <input type="file" id="fPdf" accept="application/pdf,.pdf" class="hidden">
 <input type="file" id="fRestore" accept=".notizen,.json,application/json" class="hidden">
-<div id="dlg" class="hidden"><form id="dlgBox"><div id="dlgPrev" class="hidden"><span class="pgs"></span><span class="cover"><span class="gl"></span><span class="lbl"><span class="t"></span></span></span></div><div id="dlgMsg"></div><div id="dlgFmt" class="hidden"><div class="fmts"><button type="button" data-f="inf"><span class="pv"><i></i></span><b>Unendlich</b><small>Freie Fläche</small></button><button type="button" data-f="a4"><span class="pv"><i></i></span><b>DIN A4</b><small>210 × 297 mm</small></button><button type="button" data-f="a3"><span class="pv"><i></i></span><b>DIN A3</b><small>297 × 420 mm</small></button></div><div class="ori"><button type="button" data-o="p"><svg viewBox="0 0 24 24"><rect x="6.5" y="3.5" width="11" height="17" rx="2"/></svg>Hochformat</button><button type="button" data-o="l"><svg viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="17" height="11" rx="2"/></svg>Querformat</button></div><div id="dlgFmtHint"></div></div><input id="dlgIn" spellcheck="false" maxlength="80"><div id="dlgSw" class="hidden"></div><div class="row"><button type="button" class="btn" id="dlgNo">Abbrechen</button><button type="submit" class="btn primary" id="dlgOk">OK</button></div></form></div>
+<div id="dlg" class="hidden"><form id="dlgBox" data-title="Notizen"><div id="dlgPrev" class="hidden"><span class="pgs"></span><span class="cover"><span class="gl"></span><span class="lbl"><span class="t"></span></span></span></div><div id="dlgMsg"></div><div id="dlgFmt" class="hidden"><div class="fmts"><button type="button" data-f="inf"><span class="pv"><i></i></span><b>Unendlich</b><small>Freie Fläche</small></button><button type="button" data-f="a4"><span class="pv"><i></i></span><b>DIN A4</b><small>210 × 297 mm</small></button><button type="button" data-f="a3"><span class="pv"><i></i></span><b>DIN A3</b><small>297 × 420 mm</small></button></div><div class="ori"><button type="button" data-o="p"><svg viewBox="0 0 24 24"><rect x="6.5" y="3.5" width="11" height="17" rx="2"/></svg>Hochformat</button><button type="button" data-o="l"><svg viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="17" height="11" rx="2"/></svg>Querformat</button></div><div id="dlgFmtHint"></div></div><input id="dlgIn" spellcheck="false" maxlength="80"><div id="dlgSw" class="hidden"></div><div class="row"><button type="button" class="btn" id="dlgNo">Abbrechen</button><button type="submit" class="btn primary" id="dlgOk">OK</button></div></form></div>
 <div id="toast" style="opacity:0"></div>
 
 <svg width="0" height="0" style="position:absolute">
-  <symbol id="ic-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <defs><linearGradient id="xg-blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9d4ff"/><stop offset="0.5" stop-color="#3d86ea"/><stop offset="1" stop-color="#1a4fbf"/></linearGradient><linearGradient id="xg-green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b9f29f"/><stop offset="0.5" stop-color="#4cb83a"/><stop offset="1" stop-color="#24801c"/></linearGradient><linearGradient id="xg-yellow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff7a8"/><stop offset="0.5" stop-color="#ffd23a"/><stop offset="1" stop-color="#e39b00"/></linearGradient><linearGradient id="xg-neon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6ffa6"/><stop offset="0.5" stop-color="#e2f53a"/><stop offset="1" stop-color="#b5cc00"/></linearGradient><linearGradient id="xg-red" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb39e"/><stop offset="0.5" stop-color="#e5421f"/><stop offset="1" stop-color="#a8270b"/></linearGradient><linearGradient id="xg-orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffdc9e"/><stop offset="0.5" stop-color="#ff9a2e"/><stop offset="1" stop-color="#cf6200"/></linearGradient><linearGradient id="xg-pink" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd2e2"/><stop offset="0.5" stop-color="#f07ea4"/><stop offset="1" stop-color="#c44a77"/></linearGradient><linearGradient id="xg-silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#d7dbe2"/><stop offset="1" stop-color="#97a0ab"/></linearGradient><linearGradient id="xg-paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.6" stop-color="#f4f4ee"/><stop offset="1" stop-color="#dedcd0"/></linearGradient><linearGradient id="xg-wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3cf98"/><stop offset="0.5" stop-color="#c98d4a"/><stop offset="1" stop-color="#93602c"/></linearGradient><linearGradient id="xg-folder" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2b8"/><stop offset="0.5" stop-color="#ffd15c"/><stop offset="1" stop-color="#e3a41f"/></linearGradient><linearGradient id="xg-tape" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6d2"/><stop offset="0.5" stop-color="#f3dc8e"/><stop offset="1" stop-color="#d6b552"/></linearGradient><linearGradient id="xg-skinU" x1="0" y1="3" x2="0" y2="21" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff3e4"/><stop offset="0.5" stop-color="#ffd6ab"/><stop offset="1" stop-color="#e9a86e"/></linearGradient><linearGradient id="xg-blueU" x1="0" y1="5" x2="0" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a9d4ff"/><stop offset="0.5" stop-color="#3d86ea"/><stop offset="1" stop-color="#1a4fbf"/></linearGradient><linearGradient id="xg-skyU" x1="0" y1="5" x2="0" y2="17" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a8d8ff"/><stop offset="1" stop-color="#4b98e8"/></linearGradient><linearGradient id="xg-hillU" x1="0" y1="12" x2="0" y2="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a9e98a"/><stop offset="1" stop-color="#3a9629"/></linearGradient></defs>
+  <symbol id="ic-back" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M15 18l-6-6 6-6"/></g><g style="display:var(--icx,none)" stroke="none"><circle cx="12" cy="12" r="9.6" fill="url(#xg-green)" stroke="#1f6e17" stroke-width=".9"/><path d="M7.6 6.2a7.5 5 0 0 1 8.8 0" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.2" stroke-linecap="round"/><path d="M13.6 7.4L8.8 12l4.8 4.6M9.4 12h6.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g></symbol>
   <symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-  <symbol id="ic-pen" viewBox="0 0 24 24"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/><path d="M14 6l3 3"/></symbol>
-  <symbol id="ic-hl" viewBox="0 0 24 24"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 01-2.8 0l-5.2-5.2a2 2 0 010-2.8L14 4"/></symbol>
-  <symbol id="ic-tape" viewBox="0 0 24 24"><path d="M7.1 21.1L21.1 7.1 18 6 16.9 2.9 2.9 16.9 6 18z"/><path d="M8.6 12.6l2.8 2.8M12.6 8.6l2.8 2.8"/></symbol>
-  <symbol id="ic-eraser" viewBox="0 0 24 24"><path d="M7 21h12"/><path d="M5.4 13.6l7.2-7.2a2 2 0 012.8 0l3.2 3.2a2 2 0 010 2.8L11.5 19.5H8.4L5.4 16.4a2 2 0 010-2.8z"/><path d="M9 10l5 5"/></symbol>
-  <symbol id="ic-lasso" viewBox="0 0 24 24"><ellipse cx="12" cy="9.5" rx="8.5" ry="5.5" stroke-dasharray="3 3"/><path d="M7.5 14.2c-1.2 1.6-.6 3.8 1.5 4.8"/></symbol>
-  <symbol id="ic-hand" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 00-4 0v5M14 10V4a2 2 0 00-4 0v6M10 10.5V6a2 2 0 00-4 0v8a8 8 0 0016 0v-3a2 2 0 00-4 0"/></symbol>
-  <symbol id="ic-img" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></symbol>
-  <symbol id="ic-clip" viewBox="0 0 24 24"><path d="M9 4.5H7a2 2 0 00-2 2V19a2 2 0 002 2h10a2 2 0 002-2V6.5a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="3.5" rx="1"/><path d="M8.5 17.5l2.8-2.8 1.9 1.9 2.3-2.3"/></symbol>
-  <symbol id="ic-addpage" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M12 11v7M8.5 14.5h7"/></symbol>
-  <symbol id="ic-pdf" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></symbol>
-  <symbol id="ic-dots" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="5" r="1.4"/><circle cx="12" cy="5" r="1.4"/><circle cx="19" cy="5" r="1.4"/><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/><circle cx="5" cy="19" r="1.4"/><circle cx="12" cy="19" r="1.4"/><circle cx="19" cy="19" r="1.4"/></g></symbol>
-  <symbol id="ic-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></symbol>
-  <symbol id="ic-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></symbol>
-  <symbol id="ic-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></symbol>
-  <symbol id="ic-tune" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
-  <symbol id="ic-more" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g></symbol>
-  <symbol id="ic-down" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
-  <symbol id="ic-up" viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></symbol>
-  <symbol id="ic-edit" viewBox="0 0 24 24"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></symbol>
-  <symbol id="ic-move" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 015.5 5H9l2 2h7.5A2.5 2.5 0 0121 9.5v8a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 17.5z"/><path d="M9.5 13.5h6M13 11l2.5 2.5L13 16"/></symbol>
+  <symbol id="ic-pen" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/><path d="M14 6l3 3"/></g><g style="display:var(--icx,none)" stroke="none"><g transform="rotate(-45 12 12)"><path d="M1.2 12L6 9.2V14.8z" fill="#f6d9ab" stroke="#7a5320" stroke-width=".8" stroke-linejoin="round"/><path d="M1.2 12L3.3 10.8V13.2z" fill="#333"/><rect x="6" y="9.2" width="11" height="5.6" fill="url(#xg-yellow)" stroke="#8a6200" stroke-width=".8"/><path d="M6 11.1h11M6 12.9h11" stroke="#d99a00" stroke-width=".6"/><rect x="17" y="9.2" width="2.4" height="5.6" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".8"/><rect x="19.4" y="9.2" width="3.4" height="5.6" rx="1.2" fill="url(#xg-pink)" stroke="#9b3f62" stroke-width=".8"/></g></g></symbol>
+  <symbol id="ic-hl" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 01-2.8 0l-5.2-5.2a2 2 0 010-2.8L14 4"/></g><g style="display:var(--icx,none)" stroke="none"><g transform="rotate(-45 12 12)"><path d="M1.3 10.4L4.4 9.2v5.6l-3.1-1.2z" fill="#f5f000" stroke="#7d7600" stroke-width=".8" stroke-linejoin="round"/><rect x="4.4" y="8.7" width="2.8" height="6.6" fill="#5c5c5c" stroke="#262626" stroke-width=".8"/><rect x="7.2" y="7.8" width="11.8" height="8.4" rx="1.4" fill="url(#xg-neon)" stroke="#6f7d00" stroke-width=".8"/><rect x="8.4" y="9" width="9.2" height="1.7" rx=".85" fill="#fff" fill-opacity=".65"/><rect x="19" y="8.3" width="3.8" height="7.4" rx="1.3" fill="#474747" stroke="#1f1f1f" stroke-width=".8"/></g></g></symbol>
+  <symbol id="ic-tape" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M7.1 21.1L21.1 7.1 18 6 16.9 2.9 2.9 16.9 6 18z"/><path d="M8.6 12.6l2.8 2.8M12.6 8.6l2.8 2.8"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M12 15.2l9.6 5.3-.5.7.9.4-.6.8.9.3-.6.9-10-5.6z" fill="#f3dfa3" stroke="#a88a3a" stroke-width=".7" stroke-linejoin="round"/><circle cx="9.6" cy="10.6" r="7.8" fill="url(#xg-tape)" stroke="#a8862a" stroke-width=".9"/><circle cx="9.6" cy="10.6" r="5.6" fill="none" stroke="#c9a54a" stroke-width=".7" stroke-opacity=".8"/><circle cx="9.6" cy="10.6" r="3.3" fill="#fff" stroke="#a8862a" stroke-width=".8"/><path d="M5 6.6a6 6 0 0 1 4.2-2" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></g></symbol>
+  <symbol id="ic-eraser" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M7 21h12"/><path d="M5.4 13.6l7.2-7.2a2 2 0 012.8 0l3.2 3.2a2 2 0 010 2.8L11.5 19.5H8.4L5.4 16.4a2 2 0 010-2.8z"/><path d="M9 10l5 5"/></g><g style="display:var(--icx,none)" stroke="none"><g transform="rotate(-35 12 12)"><rect x="2.6" y="7.6" width="18.8" height="8.8" rx="1.8" fill="url(#xg-pink)" stroke="#9b3f62" stroke-width=".9"/><path d="M11.6 7.6h8a1.8 1.8 0 0 1 1.8 1.8v5.2a1.8 1.8 0 0 1-1.8 1.8h-8z" fill="url(#xg-blue)" stroke="#1a3f8f" stroke-width=".9"/><path d="M4.4 9.4h5.4" stroke="#fff" stroke-opacity=".7" stroke-width="1.2" stroke-linecap="round"/></g></g></symbol>
+  <symbol id="ic-lasso" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><ellipse cx="12" cy="9.5" rx="8.5" ry="5.5" stroke-dasharray="3 3"/><path d="M7.5 14.2c-1.2 1.6-.6 3.8 1.5 4.8"/></g><g style="display:var(--icx,none)" stroke="none"><ellipse cx="12.6" cy="9.4" rx="8.6" ry="5.8" fill="#dbe9ff" fill-opacity=".6" stroke="#1d5bbf" stroke-width="1.8" stroke-dasharray="3 2.2"/><path d="M7.3 14.3C5.6 16.3 6.4 19.3 9.8 20.3" fill="none" stroke="#8a5a20" stroke-width="2" stroke-linecap="round"/><circle cx="7.5" cy="14.1" r="1.7" fill="url(#xg-wood)" stroke="#6a4316" stroke-width=".8"/></g></symbol>
+  <symbol id="ic-hand" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M18 11V6a2 2 0 00-4 0v5M14 10V4a2 2 0 00-4 0v6M10 10.5V6a2 2 0 00-4 0v8a8 8 0 0016 0v-3a2 2 0 00-4 0"/></g><g style="display:var(--icx,none)" stroke="none"><g fill="url(#xg-skinU)" stroke="#94551f" stroke-width=".9"><rect x="6.2" y="5.4" width="3" height="9.6" rx="1.5"/><rect x="9.2" y="3.4" width="3" height="11.4" rx="1.5"/><rect x="12.2" y="4.2" width="3" height="10.6" rx="1.5"/><rect x="15.2" y="6.4" width="2.7" height="8.6" rx="1.35"/></g><path d="M6.2 11.2L3.6 9.6a1.5 1.5 0 0 0-1.9 2.3L5.6 17.6C6.8 19.6 8.6 21 11.4 21H13c3 0 4.9-2.1 4.9-5.2V11.2z" fill="url(#xg-skinU)"/><path d="M6.2 11.9L3.6 9.6a1.5 1.5 0 0 0-1.9 2.3L5.6 17.6C6.8 19.6 8.6 21 11.4 21H13c3 0 4.9-2.1 4.9-5.2V12.4" fill="none" stroke="#94551f" stroke-width=".9" stroke-linejoin="round"/></g></symbol>
+  <symbol id="ic-img" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></g><g style="display:var(--icx,none)" stroke="none"><rect x="2.5" y="4" width="19" height="16" rx="1.3" fill="#fff" stroke="#4f5964" stroke-width=".9"/><rect x="4.2" y="5.7" width="15.6" height="12.6" fill="url(#xg-skyU)"/><path d="M4.2 15.6c3.4-3 6.8-2.8 9.6-1 2-1.2 4.2-1.2 6-.3v4H4.2z" fill="url(#xg-hillU)"/><circle cx="15.8" cy="9" r="2" fill="#ffd21a" stroke="#d99a00" stroke-width=".6"/><path d="M6 10.6h4.3a1.5 1.5 0 0 0-2.4-1.6 1.2 1.2 0 0 0-1.9 1.6z" fill="#fff"/></g></symbol>
+  <symbol id="ic-xp" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M14.5 6.5h1.5M17.5 6.5h1"/></g><g style="display:var(--icx,none)" stroke="none"><rect x="2.5" y="4" width="19" height="16" rx="1.6" fill="#fff" stroke="#1a3f8f" stroke-width=".9"/><path d="M2.5 9V5.6A1.6 1.6 0 0 1 4.1 4h15.8a1.6 1.6 0 0 1 1.6 1.6V9z" fill="url(#xg-blue)" stroke="#1a3f8f" stroke-width=".9"/><rect x="16.9" y="5.1" width="3.4" height="2.9" rx=".6" fill="url(#xg-red)" stroke="#fff" stroke-width=".5"/><path d="M5 12.2h8M5 14.7h11M5 17.2h6" stroke="#9bb3d9" stroke-width=".9"/></g></symbol>
+  <symbol id="ic-clip" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M9 4.5H7a2 2 0 00-2 2V19a2 2 0 002 2h10a2 2 0 002-2V6.5a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="3.5" rx="1"/><path d="M8.5 17.5l2.8-2.8 1.9 1.9 2.3-2.3"/></g><g style="display:var(--icx,none)" stroke="none"><rect x="4" y="3.6" width="16" height="18" rx="1.6" fill="url(#xg-wood)" stroke="#6a4316" stroke-width=".9"/><rect x="6.4" y="6.4" width="11.2" height="13" fill="url(#xg-paper)" stroke="#8f8f86" stroke-width=".6"/><path d="M8.4 10.2h7M8.4 12.8h7M8.4 15.4h4.5" stroke="#9a9a90" stroke-width=".9"/><rect x="8.4" y="2" width="7.2" height="4.4" rx="1.2" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9"/></g></symbol>
+  <symbol id="ic-addpage" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M12 11v7M8.5 14.5h7"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M5 2.5h9.5l5 5v14H5z" fill="url(#xg-paper)" stroke="#6f6f68" stroke-width=".9" stroke-linejoin="round"/><path d="M14.5 2.5v5h5" fill="#e6e5dc" stroke="#6f6f68" stroke-width=".9" stroke-linejoin="round"/><path d="M7.5 6.2h5M7.5 9h8.5M7.5 11.8h6" stroke="#a9a9a0" stroke-width=".9"/><circle cx="16.8" cy="17.2" r="4.8" fill="url(#xg-green)" stroke="#1f6e17" stroke-width=".8"/><path d="M16.8 14.8v4.8M14.4 17.2h4.8" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></g></symbol>
+  <symbol id="ic-pdf" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M5 2.5h9.5l5 5v14H5z" fill="url(#xg-paper)" stroke="#6f6f68" stroke-width=".9" stroke-linejoin="round"/><path d="M14.5 2.5v5h5" fill="#e6e5dc" stroke="#6f6f68" stroke-width=".9" stroke-linejoin="round"/><path d="M7.5 6.2h5M7.5 9h8.5" stroke="#a9a9a0" stroke-width=".9"/><rect x="3" y="12.4" width="13.2" height="6.8" rx="1.1" fill="url(#xg-red)" stroke="#8a1f0a" stroke-width=".8"/><path d="M5.4 15.8h8.4" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></g></symbol>
+  <symbol id="ic-dots" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><g fill="currentColor" stroke="none"><circle cx="5" cy="5" r="1.4"/><circle cx="12" cy="5" r="1.4"/><circle cx="19" cy="5" r="1.4"/><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/><circle cx="5" cy="19" r="1.4"/><circle cx="12" cy="19" r="1.4"/><circle cx="19" cy="19" r="1.4"/></g></g><g style="display:var(--icx,none)" stroke="none"><rect x="3.5" y="3.5" width="17" height="17" rx="1.2" fill="url(#xg-paper)" stroke="#6f6f68" stroke-width=".9"/><g fill="#2e6fd6"><circle cx="7.6" cy="7.6" r="1.35"/><circle cx="12" cy="7.6" r="1.35"/><circle cx="16.4" cy="7.6" r="1.35"/><circle cx="7.6" cy="12" r="1.35"/><circle cx="12" cy="12" r="1.35"/><circle cx="16.4" cy="12" r="1.35"/><circle cx="7.6" cy="16.4" r="1.35"/><circle cx="12" cy="16.4" r="1.35"/><circle cx="16.4" cy="16.4" r="1.35"/></g></g></symbol>
+  <symbol id="ic-undo" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M19.5 18.6C19.5 12.6 16 9.5 10.5 9.5H8" fill="none" stroke="#163c8c" stroke-width="5" stroke-linecap="round"/><path d="M19.5 18.6C19.5 12.6 16 9.5 10.5 9.5H8" fill="none" stroke="url(#xg-blueU)" stroke-width="3.1" stroke-linecap="round"/><path d="M9.8 4.2L3 9.5l6.8 5.3z" fill="url(#xg-blue)" stroke="#163c8c" stroke-width=".9" stroke-linejoin="round"/></g></symbol>
+  <symbol id="ic-redo" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></g><g style="display:var(--icx,none)" stroke="none"><g transform="matrix(-1 0 0 1 24 0)"><path d="M19.5 18.6C19.5 12.6 16 9.5 10.5 9.5H8" fill="none" stroke="#163c8c" stroke-width="5" stroke-linecap="round"/><path d="M19.5 18.6C19.5 12.6 16 9.5 10.5 9.5H8" fill="none" stroke="url(#xg-blueU)" stroke-width="3.1" stroke-linecap="round"/><path d="M9.8 4.2L3 9.5l6.8 5.3z" fill="url(#xg-blue)" stroke="#163c8c" stroke-width=".9" stroke-linejoin="round"/></g></g></symbol>
+  <symbol id="ic-moon" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M20 14.6A8.6 8.6 0 1 1 9.4 4a6.8 6.8 0 0 0 10.6 10.6z" fill="url(#xg-yellow)" stroke="#a87400" stroke-width=".9" stroke-linejoin="round"/><path d="M17.6 3.2l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" fill="#ffc21a" stroke="#c58a00" stroke-width=".5" stroke-linejoin="round"/></g></symbol>
+  <symbol id="ic-tune" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M4 6.5h16M4 12h16M4 17.5h16" stroke="#6a6a6a" stroke-width="1.6" stroke-linecap="round"/><rect x="12.8" y="3.8" width="3.8" height="5.4" rx="1" fill="url(#xg-blue)" stroke="#1a3f8f" stroke-width=".8"/><rect x="6.4" y="9.3" width="3.8" height="5.4" rx="1" fill="url(#xg-green)" stroke="#1f6e17" stroke-width=".8"/><rect x="14.4" y="14.8" width="3.8" height="5.4" rx="1" fill="url(#xg-orange)" stroke="#a04d00" stroke-width=".8"/></g></symbol>
+  <symbol id="ic-more" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></g></g><g style="display:var(--icx,none)" stroke="none"><g fill="url(#xg-blue)" stroke="#1a3f8f" stroke-width=".7"><circle cx="5.5" cy="12" r="2.4"/><circle cx="12" cy="12" r="2.4"/><circle cx="18.5" cy="12" r="2.4"/></g></g></symbol>
+  <symbol id="ic-down" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M9 3h6v6.6h3.6L12 16.6 5.4 9.6H9z" fill="url(#xg-green)" stroke="#1f6e17" stroke-width=".9" stroke-linejoin="round"/><rect x="3" y="15" width="18" height="5.5" rx="1.2" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9"/><path d="M5.5 17.6h13" stroke="#fff" stroke-width=".8" stroke-opacity=".8"/></g></symbol>
+  <symbol id="ic-up" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M9 17V9.6H5.4L12 2.6l6.6 7H15V17z" fill="url(#xg-blue)" stroke="#163c8c" stroke-width=".9" stroke-linejoin="round"/><rect x="3" y="15" width="18" height="5.5" rx="1.2" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9"/><path d="M5.5 17.6h13" stroke="#fff" stroke-width=".8" stroke-opacity=".8"/></g></symbol>
+  <symbol id="ic-edit" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></g><g style="display:var(--icx,none)" stroke="none"><g transform="rotate(-45 12 12)"><path d="M1.2 12L6 9.2V14.8z" fill="#f6d9ab" stroke="#7a5320" stroke-width=".8" stroke-linejoin="round"/><path d="M1.2 12L3.3 10.8V13.2z" fill="#333"/><rect x="6" y="9.2" width="11" height="5.6" fill="url(#xg-yellow)" stroke="#8a6200" stroke-width=".8"/><path d="M6 11.1h11M6 12.9h11" stroke="#d99a00" stroke-width=".6"/><rect x="17" y="9.2" width="2.4" height="5.6" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".8"/><rect x="19.4" y="9.2" width="3.4" height="5.6" rx="1.2" fill="url(#xg-pink)" stroke="#9b3f62" stroke-width=".8"/></g></g></symbol>
+  <symbol id="ic-move" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M3 7.5A2.5 2.5 0 015.5 5H9l2 2h7.5A2.5 2.5 0 0121 9.5v8a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 17.5z"/><path d="M9.5 13.5h6M13 11l2.5 2.5L13 16"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M2.5 6.6A1.6 1.6 0 0 1 4.1 5H9l2 2h8.9a1.6 1.6 0 0 1 1.6 1.6v9.8a1.6 1.6 0 0 1-1.6 1.6H4.1a1.6 1.6 0 0 1-1.6-1.6z" fill="url(#xg-folder)" stroke="#a87410" stroke-width=".9" stroke-linejoin="round"/><path d="M2.9 10h18.2" stroke="#e8b84a" stroke-width=".8"/><path d="M8.2 14.2h5.6v-2.4l3.9 3.2-3.9 3.2v-2.4H8.2z" fill="url(#xg-green)" stroke="#1f6e17" stroke-width=".8" stroke-linejoin="round"/></g></symbol>
   <symbol id="ic-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="ic-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
-  <symbol id="ic-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
-  <symbol id="ic-shape" viewBox="0 0 24 24"><rect x="3" y="10.5" width="10.5" height="10.5" rx="1.6"/><path d="M10.6 10.5a6 6 0 116.9 6.9"/></symbol>
-  <symbol id="ic-snap" viewBox="0 0 24 24"><path d="M5 4h4.4v7a2.6 2.6 0 005.2 0V4H19v7a7 7 0 01-14 0z"/><path d="M5 7.6h4.4M14.6 7.6H19"/></symbol>
+  <symbol id="ic-trash" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M5.6 7.6h12.8l-1.2 13.1a1.4 1.4 0 0 1-1.4 1.3H8.2a1.4 1.4 0 0 1-1.4-1.3z" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9" stroke-linejoin="round"/><path d="M9.4 10.6v8.6M12 10.6v8.6M14.6 10.6v8.6" stroke="#8a929c" stroke-width="1"/><rect x="4" y="4.6" width="16" height="3" rx="1" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9"/><path d="M9.4 4.6V3.2h5.2v1.4" fill="none" stroke="#5f6670" stroke-width=".9"/></g></symbol>
+  <symbol id="ic-shape" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><rect x="3" y="10.5" width="10.5" height="10.5" rx="1.6"/><path d="M10.6 10.5a6 6 0 116.9 6.9"/></g><g style="display:var(--icx,none)" stroke="none"><rect x="2.6" y="9.6" width="11" height="11" rx="1.2" fill="url(#xg-blue)" stroke="#1a3f8f" stroke-width=".9"/><circle cx="15.6" cy="8.6" r="6" fill="url(#xg-orange)" stroke="#a04d00" stroke-width=".9"/><path d="M12.4 5.6a4.2 3 0 0 1 4.4-1.6" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="1.1" stroke-linecap="round"/></g></symbol>
+  <symbol id="ic-snap" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M5 4h4.4v7a2.6 2.6 0 005.2 0V4H19v7a7 7 0 01-14 0z"/><path d="M5 7.6h4.4M14.6 7.6H19"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M5 3.5h4.6v7.6a2.4 2.4 0 0 0 4.8 0V3.5H19v7.6a7 7 0 0 1-14 0z" fill="url(#xg-red)" stroke="#7d1606" stroke-width=".9" stroke-linejoin="round"/><rect x="5" y="3.5" width="4.6" height="3.7" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9"/><rect x="14.4" y="3.5" width="4.6" height="3.7" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9"/><path d="M7 15.4a5.2 5.2 0 0 0 3.8 2.9" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.1" stroke-linecap="round"/></g></symbol>
   <symbol id="sh-line" viewBox="0 0 24 24"><path d="M4.5 19.5l15-15"/></symbol>
-  <symbol id="sh-arrow" viewBox="0 0 24 24"><path d="M4.5 19.5l15-15M11 4.5h8.5V13"/></symbol>
-  <symbol id="sh-arrow2" viewBox="0 0 24 24"><path d="M4.5 19.5l15-15M12.5 4.5h7v7M4.5 12.5v7h7"/></symbol>
+  <symbol id="sh-arrow" viewBox="0 0 24 24"><path d="M4.5 19.5L14.2 9.8"/><path d="M19.5 4.5L16 13Q14.9 9.1 11 8Z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="sh-arrow2" viewBox="0 0 24 24"><path d="M8.9 15.1L15.1 8.9"/><path d="M19.5 4.5L16.6 11.5Q15.7 8.3 12.5 7.4ZM4.5 19.5L7.4 12.5Q8.3 15.7 11.5 16.6Z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="sh-rect" viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="1"/></symbol>
   <symbol id="sh-ellipse" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.8" ry="6.3"/></symbol>
   <symbol id="sh-tri" viewBox="0 0 24 24"><path d="M12 4.5l8.5 15h-17z"/></symbol>
   <symbol id="sh-rtri" viewBox="0 0 24 24"><path d="M5 4.5v15h14.5z"/><path d="M5 16h3.5v3.5"/></symbol>
   <symbol id="sh-diamond" viewBox="0 0 24 24"><path d="M12 3.5l7.5 8.5-7.5 8.5-7.5-8.5z"/></symbol>
-  <symbol id="sh-axes2" viewBox="0 0 24 24"><path d="M2.5 12h19M19 9.8l2.5 2.2-2.5 2.2M12 21.5v-19M9.8 5L12 2.5 14.2 5"/><path d="M7 10.8v2.4M16.2 10.8v2.4M10.8 7.4h2.4M10.8 16.6h2.4" stroke-width="1.2"/></symbol>
-  <symbol id="sh-axes2p" viewBox="0 0 24 24"><path d="M4.5 19.5h17M19 17.3l2.5 2.2-2.5 2.2M4.5 19.5v-17M2.3 5l2.2-2.5L6.7 5"/><path d="M9.5 18.3v2.4M14.5 18.3v2.4M3.3 14.5h2.4M3.3 9.5h2.4" stroke-width="1.2"/></symbol>
-  <symbol id="sh-axes3" viewBox="0 0 24 24"><path d="M10 14V2.5M7.8 5L10 2.5 12.2 5M10 14h11.5M19 11.8l2.5 2.2-2.5 2.2M10 14l-7 7M3 17.6V21h3.4"/><path d="M15 12.8v2.4M8.8 9h2.4M6.2 16.9l1.7 1.7" stroke-width="1.2"/></symbol>
+  <symbol id="sh-axes2" viewBox="0 0 24 24"><path d="M2.5 12h15M12 21.5V6.5"/><path d="M21.5 12L17 10.1Q18.1 12 17 13.9ZM12 2.5L13.9 7Q12 5.9 10.1 7Z" fill="currentColor" stroke="none"/><path d="M7 10.8v2.4M16.2 10.8v2.4M10.8 7.4h2.4M10.8 16.6h2.4" stroke-width="1.2"/></symbol>
+  <symbol id="sh-axes2p" viewBox="0 0 24 24"><path d="M4.5 19.5h13M4.5 19.5V6.5"/><path d="M21.5 19.5L17 17.6Q18.1 19.5 17 21.4ZM4.5 2.5L6.4 7Q4.5 5.9 2.6 7Z" fill="currentColor" stroke="none"/><path d="M9.5 18.3v2.4M14.5 18.3v2.4M3.3 14.5h2.4M3.3 9.5h2.4" stroke-width="1.2"/></symbol>
+  <symbol id="sh-axes3" viewBox="0 0 24 24"><path d="M10 14V6.5M10 14h7.5M10 14L5.8 18.2"/><path d="M10 2.5L11.9 7Q10 5.9 8.1 7ZM21.5 14L17 12.1Q18.1 14 17 15.9ZM3 21L4.8 16.5Q5.4 18.6 7.5 19.2Z" fill="currentColor" stroke="none"/><path d="M15 12.8v2.4M8.8 9h2.4M6.2 16.9l1.7 1.7" stroke-width="1.2"/></symbol>
 </svg>
 
 <script type="text/plain" id="pdfWorkerSrc">@@PDFWORKER@@</script>
@@ -597,6 +803,7 @@ const store = {
   set(k, v) { try { localStorage.setItem('notizen.' + k, JSON.stringify(v)); } catch (e) {} },
 };
 S.dark = store.get('dark', matchMedia('(prefers-color-scheme: dark)').matches);
+S.theme = store.get('theme', 'xp') === 'modern' ? 'modern' : 'xp';   // Aussehen: Windows XP (Vorgabe) oder modern
 S.fingerDraw = store.get('fingerDraw', false);
 S.snap = store.get('snap', false) === true;
 { const a = store.get('alpha', {}); for (const k of ['pen', 'hl']) if (typeof a[k] === 'number' && a[k] >= 0.1 && a[k] <= 1) S.alpha[k] = a[k]; }
@@ -934,8 +1141,29 @@ function tri(P, cx, cy, ax, ay, bx, by) {
   if ((ax - cx) * (by - cy) - (ay - cy) * (bx - cx) < 0) { const tx = ax, ty = ay; ax = bx; ay = by; bx = tx; by = ty; }
   P.moveTo(cx, cy); P.lineTo(ax, ay); P.lineTo(bx, by);
 }
-function buildPath(pts, w, hl) {
-  const P = new Path2D(), n = pts.length / 3;
+// Flächen eines Strichs (fl) gültig? n: Zahl der Punkte
+const validFl = (fl, n) => Array.isArray(fl) && fl.length > 0 && fl.every(r => Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[0] >= 0 && r[1] > r[0] + 1 && r[1] < n);
+// fl: Flächen im Strich (gefüllte Pfeilspitzen), je [erster, letzter] Punkt eines geschlossenen Umrisses. Ihre Kanten
+// bekommen keinen Strich (sonst würde die Spitze rund), die Fläche wird gefüllt; die Linie dazwischen wie gewohnt.
+function buildPath(pts, w, hl, fl) {
+  const n = pts.length / 3, rs = Array.isArray(fl) ? fl.filter(r => Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[0] >= 0 && r[1] > r[0] + 1 && r[1] < n) : [];
+  if (!rs.length) return linePath(new Path2D(), pts, w, hl);
+  const P = new Path2D(), only = new Uint8Array(n + 1);   // only[i]: Abschnitt i − 1 → i liegt in einer Fläche
+  for (const [a, b] of rs) for (let i = a + 1; i <= b; i++) only[i] = 1;
+  let s = 0;
+  for (let i = 1; i <= n; i++) if (i === n || only[i]) { if (i - 1 > s) linePath(P, pts.subarray ? pts.subarray(s * 3, i * 3) : pts.slice(s * 3, i * 3), w, hl); s = i; }
+  for (const [a, b] of rs) {   // im selben Umlaufsinn wie alle anderen Teile (sonst entstünden Löcher)
+    let A = 0;
+    for (let i = a; i <= b; i++) { const j = i === b ? a : i + 1; A += pts[i * 3] * pts[j * 3 + 1] - pts[j * 3] * pts[i * 3 + 1]; }
+    const at = k => A >= 0 ? a + k : b - k;
+    P.moveTo(pts[at(0) * 3], pts[at(0) * 3 + 1]);
+    for (let k = 1; k <= b - a; k++) P.lineTo(pts[at(k) * 3], pts[at(k) * 3 + 1]);
+    P.closePath();
+  }
+  return P;
+}
+function linePath(P, pts, w, hl) {
+  const n = pts.length / 3;
   let px = 0, py = 0, has = false;   // Richtung des vorherigen Abschnitts
   for (let i = 0; i < n; i++) {
     const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl);
@@ -959,7 +1187,7 @@ function buildPath(pts, w, hl) {
   return P;
 }
 function circleAt(P, pts, i, w, hl) { const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl); P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); }
-function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl); pathCache.set(s, p); } return p; }
+function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl, s.fl); pathCache.set(s, p); } return p; }
 function prunePaths() {
   if (pathCache.size < S.items.length * 1.5 + 300) return;
   const cur = new Set(S.items); for (const k of pathCache.keys()) if (!cur.has(k)) pathCache.delete(k);
@@ -1884,9 +2112,22 @@ function geoBox(items) {
   return b;
 }
 // Schaft eines Pfeils (auch einer Achse eines Koordinatensystems): Indizes von Anfang und Spitze in pts, sonst null.
-// Ein Pfeil ist Ende, Spitze, Flügel, Spitze, Flügel (arrowPts), ein Doppelpfeil Flügel, Anfang, Flügel, Anfang, Ende, …
+// Mit gefüllter Spitze (fl): Anfang ist der erste Punkt (beim Doppelpfeil die erste Spitze), die Spitze der Punkt ihrer
+// Fläche, der am weitesten von der Kerbe weg liegt. Früher: Ende, Spitze, Flügel, Spitze, Flügel bzw. beim Doppelpfeil
+// Flügel, Anfang, Flügel, Anfang, Ende, …
 function shaftOf(it) {
   const p = it.pts, same = (i, j) => p[3 * i] === p[3 * j] && p[3 * i + 1] === p[3 * j + 1];
+  if (Array.isArray(it.fl) && it.fl.length) {
+    const n = p.length / 3, tip = r => {
+      let best = -1, dm = -1;
+      if (!Array.isArray(r) || !(r[0] >= 0 && r[1] < n)) return -1;
+      for (let i = r[0]; i <= r[1]; i++) { const d = Math.hypot(p[3 * i] - p[3 * r[0]], p[3 * i + 1] - p[3 * r[0] + 1]); if (d > dm) { dm = d; best = i; } }
+      return best * 3;
+    };
+    if (it.k === 'arrow2' && it.fl.length === 2) { const a = tip(it.fl[0]), b = tip(it.fl[1]); return a >= 0 && b >= 0 ? [a, b] : null; }
+    if (it.k === 'arrow' || GRAPHS.has(it.k)) { const b = tip(it.fl[0]); return b >= 0 ? [0, b] : null; }
+    return null;
+  }
   if ((it.k === 'arrow' || GRAPHS.has(it.k)) && p.length === 15 && same(1, 3)) return [0, 3];
   if (it.k === 'arrow2' && p.length === 24 && same(1, 3) && same(4, 6)) return [3, 12];
   return null;
@@ -2050,16 +2291,33 @@ function gridOrigin(ax, v) {
 }
 const snapAx = (ax, v, round = Math.round) => { const o = gridOrigin(ax, v), G = snapStep(); return o + round((v - o) / G) * G; };
 const snapX = v => snapAx(0, v), snapY = v => snapAx(1, v);
-const ARROW_C = Math.cos(27 * Math.PI / 180), ARROW_S = Math.sin(27 * Math.PI / 180);
-const headLen = (len, w, f) => Math.min(len * f, 12 + w * 2.5);
-// Flügel einer offenen Pfeilspitze bei (tx, ty), u = Richtung zur Spitze
-function wings(tx, ty, ux, uy, h) {
-  return [tx - h * (ux * ARROW_C - uy * ARROW_S), ty - h * (ux * ARROW_S + uy * ARROW_C), tx - h * (ux * ARROW_C + uy * ARROW_S), ty - h * (-ux * ARROW_S + uy * ARROW_C)];
+/* Pfeilspitze wie eine Speerspitze (nach einer Vorlage des Nutzers): gefüllt, hinten nach innen gewölbt. Länge L, halbe
+   Breite HEAD_W · L; die Kerbe in der Mitte des hinteren Randes liegt HEAD_N · L vor den hinteren Ecken, dort endet der
+   Schaft. Im Strich ist die Spitze eine Fläche (fl): ab der Kerbe der hintere Rand bis zur einen Ecke, die Spitze, die
+   andere Ecke, der Rand zurück bis zur Kerbe. Früher gezeichnete Pfeile (offene Spitze aus zwei Flügeln) bleiben, wie sie sind. */
+const HEAD_W = 0.42, HEAD_N = 0.12, HEAD_SEG = 4;   // halbe Breite und Kerbe (je Länge), Stücke je Hälfte des hinteren Randes
+const headSize = (len, w, f) => Math.min(len * f, 10 + w * 4);
+// Spitze bei (tx, ty), u = Richtung zur Spitze, Länge L: Punkte an out (flach x, y) anhängen; liefert [erster, letzter] Punkt
+function headPts(out, tx, ty, ux, uy, L) {
+  const nx = -uy, ny = ux, H = L * HEAD_W, d = L * HEAD_N, k0 = out.length / 2;
+  // hinterer Rand: quadratische Kurve von der Ecke (L, H) über die Kerbe (L − d, 0) zur Ecke (L, −H) (a zurück, b seitlich)
+  const at = t => { const s = 1 - t, a = (s * s + t * t) * L + 2 * s * t * (L - 2 * d), b = (s * s - t * t) * H; out.push(tx - ux * a + nx * b, ty - uy * a + ny * b); };
+  for (let k = 0; k <= HEAD_SEG; k++) at(0.5 - 0.5 * k / HEAD_SEG);
+  out.push(tx, ty);
+  for (let k = 0; k <= HEAD_SEG; k++) at(1 - 0.5 * k / HEAD_SEG);
+  return [k0, out.length / 2 - 1];
 }
-// Pfeil als ein Linienzug: Ende, Spitze, Flügel, Spitze, Flügel
-function arrowPts(ax, ay, bx, by, h) {
-  const L = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / L, uy = (by - ay) / L, [w1x, w1y, w2x, w2y] = wings(bx, by, ux, uy, h);
-  return [ax, ay, bx, by, w1x, w1y, bx, by, w2x, w2y];
+// Pfeil von a nach b als Linienzug mit Fläche (fl am Feld): Anfang, dann die Spitze ab der Kerbe
+function arrowLine(ax, ay, bx, by, L) {
+  const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len, out = [ax, ay];
+  out.fl = [headPts(out, bx, by, ux, uy, L)];
+  return out;
+}
+// Doppelpfeil: Spitze bei a, Schaft von Kerbe zu Kerbe, Spitze bei b
+function arrow2Line(ax, ay, bx, by, L) {
+  const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len, out = [];
+  out.fl = [headPts(out, ax, ay, -ux, -uy, L), headPts(out, bx, by, ux, uy, L)];
+  return out;
 }
 /* Strichschrift für die Beschriftung der Achsen (eigene Zeichnung, wie Normschrift): jedes Zeichen als Linienzüge in
    Einheiten, in denen die x-Höhe 10 ist (Grundlinie y = 0, x-Höhe -10, Großbuchstaben und Ziffern -14, Unterlängen bis 4).
@@ -2191,12 +2449,8 @@ function shapeLines(k, ax, ay, bx, by, w) {
   const len = Math.hypot(bx - ax, by - ay);
   if (len < 1e-6) return [];
   if (k === 'line') return [[ax, ay, bx, by]];
-  if (k === 'arrow') return [arrowPts(ax, ay, bx, by, headLen(len, w, 0.35))];
-  if (k === 'arrow2') {
-    const h = headLen(len, w, 0.3), ux = (bx - ax) / len, uy = (by - ay) / len;
-    const [a1x, a1y, a2x, a2y] = wings(ax, ay, -ux, -uy, h), [b1x, b1y, b2x, b2y] = wings(bx, by, ux, uy, h);
-    return [[a1x, a1y, ax, ay, a2x, a2y, ax, ay, bx, by, b1x, b1y, bx, by, b2x, b2y]];
-  }
+  if (k === 'arrow') return [arrowLine(ax, ay, bx, by, headSize(len, w, 0.4))];
+  if (k === 'arrow2') return [arrow2Line(ax, ay, bx, by, headSize(len, w, 0.3))];
   const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), y0 = Math.min(ay, by), y1 = Math.max(ay, by), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   if (k === 'rect') return [[ax, ay, bx, ay, bx, by, ax, by, ax, ay]];
   if (k === 'tri') return [[cx, y0, x1, y1, x0, y1, cx, y0]];
@@ -2231,9 +2485,9 @@ function newGraphSettings(k) {
 function graphLines(p, w) {
   const [x0, y0, x1, y1] = p.b, [ox, oy] = p.o, f = p.f > 0 ? p.f : 1, w0 = w / f, out = [];
   const U = (p.step > 0 ? p.step : 1) * (p.G > 0 ? p.G : gridSize()) * f;   // Abstand der Teilstriche
-  const th = f * Math.max(4, w0 * 1.5), LH = f * (13 + Math.max(0, w0 - 2) * 2.5), m = 3 * f, cap = f * (12 + w0 * 2.5);
-  const gx = f * (7 + w0), gy = f * (8 + w0), half = h => Math.max(th, h * ARROW_S);   // Abstand der Beschriftung zur Achse
-  const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5 * f) return -1; const h = Math.min(L * 0.35, cap); out.push(arrowPts(fx, fy, tx, ty, h)); return h; };
+  const th = f * Math.max(4, w0 * 1.5), LH = f * (13 + Math.max(0, w0 - 2) * 2.5), m = 3 * f, cap = f * (10 + w0 * 2.5);
+  const gx = f * (7 + w0), gy = f * (8 + w0), half = h => Math.max(th, h * HEAD_W);   // Abstand der Beschriftung zur Achse
+  const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5 * f) return -1; const h = Math.min(L * 0.35, cap); out.push(arrowLine(fx, fy, tx, ty, h)); return h; };
   const corner = p.k === 'axes2p';   // Ursprung in der Ecke: daneben ist nichts, eine lange Beschriftung darf dort anfangen
   // waagrechte Achse mit der Spitze bei tx: kurze Beschriftung unter der Spitze, lange mittig unter der Achse zwischen
   // Ursprung und Spitze (nicht über den Ursprung hinaus, dort kreuzt sonst die senkrechte Achse)
@@ -2278,6 +2532,7 @@ function shapeStroke(xy, c, w, k, g, gr) {
   const n = xy.length / 2, p = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { p[i * 3] = xy[i * 2]; p[i * 3 + 1] = xy[i * 2 + 1]; p[i * 3 + 2] = 0.5; }
   const s = { t: 's', id: uid(), c, w, hl: false, pts: p, bb: bboxOf(p, w), k };
+  if (xy.fl) s.fl = xy.fl.map(r => [r[0], r[1]]);   // gefüllte Pfeilspitzen
   if (g) s.g = g;
   if (gr) s.gr = gr;
   return s;
@@ -2295,7 +2550,7 @@ function shapeGeo(a) {
     const gr = GRAPHS.has(a.shape) && Math.hypot(bx - ax, by - ay) >= 1e-6 ? graphParams(a.shape, Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)) : null;
     for (const xy of gr ? graphLines(gr, a.w) : shapeLines(a.shape, ax, ay, bx, by, a.w)) strokes.push(shapeStroke(xy, a.c, a.w, a.shape, a.g, gr));
   }
-  return a.geo = { key, strokes, paths: strokes.map(s => buildPath(s.pts, s.w, false)) };
+  return a.geo = { key, strokes, paths: strokes.map(s => buildPath(s.pts, s.w, false, s.fl)) };
 }
 /* Eigene Formen platzieren: Antippen = gespeicherte Größe, mittig auf dem Punkt; Ziehen = gleichmäßig in das
    aufgezogene Rechteck eingepasst, an seiner oberen linken Ecke (nie gespiegelt). Mit Raster liegt die geometrische
@@ -2334,6 +2589,7 @@ function stampStrokes(r, s, x, y, g) {
     for (let i = 0; i < q.length; i += 3) { p[i] = x + q[i] * s; p[i + 1] = y + q[i + 1] * s; p[i + 2] = q[i + 2]; }
     const k = { t: 's', id: uid(), c: st.c, w, hl: st.hl, pts: p, bb: bboxOf(p, w), k: 'custom', g };
     if (st.al) k.al = st.al;
+    if (st.fl) k.fl = st.fl.map(r => [r[0], r[1]]);
     return k;
   });
 }
@@ -2344,12 +2600,12 @@ function stampGeo(a) {
   const [s, x, y] = stampPlace(a, tap);
   if (!tap && stampData(r).n > STAMP_BIG) {   // große Form: ihre fertigen Pfade nur verschieben und skalieren
     const d = stampData(r);
-    if (!d.paths) { d.paths = r.strokes.map(st => buildPath(st.pts, st.w, st.hl)); d.bbs = r.strokes.map(st => bboxOf(st.pts, st.w)); }
+    if (!d.paths) { d.paths = r.strokes.map(st => buildPath(st.pts, st.w, st.hl, st.fl)); d.bbs = r.strokes.map(st => bboxOf(st.pts, st.w)); }
     const strokes = r.strokes.map((st, i) => { const b = d.bbs[i]; return { t: 's', c: st.c, hl: st.hl, bb: [x + b[0] * s, y + b[1] * s, x + b[2] * s, y + b[3] * s] }; });
     return a.geo = { key, strokes, paths: d.paths, xf: [s, x, y], box: true };
   }
   const strokes = stampStrokes(r, s, x, y, a.g);
-  return a.geo = { key, strokes, paths: strokes.map(k => buildPath(k.pts, k.w, k.hl)), box: true };
+  return a.geo = { key, strokes, paths: strokes.map(k => buildPath(k.pts, k.w, k.hl, k.fl)), box: true };
 }
 // Vorschau kachelweise, wie renderTile: unter der Form die Kachelpixel (deckend), darauf die Striche mit der Kachel
 // als Clip. Skia glättet Kanten abhängig vom Clip; so entstehen genau die Pixel, die später in der Kachel stehen,
@@ -2407,7 +2663,7 @@ function stampRest(a) {
   if (t >= 180) { a.rest = true; requestLive(); } else a.restT = setTimeout(() => stampRest(a), 190 - t);
 }
 function exactStamp(a, g) {
-  if (!a.exact || a.exact.key !== g.key) { const st = stampStrokes(a.custom, ...g.xf, a.g); a.exact = { key: g.key, strokes: st, paths: st.map(k => buildPath(k.pts, k.w, k.hl)), box: true }; }
+  if (!a.exact || a.exact.key !== g.key) { const st = stampStrokes(a.custom, ...g.xf, a.g); a.exact = { key: g.key, strokes: st, paths: st.map(k => buildPath(k.pts, k.w, k.hl, k.fl)), box: true }; }
   return a.exact;
 }
 function liveShape(a) {
@@ -3093,6 +3349,7 @@ const tToSize = (k, t) => { const [lo, hi] = SIZE_RANGE[k], v = lo * Math.pow(hi
 function showSize() {
   const k = sizeKind, v = S.size[k];
   $('#szLabel').textContent = { hl: 'Textmarker', tape: 'Tape' }[k] || 'Stift';
+  $('#sizeMenu').dataset.title = $('#szLabel').textContent;   // Titelleiste (Aussehen XP)
   $('#szVal').textContent = fmtSize(v);
   if (k !== 'tape') $('#opVal').textContent = Math.round(S.alpha[k] * 100) + ' %';
   $('#smVal').textContent = fmtSmooth(S.smooth);
@@ -3312,6 +3569,7 @@ function setGraph(ch) {
 function renderGraphMenu() {
   const v = grValues(); if (!v) return;
   $('#grTitle').textContent = GRAPH_NAMES[v.k] || GRAPH_NAMES.axes2;
+  $('#graphMenu').dataset.title = $('#grTitle').textContent;
   $('#grStepVal').textContent = fmtStep(v.step);
   const sb = $('#grSteps'); sb.innerHTML = '';
   for (const s of GRAPH_STEPS) {
@@ -3346,7 +3604,7 @@ function drawGraphPreview(v) {
   g.translate((W - bw * s) / 2 - (bb[0] - w / 2) * s, (H - bh * s) / 2 - (bb[1] - w / 2) * s); g.scale(s, s);
   for (const xy of lines) {
     const s = shapeStroke(xy, c, w, v.k); if (src && src.al) s.al = src.al;
-    fillStroke(g, s, buildPath(s.pts, s.w, false));
+    fillStroke(g, s, buildPath(s.pts, s.w, false, s.fl));
   }
 }
 function openGraphMenu(btn, edit) {
@@ -3413,6 +3671,7 @@ async function saveCustomShape() {
     for (let i = 0; i < p.length; i += 3) { p[i] -= x0; p[i + 1] -= y0; }
     const st = { c: s.c, w: s.w, hl: !!s.hl, pts: p };
     if (s.al) st.al = s.al;
+    if (s.fl) st.fl = s.fl.map(r => [r[0], r[1]]);
     return st;
   });
   const b = geoBox(list), rec = { id: uid(), name: name.trim() || 'Form ' + k, created: Date.now(), w: b[2], h: b[3], strokes: list };
@@ -3438,7 +3697,7 @@ function customThumb(r) {
   c = document.createElement('canvas'); c.width = c.height = Math.round(SZ * DPR);
   const g = c.getContext('2d'), f = c.width / SZ;
   g.setTransform(f * k, 0, 0, f * k, f * (SZ / 2 - r.w / 2 * k), f * (SZ / 2 - r.h / 2 * k));
-  for (const st of r.strokes) fillStroke(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl));
+  for (const st of r.strokes) fillStroke(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl, st.fl));
   thumbCache.set(key, c);
   return c;
 }
@@ -3473,6 +3732,29 @@ function applyDark() {
 }
 function toggleDark() { S.dark = !S.dark; store.set('dark', S.dark); applyDark(); }
 $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
+/* Aussehen „Windows XP“: nur CSS (html.xp, gesetzt schon im Kopf der Seite); die Titelleisten zeigen data-title, ihr rotes ✕
+   schließt das Fenster (im Editor: zurück zum Buch). Der Schreibbereich folgt weiter Hell/Dunkel. */
+const isXP = () => document.documentElement.classList.contains('xp');
+function applyTheme() {
+  const xp = S.theme === 'xp';
+  document.documentElement.classList.toggle('xp', xp);
+  $('#hTheme').classList.toggle('on', xp);
+  xpTitle(); fitBar(); if (S.sel) placeSelbar();
+}
+function toggleTheme() { S.theme = S.theme === 'xp' ? 'modern' : 'xp'; store.set('theme', S.theme); applyTheme(); toast('Aussehen: ' + (S.theme === 'xp' ? 'Windows XP' : 'modern'), 1400); }
+$('#hTheme').onclick = toggleTheme;
+$('#mTheme').onclick = () => { closeMenus(); toggleTheme(); };
+// Titelleiste des Editors: „Name – Notizen“ wie ein Fenster damals
+function xpTitle() { $('#bar').dataset.title = ($('#title').value.trim() || 'Ohne Titel') + ' – Notizen'; }
+// Trifft ein Tipp das ✕ rechts in der Titelleiste von el? (als Hintergrund gezeichnet, der Tipp trifft el selbst)
+function xpCloseHit(el, e, top, h = 30) {
+  if (!isXP() || e.target !== el) return false;
+  const r = el.getBoundingClientRect(), y0 = top === undefined ? r.top : top;
+  return e.clientX > r.right - 34 && e.clientY >= y0 && e.clientY < y0 + h;
+}
+for (const m of $$('.menu[data-title]')) m.addEventListener('pointerdown', e => { if (xpCloseHit(m, e)) { e.preventDefault(); e.stopPropagation(); closeMenus(); } });
+$('#dlgBox').addEventListener('pointerdown', e => { if (xpCloseHit($('#dlgBox'), e)) { e.preventDefault(); $('#dlgNo').click(); } });
+$('#bar').addEventListener('pointerdown', e => { const r = $('#bar').getBoundingClientRect(); if (xpCloseHit($('#bar'), e, r.top - 30)) { e.preventDefault(); $('#bBack').click(); } });
 
 /* Aufploppen aller Popups (Menüs, Farbwähler, Dialog, Auswahlleiste): aus dem Knopf heraus, kurz federnd (dieselbe
    Feder wie bei den Buch-Animationen); beim Schließen huschen Menüs kurz zusammen. Bei „Bewegung reduzieren“ ohne
@@ -3520,6 +3802,7 @@ $('#bSheet').onclick = addSheet;
 $('#bMore').onclick = () => {
   $('#mFit').textContent = paperSize() ? 'Ganzes Blatt anzeigen' : 'Alles anzeigen'; $('#mFinger').textContent = 'Mit dem Finger zeichnen: ' + (S.fingerDraw ? 'an' : 'aus');
   $('#mFull').textContent = document.fullscreenElement ? 'Vollbild beenden' : 'Vollbild';
+  $('#mTheme').textContent = 'Aussehen: ' + (S.theme === 'xp' ? 'modern' : 'Windows XP');
   openMenu($('#moreMenu'), $('#bMore'));
 };
 // Vollbild: ohne Titelleiste des Fensters und ohne Taskleiste; Esc oder nochmal beendet es. Das Windows-Programm ruft
@@ -3888,6 +4171,10 @@ async function renderTo(items, box, scale, bg, o = {}) {
       const step = Math.max(3, Math.floor(it.pts.length / 3 / 20) * 3);
       for (let i = step; i < it.pts.length; i += step) ctx.lineTo(it.pts[i], it.pts[i + 1]);
       ctx.lineTo(it.pts[it.pts.length - 3], it.pts[it.pts.length - 2]); ctx.stroke();
+      if (validFl(it.fl, it.pts.length / 3)) {   // gefüllte Pfeilspitzen
+        ctx.fillStyle = colorOf(it.c);
+        for (const [a, b] of it.fl) { ctx.beginPath(); ctx.moveTo(it.pts[a * 3], it.pts[a * 3 + 1]); for (let i = a + 1; i <= b; i++) ctx.lineTo(it.pts[i * 3], it.pts[i * 3 + 1]); ctx.fill(); }
+      }
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     });
     else paint(() => drawItem(ctx, it, scale));
@@ -4100,7 +4387,7 @@ let homeKey = null, homeScroll = null;   // für Animation und Scrollposition be
 // damit sie nicht mitten im Wort umbrechen. avail = nutzbare Breite des Schildes in em.
 let measureCtx = null;
 function coverLabel(lbl, name, avail = 6.7) {
-  lbl.firstChild.textContent = name;
+  lbl.firstChild.textContent = name; lbl.parentNode.dataset.n = name;   // data-n: großer Name im Hintergrund (Aussehen XP)
   if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
   measureCtx.font = '650 100px ' + getComputedStyle(document.body).fontFamily;
   const em = t => measureCtx.measureText(t).width / 100;
@@ -4109,6 +4396,10 @@ function coverLabel(lbl, name, avail = 6.7) {
   let k = longest > avail ? avail / longest : 1;
   if (total > 2.2 * avail) k = Math.min(k, 0.82);   // lange Namen: lieber kleiner als abgeschnitten
   lbl.style.setProperty('--k', Math.max(0.55, k).toFixed(3));
+  // Aussehen XP: großer Titel unten (Franklin Gothic), etwa 5,3 Geviert breit; das längste Wort passt hinein
+  measureCtx.font = 'bold 100px "Franklin Gothic Medium","Trebuchet MS",Tahoma,sans-serif';
+  const longX = Math.max(0.01, ...name.split(/\s+/).map(em));
+  lbl.style.setProperty('--kx', Math.max(0.5, Math.min(1, 5.3 / longX)).toFixed(3));
 }
 // quiet: ohne die Einblend-Animation des Rasters (die Buch-Animation übernimmt das)
 async function renderHome(quiet) {
@@ -4150,6 +4441,7 @@ function renderShelf(grid, books, notes) {
       <div class="cap"><div class="grow"><div class="nm"></div><div class="dt"></div></div>
       <button class="mbtn" title="Buch bearbeiten"><svg class="i"><use href="#ic-more"/></svg></button></div>`;
     coverLabel(el.querySelector('.lbl'), b.name);
+    el.querySelector('.gl').dataset.p = n ? (n === 1 ? '1 Seite' : n + ' Seiten') : 'Neu';   // Schild auf dem Einband (Aussehen XP)
     el.querySelector('.nm').textContent = el.firstChild.title = b.name;
     el.querySelector('.dt').textContent = (n ? pagesWord(n) : 'Leer') + ' · ' + fmtDay(last.get(b.id) || b.created || Date.now());
     el.firstChild.onclick = () => openBook(b.id, el);
@@ -4724,7 +5016,7 @@ async function openNote(meta) {
     S.view = meta.view ? { ...meta.view } : { tx: 0, ty: 0, z: 1 }; S.level = S.view.z;
     S.undo = []; S.redo = []; S.sel = null; action = null; S.thumbDirty = false;
     clearTiles(); pathCache.clear();
-    $('#title').value = meta.name;
+    $('#title').value = meta.name; xpTitle();
     if (!$('#home').classList.contains('hidden')) homeScroll = { key: homeKey, top: $('#grid').scrollTop };
     closeMenus(); $('#home').classList.add('hidden'); $('#editor').classList.remove('hidden');
     updateUndo(); setTool(S.tool === 'hand' ? 'pen' : S.tool); resize();
@@ -4762,7 +5054,7 @@ async function closeNote() {
 }
 window.__flush = () => flushNote().catch(() => {});
 $('#bBack').onclick = closeNote;
-$('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } fitBar(); });
+$('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } xpTitle(); fitBar(); });
 $('#title').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); });
 /* Sicherung: eine Textdatei mit einer Zeile pro Buch, Notiz, Stricheliste und Bild.
    So entsteht nie ein einzelner riesiger Text, auch bei vielen PDFs.
@@ -4806,7 +5098,7 @@ function shapeFromBackup(r) {
   if (typeof r.id !== 'string' || !r.id || !Array.isArray(r.strokes)) return null;
   const strokes = r.strokes.filter(st => st && Array.isArray(st.pts) && st.pts.length >= 3 && st.pts.length % 3 === 0 && st.pts.every(Number.isFinite))
     .map(st => ({ c: typeof st.c === 'string' ? st.c : 'ink', w: st.w > 0 ? +st.w : 2, hl: !!st.hl, pts: Float32Array.from(st.pts),
-      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}) }));
+      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}), ...(validFl(st.fl, st.pts.length / 3) ? { fl: st.fl.map(r => [r[0], r[1]]) } : {}) }));
   if (!strokes.length) return null;
   const [x0, y0] = geoBox(strokes);
   if (x0 || y0) for (const st of strokes) for (let i = 0; i < st.pts.length; i += 3) { st.pts[i] -= x0; st.pts[i + 1] -= y0; }
@@ -4883,7 +5175,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && S.n
 window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
 
 /* ---------- Start ---------- */
-applyDark();
+applyDark(); applyTheme();
 openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome().then(scheduleWarmUp); })
   .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
 // Browser-Version im Netz (GitHub Pages): Offline-Start über sw.js; das Windows-Programm lädt die Datei lokal

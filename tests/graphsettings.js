@@ -90,13 +90,30 @@ const FILE = path.resolve(process.argv[2] || path.join(DIR, 'Notizen.html'));
   await p.evaluate(() => { window.__sg = { ...S.graph }; Object.assign(S.graph, GRAPH_DEFAULT); });
   await shape('axes2', 700, 560, 1020, 860); const g4 = await lastG();
   await p.evaluate(() => Object.assign(S.graph, window.__sg));
+  //    Achsen wie damals mit offener Spitze (Ende, Spitze, Flügel, Spitze, Flügel); neu gezeichnet bekommt er die gefüllte
   const old = await p.evaluate(g => {
-    const L = S.items.map(it => { if (it.g !== g) return it; const { gr, ...rest } = transformItem(it, 1.5, 700, 560, 0, 0); return rest; }); commit(L);
-    const pts = S.items.filter(s => s.g === g).map(s => Array.from(s.pts).map(v => +v.toFixed(2)));
-    const d = graphData(g), r = rebuildGraph(g, {}), again = r.items.filter(s => s.g === g).map(s => Array.from(s.pts).map(v => +v.toFixed(2)));
-    return { d: { k: d.k, step: d.step, G: d.G, f: +d.f.toFixed(4), lx: d.lx, ly: d.ly }, same: JSON.stringify(pts) === JSON.stringify(again), noGr: S.items.filter(s => s.g === g).every(s => !s.gr) };
+    const C = Math.cos(27 * Math.PI / 180), Sn = Math.sin(27 * Math.PI / 180);
+    const openHead = s => {
+      const sh = shaftOf(s), q0 = [s.pts[sh[0]], s.pts[sh[0] + 1]], q1 = [s.pts[sh[1]], s.pts[sh[1] + 1]];
+      const L = Math.hypot(q1[0] - q0[0], q1[1] - q0[1]), ux = (q1[0] - q0[0]) / L, uy = (q1[1] - q0[1]) / L, h = Math.min(L * 0.35, 1.5 * (12 + 2 * 2.5));
+      const xy = [...q0, ...q1, q1[0] - h * (ux * C - uy * Sn), q1[1] - h * (ux * Sn + uy * C), ...q1, q1[0] - h * (ux * C + uy * Sn), q1[1] - h * (-ux * Sn + uy * C)];
+      const pts = new Float32Array(15); for (let i = 0; i < 5; i++) { pts[i * 3] = xy[i * 2]; pts[i * 3 + 1] = xy[i * 2 + 1]; pts[i * 3 + 2] = 0.5; }
+      const { fl, ...rest } = s; return { ...rest, pts, bb: bboxOf(pts, s.w) };
+    };
+    const L = S.items.map(it => { if (it.g !== g) return it; const { gr, ...rest } = transformItem(it, 1.5, 700, 560, 0, 0); return rest.fl ? openHead(rest) : rest; }); commit(L);
+    // Teilstrich: zwei Punkte, quer mittig auf einer Achse (die Beschriftung liegt neben den Achsen)
+    const o = graphData(g).o, isTick = s => s.pts.length === 6 && ((Math.abs(s.pts[0] - s.pts[3]) < 1e-3 && Math.abs((s.pts[1] + s.pts[4]) / 2 - o[1]) < 0.01)
+      || (Math.abs(s.pts[1] - s.pts[4]) < 1e-3 && Math.abs((s.pts[0] + s.pts[3]) / 2 - o[0]) < 0.01));
+    const key = s => Array.from(s.pts).map(v => +v.toFixed(2)).join(), mine = () => S.items.filter(s => s.g === g);
+    const ends = s => { const sh = shaftOf(s); return [s.pts[sh[0]], s.pts[sh[0] + 1], s.pts[sh[1]], s.pts[sh[1] + 1]].map(v => +v.toFixed(2)).join(); };
+    const oldAxes = mine().filter(s => s.pts.length === 15), ticks0 = mine().filter(isTick).map(key);
+    const d = graphData(g), r = rebuildGraph(g, {}), now = r.items.filter(s => s.g === g), newAxes = now.filter(s => s.fl);
+    return { d: { k: d.k, step: d.step, G: d.G, f: +d.f.toFixed(4), lx: d.lx, ly: d.ly }, oldAxes: oldAxes.length, newAxes: newAxes.length,
+      sameTicks: ticks0.length > 6 && ticks0.join('|') === now.filter(isTick).map(key).join('|'), sameEnds: oldAxes.map(ends).join('|') === newAxes.map(ends).join('|'),
+      labels: now.length - newAxes.length - ticks0.length, noGr: mine().every(s => !s.gr) };
   }, g4);
-  check(old.noGr && old.d.k === 'axes2' && old.d.G === 28 && old.d.f === 1.5 && old.d.lx === 'x' && old.same, 'Früherer Graph: Daten abgeleitet, neu gezeichnet genau gleich (' + JSON.stringify(old) + ')');
+  check(old.noGr && old.d.k === 'axes2' && old.d.G === 28 && old.d.f === 1.5 && old.d.lx === 'x' && old.oldAxes === 2 && old.newAxes === 2 && old.sameTicks && old.sameEnds && old.labels === 4,
+    'Früherer Graph (offene Spitzen): Daten abgeleitet, neu gezeichnet gleich, nur mit gefüllten Spitzen (' + JSON.stringify(old) + ')');
   await p.evaluate(g => setSel(new Set(S.items.filter(s => s.g === g).map(s => s.id))), g4); await p.waitForTimeout(200);
   res.oldBtn = await p.evaluate(() => !$('#sGraph').classList.contains('hidden'));
   await p.click('#sGraph'); await p.waitForTimeout(400); await p.click('#grSteps button:nth-child(3)'); await p.waitForTimeout(150);

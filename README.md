@@ -35,6 +35,8 @@ Vor jeder Weitergabe `version` in `electron/package.json` erhöhen.
 ## Wichtig bei Änderungen
 - Die Daten liegen in IndexedDB `notizen-app` (Version 4; Stores index, items, images, books, shapes) unter `%APPDATA%\Notizen`. Ein Upgrade darf nie bestehende Notizen löschen; die Version nur erhöhen.
 - Das Sicherungsformat (3) muss alte Sicherungen weiter lesen können.
+- Aussehen Windows XP: alles unter `html.xp` (CSS-Block „Aussehen Windows XP“; die Klasse setzt schon ein kleines Skript im `<head>`, gespeichert als `theme`, Vorgabe XP). Titelleisten kommen aus `data-title`, ihr rotes ✕ wird per Klick auf die Ecke erkannt (`xpCloseHit`). Jedes Symbol hat zwei Gruppen: die Linienzeichnung (`display:var(--icm)`) und die bunte XP-Fassung (`display:var(--icx)`).
+- Gefüllte Flächen in Strichen (Pfeilspitzen): `fl` = Liste von [erster, letzter] Punkt eines geschlossenen Umrisses; `buildPath` füllt sie (gleicher Umlaufsinn wie die übrigen Teile) und zeichnet ihre Kanten nicht nach.
 - Striche liegen in Weltkoordinaten, Ansicht {tx, ty, z}, gezeichnet wird in Kacheln zu 512 px.
 - Akku: `cvMain` ist an jeder Seite um einen Rand (`PADD`) größer als der Bildschirm; beim Verschieben schiebt der Compositor sie (`transform`), neu gemalt wird erst, wenn der Rand nicht reicht. Bildschirm-Koordinaten der Kacheln liefert `tileRange`, Leinwand-Koordinaten `mainRange`.
 - Akku: wer auf `ctxLive` zeichnet, meldet den Bereich mit `liveMark`/`liveMarkDev`; `liveClear` leert nur diesen Bereich (Leeren kostet auf dem Surface Grafikzeit je Fläche, `clearRect` auf einem Teil so viel wie auf allem). Leer und ohne schwebenden Stift ist die Live-Ebene ausgeblendet (`liveVis`). `tests/akku/test_live.py` prüft nach jedem Leeren, dass nichts übrig bleibt.

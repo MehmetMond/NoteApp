@@ -49,6 +49,7 @@ const store = {
   set(k, v) { try { localStorage.setItem('notizen.' + k, JSON.stringify(v)); } catch (e) {} },
 };
 S.dark = store.get('dark', matchMedia('(prefers-color-scheme: dark)').matches);
+S.theme = store.get('theme', 'xp') === 'modern' ? 'modern' : 'xp';   // Aussehen: Windows XP (Vorgabe) oder modern
 S.fingerDraw = store.get('fingerDraw', false);
 S.snap = store.get('snap', false) === true;
 { const a = store.get('alpha', {}); for (const k of ['pen', 'hl']) if (typeof a[k] === 'number' && a[k] >= 0.1 && a[k] <= 1) S.alpha[k] = a[k]; }
@@ -386,8 +387,29 @@ function tri(P, cx, cy, ax, ay, bx, by) {
   if ((ax - cx) * (by - cy) - (ay - cy) * (bx - cx) < 0) { const tx = ax, ty = ay; ax = bx; ay = by; bx = tx; by = ty; }
   P.moveTo(cx, cy); P.lineTo(ax, ay); P.lineTo(bx, by);
 }
-function buildPath(pts, w, hl) {
-  const P = new Path2D(), n = pts.length / 3;
+// Flächen eines Strichs (fl) gültig? n: Zahl der Punkte
+const validFl = (fl, n) => Array.isArray(fl) && fl.length > 0 && fl.every(r => Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[0] >= 0 && r[1] > r[0] + 1 && r[1] < n);
+// fl: Flächen im Strich (gefüllte Pfeilspitzen), je [erster, letzter] Punkt eines geschlossenen Umrisses. Ihre Kanten
+// bekommen keinen Strich (sonst würde die Spitze rund), die Fläche wird gefüllt; die Linie dazwischen wie gewohnt.
+function buildPath(pts, w, hl, fl) {
+  const n = pts.length / 3, rs = Array.isArray(fl) ? fl.filter(r => Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[0] >= 0 && r[1] > r[0] + 1 && r[1] < n) : [];
+  if (!rs.length) return linePath(new Path2D(), pts, w, hl);
+  const P = new Path2D(), only = new Uint8Array(n + 1);   // only[i]: Abschnitt i − 1 → i liegt in einer Fläche
+  for (const [a, b] of rs) for (let i = a + 1; i <= b; i++) only[i] = 1;
+  let s = 0;
+  for (let i = 1; i <= n; i++) if (i === n || only[i]) { if (i - 1 > s) linePath(P, pts.subarray ? pts.subarray(s * 3, i * 3) : pts.slice(s * 3, i * 3), w, hl); s = i; }
+  for (const [a, b] of rs) {   // im selben Umlaufsinn wie alle anderen Teile (sonst entstünden Löcher)
+    let A = 0;
+    for (let i = a; i <= b; i++) { const j = i === b ? a : i + 1; A += pts[i * 3] * pts[j * 3 + 1] - pts[j * 3] * pts[i * 3 + 1]; }
+    const at = k => A >= 0 ? a + k : b - k;
+    P.moveTo(pts[at(0) * 3], pts[at(0) * 3 + 1]);
+    for (let k = 1; k <= b - a; k++) P.lineTo(pts[at(k) * 3], pts[at(k) * 3 + 1]);
+    P.closePath();
+  }
+  return P;
+}
+function linePath(P, pts, w, hl) {
+  const n = pts.length / 3;
   let px = 0, py = 0, has = false;   // Richtung des vorherigen Abschnitts
   for (let i = 0; i < n; i++) {
     const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl);
@@ -411,7 +433,7 @@ function buildPath(pts, w, hl) {
   return P;
 }
 function circleAt(P, pts, i, w, hl) { const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl); P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); }
-function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl); pathCache.set(s, p); } return p; }
+function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl, s.fl); pathCache.set(s, p); } return p; }
 function prunePaths() {
   if (pathCache.size < S.items.length * 1.5 + 300) return;
   const cur = new Set(S.items); for (const k of pathCache.keys()) if (!cur.has(k)) pathCache.delete(k);
@@ -1336,9 +1358,22 @@ function geoBox(items) {
   return b;
 }
 // Schaft eines Pfeils (auch einer Achse eines Koordinatensystems): Indizes von Anfang und Spitze in pts, sonst null.
-// Ein Pfeil ist Ende, Spitze, Flügel, Spitze, Flügel (arrowPts), ein Doppelpfeil Flügel, Anfang, Flügel, Anfang, Ende, …
+// Mit gefüllter Spitze (fl): Anfang ist der erste Punkt (beim Doppelpfeil die erste Spitze), die Spitze der Punkt ihrer
+// Fläche, der am weitesten von der Kerbe weg liegt. Früher: Ende, Spitze, Flügel, Spitze, Flügel bzw. beim Doppelpfeil
+// Flügel, Anfang, Flügel, Anfang, Ende, …
 function shaftOf(it) {
   const p = it.pts, same = (i, j) => p[3 * i] === p[3 * j] && p[3 * i + 1] === p[3 * j + 1];
+  if (Array.isArray(it.fl) && it.fl.length) {
+    const n = p.length / 3, tip = r => {
+      let best = -1, dm = -1;
+      if (!Array.isArray(r) || !(r[0] >= 0 && r[1] < n)) return -1;
+      for (let i = r[0]; i <= r[1]; i++) { const d = Math.hypot(p[3 * i] - p[3 * r[0]], p[3 * i + 1] - p[3 * r[0] + 1]); if (d > dm) { dm = d; best = i; } }
+      return best * 3;
+    };
+    if (it.k === 'arrow2' && it.fl.length === 2) { const a = tip(it.fl[0]), b = tip(it.fl[1]); return a >= 0 && b >= 0 ? [a, b] : null; }
+    if (it.k === 'arrow' || GRAPHS.has(it.k)) { const b = tip(it.fl[0]); return b >= 0 ? [0, b] : null; }
+    return null;
+  }
   if ((it.k === 'arrow' || GRAPHS.has(it.k)) && p.length === 15 && same(1, 3)) return [0, 3];
   if (it.k === 'arrow2' && p.length === 24 && same(1, 3) && same(4, 6)) return [3, 12];
   return null;
@@ -1502,16 +1537,33 @@ function gridOrigin(ax, v) {
 }
 const snapAx = (ax, v, round = Math.round) => { const o = gridOrigin(ax, v), G = snapStep(); return o + round((v - o) / G) * G; };
 const snapX = v => snapAx(0, v), snapY = v => snapAx(1, v);
-const ARROW_C = Math.cos(27 * Math.PI / 180), ARROW_S = Math.sin(27 * Math.PI / 180);
-const headLen = (len, w, f) => Math.min(len * f, 12 + w * 2.5);
-// Flügel einer offenen Pfeilspitze bei (tx, ty), u = Richtung zur Spitze
-function wings(tx, ty, ux, uy, h) {
-  return [tx - h * (ux * ARROW_C - uy * ARROW_S), ty - h * (ux * ARROW_S + uy * ARROW_C), tx - h * (ux * ARROW_C + uy * ARROW_S), ty - h * (-ux * ARROW_S + uy * ARROW_C)];
+/* Pfeilspitze wie eine Speerspitze (nach einer Vorlage des Nutzers): gefüllt, hinten nach innen gewölbt. Länge L, halbe
+   Breite HEAD_W · L; die Kerbe in der Mitte des hinteren Randes liegt HEAD_N · L vor den hinteren Ecken, dort endet der
+   Schaft. Im Strich ist die Spitze eine Fläche (fl): ab der Kerbe der hintere Rand bis zur einen Ecke, die Spitze, die
+   andere Ecke, der Rand zurück bis zur Kerbe. Früher gezeichnete Pfeile (offene Spitze aus zwei Flügeln) bleiben, wie sie sind. */
+const HEAD_W = 0.42, HEAD_N = 0.12, HEAD_SEG = 4;   // halbe Breite und Kerbe (je Länge), Stücke je Hälfte des hinteren Randes
+const headSize = (len, w, f) => Math.min(len * f, 10 + w * 4);
+// Spitze bei (tx, ty), u = Richtung zur Spitze, Länge L: Punkte an out (flach x, y) anhängen; liefert [erster, letzter] Punkt
+function headPts(out, tx, ty, ux, uy, L) {
+  const nx = -uy, ny = ux, H = L * HEAD_W, d = L * HEAD_N, k0 = out.length / 2;
+  // hinterer Rand: quadratische Kurve von der Ecke (L, H) über die Kerbe (L − d, 0) zur Ecke (L, −H) (a zurück, b seitlich)
+  const at = t => { const s = 1 - t, a = (s * s + t * t) * L + 2 * s * t * (L - 2 * d), b = (s * s - t * t) * H; out.push(tx - ux * a + nx * b, ty - uy * a + ny * b); };
+  for (let k = 0; k <= HEAD_SEG; k++) at(0.5 - 0.5 * k / HEAD_SEG);
+  out.push(tx, ty);
+  for (let k = 0; k <= HEAD_SEG; k++) at(1 - 0.5 * k / HEAD_SEG);
+  return [k0, out.length / 2 - 1];
 }
-// Pfeil als ein Linienzug: Ende, Spitze, Flügel, Spitze, Flügel
-function arrowPts(ax, ay, bx, by, h) {
-  const L = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / L, uy = (by - ay) / L, [w1x, w1y, w2x, w2y] = wings(bx, by, ux, uy, h);
-  return [ax, ay, bx, by, w1x, w1y, bx, by, w2x, w2y];
+// Pfeil von a nach b als Linienzug mit Fläche (fl am Feld): Anfang, dann die Spitze ab der Kerbe
+function arrowLine(ax, ay, bx, by, L) {
+  const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len, out = [ax, ay];
+  out.fl = [headPts(out, bx, by, ux, uy, L)];
+  return out;
+}
+// Doppelpfeil: Spitze bei a, Schaft von Kerbe zu Kerbe, Spitze bei b
+function arrow2Line(ax, ay, bx, by, L) {
+  const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len, out = [];
+  out.fl = [headPts(out, ax, ay, -ux, -uy, L), headPts(out, bx, by, ux, uy, L)];
+  return out;
 }
 /* Strichschrift für die Beschriftung der Achsen (eigene Zeichnung, wie Normschrift): jedes Zeichen als Linienzüge in
    Einheiten, in denen die x-Höhe 10 ist (Grundlinie y = 0, x-Höhe -10, Großbuchstaben und Ziffern -14, Unterlängen bis 4).
@@ -1643,12 +1695,8 @@ function shapeLines(k, ax, ay, bx, by, w) {
   const len = Math.hypot(bx - ax, by - ay);
   if (len < 1e-6) return [];
   if (k === 'line') return [[ax, ay, bx, by]];
-  if (k === 'arrow') return [arrowPts(ax, ay, bx, by, headLen(len, w, 0.35))];
-  if (k === 'arrow2') {
-    const h = headLen(len, w, 0.3), ux = (bx - ax) / len, uy = (by - ay) / len;
-    const [a1x, a1y, a2x, a2y] = wings(ax, ay, -ux, -uy, h), [b1x, b1y, b2x, b2y] = wings(bx, by, ux, uy, h);
-    return [[a1x, a1y, ax, ay, a2x, a2y, ax, ay, bx, by, b1x, b1y, bx, by, b2x, b2y]];
-  }
+  if (k === 'arrow') return [arrowLine(ax, ay, bx, by, headSize(len, w, 0.4))];
+  if (k === 'arrow2') return [arrow2Line(ax, ay, bx, by, headSize(len, w, 0.3))];
   const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), y0 = Math.min(ay, by), y1 = Math.max(ay, by), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   if (k === 'rect') return [[ax, ay, bx, ay, bx, by, ax, by, ax, ay]];
   if (k === 'tri') return [[cx, y0, x1, y1, x0, y1, cx, y0]];
@@ -1683,9 +1731,9 @@ function newGraphSettings(k) {
 function graphLines(p, w) {
   const [x0, y0, x1, y1] = p.b, [ox, oy] = p.o, f = p.f > 0 ? p.f : 1, w0 = w / f, out = [];
   const U = (p.step > 0 ? p.step : 1) * (p.G > 0 ? p.G : gridSize()) * f;   // Abstand der Teilstriche
-  const th = f * Math.max(4, w0 * 1.5), LH = f * (13 + Math.max(0, w0 - 2) * 2.5), m = 3 * f, cap = f * (12 + w0 * 2.5);
-  const gx = f * (7 + w0), gy = f * (8 + w0), half = h => Math.max(th, h * ARROW_S);   // Abstand der Beschriftung zur Achse
-  const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5 * f) return -1; const h = Math.min(L * 0.35, cap); out.push(arrowPts(fx, fy, tx, ty, h)); return h; };
+  const th = f * Math.max(4, w0 * 1.5), LH = f * (13 + Math.max(0, w0 - 2) * 2.5), m = 3 * f, cap = f * (10 + w0 * 2.5);
+  const gx = f * (7 + w0), gy = f * (8 + w0), half = h => Math.max(th, h * HEAD_W);   // Abstand der Beschriftung zur Achse
+  const axis = (fx, fy, tx, ty) => { const L = Math.hypot(tx - fx, ty - fy); if (L < 0.5 * f) return -1; const h = Math.min(L * 0.35, cap); out.push(arrowLine(fx, fy, tx, ty, h)); return h; };
   const corner = p.k === 'axes2p';   // Ursprung in der Ecke: daneben ist nichts, eine lange Beschriftung darf dort anfangen
   // waagrechte Achse mit der Spitze bei tx: kurze Beschriftung unter der Spitze, lange mittig unter der Achse zwischen
   // Ursprung und Spitze (nicht über den Ursprung hinaus, dort kreuzt sonst die senkrechte Achse)
@@ -1730,6 +1778,7 @@ function shapeStroke(xy, c, w, k, g, gr) {
   const n = xy.length / 2, p = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { p[i * 3] = xy[i * 2]; p[i * 3 + 1] = xy[i * 2 + 1]; p[i * 3 + 2] = 0.5; }
   const s = { t: 's', id: uid(), c, w, hl: false, pts: p, bb: bboxOf(p, w), k };
+  if (xy.fl) s.fl = xy.fl.map(r => [r[0], r[1]]);   // gefüllte Pfeilspitzen
   if (g) s.g = g;
   if (gr) s.gr = gr;
   return s;
@@ -1747,7 +1796,7 @@ function shapeGeo(a) {
     const gr = GRAPHS.has(a.shape) && Math.hypot(bx - ax, by - ay) >= 1e-6 ? graphParams(a.shape, Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)) : null;
     for (const xy of gr ? graphLines(gr, a.w) : shapeLines(a.shape, ax, ay, bx, by, a.w)) strokes.push(shapeStroke(xy, a.c, a.w, a.shape, a.g, gr));
   }
-  return a.geo = { key, strokes, paths: strokes.map(s => buildPath(s.pts, s.w, false)) };
+  return a.geo = { key, strokes, paths: strokes.map(s => buildPath(s.pts, s.w, false, s.fl)) };
 }
 /* Eigene Formen platzieren: Antippen = gespeicherte Größe, mittig auf dem Punkt; Ziehen = gleichmäßig in das
    aufgezogene Rechteck eingepasst, an seiner oberen linken Ecke (nie gespiegelt). Mit Raster liegt die geometrische
@@ -1786,6 +1835,7 @@ function stampStrokes(r, s, x, y, g) {
     for (let i = 0; i < q.length; i += 3) { p[i] = x + q[i] * s; p[i + 1] = y + q[i + 1] * s; p[i + 2] = q[i + 2]; }
     const k = { t: 's', id: uid(), c: st.c, w, hl: st.hl, pts: p, bb: bboxOf(p, w), k: 'custom', g };
     if (st.al) k.al = st.al;
+    if (st.fl) k.fl = st.fl.map(r => [r[0], r[1]]);
     return k;
   });
 }
@@ -1796,12 +1846,12 @@ function stampGeo(a) {
   const [s, x, y] = stampPlace(a, tap);
   if (!tap && stampData(r).n > STAMP_BIG) {   // große Form: ihre fertigen Pfade nur verschieben und skalieren
     const d = stampData(r);
-    if (!d.paths) { d.paths = r.strokes.map(st => buildPath(st.pts, st.w, st.hl)); d.bbs = r.strokes.map(st => bboxOf(st.pts, st.w)); }
+    if (!d.paths) { d.paths = r.strokes.map(st => buildPath(st.pts, st.w, st.hl, st.fl)); d.bbs = r.strokes.map(st => bboxOf(st.pts, st.w)); }
     const strokes = r.strokes.map((st, i) => { const b = d.bbs[i]; return { t: 's', c: st.c, hl: st.hl, bb: [x + b[0] * s, y + b[1] * s, x + b[2] * s, y + b[3] * s] }; });
     return a.geo = { key, strokes, paths: d.paths, xf: [s, x, y], box: true };
   }
   const strokes = stampStrokes(r, s, x, y, a.g);
-  return a.geo = { key, strokes, paths: strokes.map(k => buildPath(k.pts, k.w, k.hl)), box: true };
+  return a.geo = { key, strokes, paths: strokes.map(k => buildPath(k.pts, k.w, k.hl, k.fl)), box: true };
 }
 // Vorschau kachelweise, wie renderTile: unter der Form die Kachelpixel (deckend), darauf die Striche mit der Kachel
 // als Clip. Skia glättet Kanten abhängig vom Clip; so entstehen genau die Pixel, die später in der Kachel stehen,
@@ -1859,7 +1909,7 @@ function stampRest(a) {
   if (t >= 180) { a.rest = true; requestLive(); } else a.restT = setTimeout(() => stampRest(a), 190 - t);
 }
 function exactStamp(a, g) {
-  if (!a.exact || a.exact.key !== g.key) { const st = stampStrokes(a.custom, ...g.xf, a.g); a.exact = { key: g.key, strokes: st, paths: st.map(k => buildPath(k.pts, k.w, k.hl)), box: true }; }
+  if (!a.exact || a.exact.key !== g.key) { const st = stampStrokes(a.custom, ...g.xf, a.g); a.exact = { key: g.key, strokes: st, paths: st.map(k => buildPath(k.pts, k.w, k.hl, k.fl)), box: true }; }
   return a.exact;
 }
 function liveShape(a) {
@@ -2545,6 +2595,7 @@ const tToSize = (k, t) => { const [lo, hi] = SIZE_RANGE[k], v = lo * Math.pow(hi
 function showSize() {
   const k = sizeKind, v = S.size[k];
   $('#szLabel').textContent = { hl: 'Textmarker', tape: 'Tape' }[k] || 'Stift';
+  $('#sizeMenu').dataset.title = $('#szLabel').textContent;   // Titelleiste (Aussehen XP)
   $('#szVal').textContent = fmtSize(v);
   if (k !== 'tape') $('#opVal').textContent = Math.round(S.alpha[k] * 100) + ' %';
   $('#smVal').textContent = fmtSmooth(S.smooth);
@@ -2764,6 +2815,7 @@ function setGraph(ch) {
 function renderGraphMenu() {
   const v = grValues(); if (!v) return;
   $('#grTitle').textContent = GRAPH_NAMES[v.k] || GRAPH_NAMES.axes2;
+  $('#graphMenu').dataset.title = $('#grTitle').textContent;
   $('#grStepVal').textContent = fmtStep(v.step);
   const sb = $('#grSteps'); sb.innerHTML = '';
   for (const s of GRAPH_STEPS) {
@@ -2798,7 +2850,7 @@ function drawGraphPreview(v) {
   g.translate((W - bw * s) / 2 - (bb[0] - w / 2) * s, (H - bh * s) / 2 - (bb[1] - w / 2) * s); g.scale(s, s);
   for (const xy of lines) {
     const s = shapeStroke(xy, c, w, v.k); if (src && src.al) s.al = src.al;
-    fillStroke(g, s, buildPath(s.pts, s.w, false));
+    fillStroke(g, s, buildPath(s.pts, s.w, false, s.fl));
   }
 }
 function openGraphMenu(btn, edit) {
@@ -2865,6 +2917,7 @@ async function saveCustomShape() {
     for (let i = 0; i < p.length; i += 3) { p[i] -= x0; p[i + 1] -= y0; }
     const st = { c: s.c, w: s.w, hl: !!s.hl, pts: p };
     if (s.al) st.al = s.al;
+    if (s.fl) st.fl = s.fl.map(r => [r[0], r[1]]);
     return st;
   });
   const b = geoBox(list), rec = { id: uid(), name: name.trim() || 'Form ' + k, created: Date.now(), w: b[2], h: b[3], strokes: list };
@@ -2890,7 +2943,7 @@ function customThumb(r) {
   c = document.createElement('canvas'); c.width = c.height = Math.round(SZ * DPR);
   const g = c.getContext('2d'), f = c.width / SZ;
   g.setTransform(f * k, 0, 0, f * k, f * (SZ / 2 - r.w / 2 * k), f * (SZ / 2 - r.h / 2 * k));
-  for (const st of r.strokes) fillStroke(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl));
+  for (const st of r.strokes) fillStroke(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl, st.fl));
   thumbCache.set(key, c);
   return c;
 }
@@ -2925,6 +2978,29 @@ function applyDark() {
 }
 function toggleDark() { S.dark = !S.dark; store.set('dark', S.dark); applyDark(); }
 $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
+/* Aussehen „Windows XP“: nur CSS (html.xp, gesetzt schon im Kopf der Seite); die Titelleisten zeigen data-title, ihr rotes ✕
+   schließt das Fenster (im Editor: zurück zum Buch). Der Schreibbereich folgt weiter Hell/Dunkel. */
+const isXP = () => document.documentElement.classList.contains('xp');
+function applyTheme() {
+  const xp = S.theme === 'xp';
+  document.documentElement.classList.toggle('xp', xp);
+  $('#hTheme').classList.toggle('on', xp);
+  xpTitle(); fitBar(); if (S.sel) placeSelbar();
+}
+function toggleTheme() { S.theme = S.theme === 'xp' ? 'modern' : 'xp'; store.set('theme', S.theme); applyTheme(); toast('Aussehen: ' + (S.theme === 'xp' ? 'Windows XP' : 'modern'), 1400); }
+$('#hTheme').onclick = toggleTheme;
+$('#mTheme').onclick = () => { closeMenus(); toggleTheme(); };
+// Titelleiste des Editors: „Name – Notizen“ wie ein Fenster damals
+function xpTitle() { $('#bar').dataset.title = ($('#title').value.trim() || 'Ohne Titel') + ' – Notizen'; }
+// Trifft ein Tipp das ✕ rechts in der Titelleiste von el? (als Hintergrund gezeichnet, der Tipp trifft el selbst)
+function xpCloseHit(el, e, top, h = 30) {
+  if (!isXP() || e.target !== el) return false;
+  const r = el.getBoundingClientRect(), y0 = top === undefined ? r.top : top;
+  return e.clientX > r.right - 34 && e.clientY >= y0 && e.clientY < y0 + h;
+}
+for (const m of $$('.menu[data-title]')) m.addEventListener('pointerdown', e => { if (xpCloseHit(m, e)) { e.preventDefault(); e.stopPropagation(); closeMenus(); } });
+$('#dlgBox').addEventListener('pointerdown', e => { if (xpCloseHit($('#dlgBox'), e)) { e.preventDefault(); $('#dlgNo').click(); } });
+$('#bar').addEventListener('pointerdown', e => { const r = $('#bar').getBoundingClientRect(); if (xpCloseHit($('#bar'), e, r.top - 30)) { e.preventDefault(); $('#bBack').click(); } });
 
 /* Aufploppen aller Popups (Menüs, Farbwähler, Dialog, Auswahlleiste): aus dem Knopf heraus, kurz federnd (dieselbe
    Feder wie bei den Buch-Animationen); beim Schließen huschen Menüs kurz zusammen. Bei „Bewegung reduzieren“ ohne
@@ -2972,6 +3048,7 @@ $('#bSheet').onclick = addSheet;
 $('#bMore').onclick = () => {
   $('#mFit').textContent = paperSize() ? 'Ganzes Blatt anzeigen' : 'Alles anzeigen'; $('#mFinger').textContent = 'Mit dem Finger zeichnen: ' + (S.fingerDraw ? 'an' : 'aus');
   $('#mFull').textContent = document.fullscreenElement ? 'Vollbild beenden' : 'Vollbild';
+  $('#mTheme').textContent = 'Aussehen: ' + (S.theme === 'xp' ? 'modern' : 'Windows XP');
   openMenu($('#moreMenu'), $('#bMore'));
 };
 // Vollbild: ohne Titelleiste des Fensters und ohne Taskleiste; Esc oder nochmal beendet es. Das Windows-Programm ruft
@@ -3340,6 +3417,10 @@ async function renderTo(items, box, scale, bg, o = {}) {
       const step = Math.max(3, Math.floor(it.pts.length / 3 / 20) * 3);
       for (let i = step; i < it.pts.length; i += step) ctx.lineTo(it.pts[i], it.pts[i + 1]);
       ctx.lineTo(it.pts[it.pts.length - 3], it.pts[it.pts.length - 2]); ctx.stroke();
+      if (validFl(it.fl, it.pts.length / 3)) {   // gefüllte Pfeilspitzen
+        ctx.fillStyle = colorOf(it.c);
+        for (const [a, b] of it.fl) { ctx.beginPath(); ctx.moveTo(it.pts[a * 3], it.pts[a * 3 + 1]); for (let i = a + 1; i <= b; i++) ctx.lineTo(it.pts[i * 3], it.pts[i * 3 + 1]); ctx.fill(); }
+      }
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     });
     else paint(() => drawItem(ctx, it, scale));
@@ -3552,7 +3633,7 @@ let homeKey = null, homeScroll = null;   // für Animation und Scrollposition be
 // damit sie nicht mitten im Wort umbrechen. avail = nutzbare Breite des Schildes in em.
 let measureCtx = null;
 function coverLabel(lbl, name, avail = 6.7) {
-  lbl.firstChild.textContent = name;
+  lbl.firstChild.textContent = name; lbl.parentNode.dataset.n = name;   // data-n: großer Name im Hintergrund (Aussehen XP)
   if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
   measureCtx.font = '650 100px ' + getComputedStyle(document.body).fontFamily;
   const em = t => measureCtx.measureText(t).width / 100;
@@ -3561,6 +3642,10 @@ function coverLabel(lbl, name, avail = 6.7) {
   let k = longest > avail ? avail / longest : 1;
   if (total > 2.2 * avail) k = Math.min(k, 0.82);   // lange Namen: lieber kleiner als abgeschnitten
   lbl.style.setProperty('--k', Math.max(0.55, k).toFixed(3));
+  // Aussehen XP: großer Titel unten (Franklin Gothic), etwa 5,3 Geviert breit; das längste Wort passt hinein
+  measureCtx.font = 'bold 100px "Franklin Gothic Medium","Trebuchet MS",Tahoma,sans-serif';
+  const longX = Math.max(0.01, ...name.split(/\s+/).map(em));
+  lbl.style.setProperty('--kx', Math.max(0.5, Math.min(1, 5.3 / longX)).toFixed(3));
 }
 // quiet: ohne die Einblend-Animation des Rasters (die Buch-Animation übernimmt das)
 async function renderHome(quiet) {
@@ -3602,6 +3687,7 @@ function renderShelf(grid, books, notes) {
       <div class="cap"><div class="grow"><div class="nm"></div><div class="dt"></div></div>
       <button class="mbtn" title="Buch bearbeiten"><svg class="i"><use href="#ic-more"/></svg></button></div>`;
     coverLabel(el.querySelector('.lbl'), b.name);
+    el.querySelector('.gl').dataset.p = n ? (n === 1 ? '1 Seite' : n + ' Seiten') : 'Neu';   // Schild auf dem Einband (Aussehen XP)
     el.querySelector('.nm').textContent = el.firstChild.title = b.name;
     el.querySelector('.dt').textContent = (n ? pagesWord(n) : 'Leer') + ' · ' + fmtDay(last.get(b.id) || b.created || Date.now());
     el.firstChild.onclick = () => openBook(b.id, el);
@@ -4176,7 +4262,7 @@ async function openNote(meta) {
     S.view = meta.view ? { ...meta.view } : { tx: 0, ty: 0, z: 1 }; S.level = S.view.z;
     S.undo = []; S.redo = []; S.sel = null; action = null; S.thumbDirty = false;
     clearTiles(); pathCache.clear();
-    $('#title').value = meta.name;
+    $('#title').value = meta.name; xpTitle();
     if (!$('#home').classList.contains('hidden')) homeScroll = { key: homeKey, top: $('#grid').scrollTop };
     closeMenus(); $('#home').classList.add('hidden'); $('#editor').classList.remove('hidden');
     updateUndo(); setTool(S.tool === 'hand' ? 'pen' : S.tool); resize();
@@ -4214,7 +4300,7 @@ async function closeNote() {
 }
 window.__flush = () => flushNote().catch(() => {});
 $('#bBack').onclick = closeNote;
-$('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } fitBar(); });
+$('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } xpTitle(); fitBar(); });
 $('#title').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); });
 /* Sicherung: eine Textdatei mit einer Zeile pro Buch, Notiz, Stricheliste und Bild.
    So entsteht nie ein einzelner riesiger Text, auch bei vielen PDFs.
@@ -4258,7 +4344,7 @@ function shapeFromBackup(r) {
   if (typeof r.id !== 'string' || !r.id || !Array.isArray(r.strokes)) return null;
   const strokes = r.strokes.filter(st => st && Array.isArray(st.pts) && st.pts.length >= 3 && st.pts.length % 3 === 0 && st.pts.every(Number.isFinite))
     .map(st => ({ c: typeof st.c === 'string' ? st.c : 'ink', w: st.w > 0 ? +st.w : 2, hl: !!st.hl, pts: Float32Array.from(st.pts),
-      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}) }));
+      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}), ...(validFl(st.fl, st.pts.length / 3) ? { fl: st.fl.map(r => [r[0], r[1]]) } : {}) }));
   if (!strokes.length) return null;
   const [x0, y0] = geoBox(strokes);
   if (x0 || y0) for (const st of strokes) for (let i = 0; i < st.pts.length; i += 3) { st.pts[i] -= x0; st.pts[i + 1] -= y0; }
@@ -4335,7 +4421,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && S.n
 window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
 
 /* ---------- Start ---------- */
-applyDark();
+applyDark(); applyTheme();
 openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome().then(scheduleWarmUp); })
   .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
 // Browser-Version im Netz (GitHub Pages): Offline-Start über sw.js; das Windows-Programm lädt die Datei lokal
