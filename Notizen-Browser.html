@@ -1830,6 +1830,7 @@ function draw() {
     shownSlots.clear(); shownSig = gaps ? '' : sig;
     if (anyGaps) {
       fillBg(ctx, S.view.z, r.txD, r.tyD, r.x1, r.y1);   // beim Zoomen nur der Bildschirm
+      drawOverview(ctx, r);                              // wo noch keine Kachel ist: die unscharfe Übersicht
       if (fallbackL != null && fallbackL !== L) drawLevel(ctx, fallbackL, false, false, mainRange(fallbackL, wide));
     }
   }
@@ -1840,6 +1841,7 @@ function draw() {
   if (cvMain.style.transform !== mt) cvMain.style.transform = mt;
   if (missing.length) requestDraw();
   else { if (fallbackL != null && !gesture && !wheelT) fallbackL = null; schedulePrefetch(); }
+  overviewCheck();
   // älteste Kacheln verwerfen
   for (const [k, t] of tiles) { if (tiles.size <= MAX_TILES) break; tiles.delete(k); tilePool.push(t); }
   if (tilePool.length > 40) tilePool.length = 40;
@@ -1862,6 +1864,54 @@ function schedulePrefetch() {
     while (ring.length && done < 4 && dl.timeRemaining() > 4) { const [i, j] = ring.shift(); renderTile(L, i, j); done++; }
     if (ring.length) schedulePrefetch();
   }, { timeout: 1000 });
+}
+/* Unscharfe Übersicht der ganzen Seite: alle Striche und Bilder einmal klein (höchstens OV_MAX Gerätepixel je Seite).
+   Wo beim Rauszoomen oder schnellen Verschieben noch Kacheln fehlen, zeigt draw() sie vergrößert statt leerem Papier,
+   bis die scharfen Kacheln da sind. Kosten für den Akku: beim Schreiben kommen nur die neuen Striche dazu; nach anderen
+   Änderungen (Radieren, Verschieben, Rückgängig …) wird sie erst nach 1,2 s Ruhe im Leerlauf neu gezeichnet, in Stücken. */
+const OV_MAX = 1536;
+let ov = null, ovT = 0;   // ov: { c, box, s, items, note, dark }
+function overviewCheck() {
+  if (!S.note || ovT || (ov && ov.note === S.note && ov.items === S.items && ov.dark === S.dark)) return;
+  const same = ov && ov.note === S.note;
+  ovT = setTimeout(() => { ovT = 0; idle(buildOverview, { timeout: 4000 }); }, same ? 1200 : 300);
+}
+function dropOverview() { if (ov) { ov.c.width = ov.c.height = 0; ov = null; } clearTimeout(ovT); ovT = 0; }
+function buildOverview(dl) {
+  const items = S.items, note = S.note, dark = S.dark;
+  if (!note) return;
+  if (gesture || action) { overviewCheck(); return; }
+  // beim Schreiben: die bisherigen Striche stehen unverändert vorne, die neuen liegen im Rechteck der Übersicht
+  if (ov && ov.note === note && ov.dark === dark && ov.items.length < items.length && ov.items.every((it, k) => items[k] === it)) {
+    const add = new Set(items.slice(ov.items.length)), b = ov.box;
+    if ([...add].every(it => { const q = itemBox(it); return q[0] >= b[0] && q[1] >= b[1] && q[2] <= b[2] && q[3] <= b[3]; })) {
+      const ctx = ov.c.getContext('2d'); ctx.setTransform(ov.s, 0, 0, ov.s, -b[0] * ov.s, -b[1] * ov.s);
+      for (const it of paintOrder(items)) if (add.has(it)) drawItem(ctx, it, ov.s);
+      ov.items = items; return;
+    }
+  }
+  const cb = contentBox(items);
+  if (!cb) { dropOverview(); return; }
+  const pad = 24, box = [cb[0] - pad, cb[1] - pad, cb[2] + pad, cb[3] + pad], w = box[2] - box[0], h = box[3] - box[1];
+  const s = Math.min(1, OV_MAX / w, OV_MAX / h), c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(w * s)); c.height = Math.max(1, Math.ceil(h * s));
+  const ctx = c.getContext('2d'); ctx.setTransform(s, 0, 0, s, -box[0] * s, -box[1] * s);
+  const order = paintOrder(items); let k = 0;
+  const step = d => {
+    if (S.items !== items || S.note !== note || S.dark !== dark) { c.width = c.height = 0; overviewCheck(); return; }   // inzwischen geändert
+    do { for (let n = 0; n < 150 && k < order.length; n++) drawItem(ctx, order[k++], s); } while (k < order.length && d.timeRemaining() > 3);
+    if (k < order.length) { idle(step, { timeout: 2000 }); return; }
+    if (ov) ov.c.width = ov.c.height = 0;
+    ov = { c, box, s, items, note, dark };
+  };
+  step(dl);
+}
+// unter die Kacheln der Ansicht (r: Bereich von cvMain wie bei drawLevel)
+function drawOverview(ctx, r) {
+  if (!ov || ov.note !== S.note || ov.dark !== S.dark) return;
+  const z = S.view.z * DPR, x = ov.box[0] * z + r.txD, y = ov.box[1] * z + r.tyD, w = (ov.box[2] - ov.box[0]) * z, h = (ov.box[3] - ov.box[1]) * z;
+  if (x > r.x1 || y > r.y1 || x + w < 0 || y + h < 0) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(ov.c, x, y, w, h);
 }
 // Die Live-Ebene merkt sich, wo etwas auf ihr steht (liveBB, Rechteck in Gerätepixeln; null = leer), und leert nur
 // dieses Rechteck. Leeren kostet auf dem Surface (Adreno) Grafikzeit je Fläche, den ganzen Bildschirm etwa 7 ms – beim
@@ -5076,6 +5126,7 @@ async function flushNote() {
 }
 async function closeNote() {
   if (!S.note || navBusy) return;
+  dropOverview();
   if (S.busy) { toast('Bitte warten, bis der Import fertig ist'); return; }
   navBusy = true;
   clearSel();

@@ -1,5 +1,8 @@
 # Notizen für das Surface Pro 11 (Version 1.5.12)
 
+## Bald in 1.5.13: Rauszoomen ohne leere Ränder (schon in der Browser-Version zum Ausprobieren)
+- **Rauszoomen ohne leere Ränder:** Beim Rauszoomen oder schnellen Verschieben war am Rand kurz nur leeres Papier zu sehen, bis die neuen Stellen gezeichnet waren. Jetzt zeigt die Seite dort sofort eine leicht unscharfe Vorschau der ganzen Seite, die Sekundenbruchteile später scharf wird. Die Vorschau wird nur im Leerlauf gezeichnet (bei 5.000 Strichen in wenigen Millisekunden); beim Schreiben kommen neue Striche einzeln dazu, nach Radieren oder Verschieben wird sie nach kurzer Ruhe neu gezeichnet. Im Hintergrund läuft dafür nichts dauerhaft.
+
 ## Neu in 1.5.12: Aussehen wie Windows XP, neue Pfeile
 - **Aussehen wie Windows XP:** Die ganze App sieht aus wie ein Programm unter Windows XP.
   - Startseite und Buch wie ein Explorer-Fenster: blaue Titelleiste, beige Leiste, grüner Knopf „Neues Buch“, die Seiten als Vorschaubilder.
