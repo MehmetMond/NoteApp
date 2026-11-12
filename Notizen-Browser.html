@@ -256,6 +256,38 @@ html.dark #colorMenu .cpsw button,html.dark #cpChip{box-shadow:inset 0 0 0 1px r
 #imgMenu{width:258px}
 #imgMenu .mhint{font-size:12px;line-height:1.4;color:var(--muted);padding:8px 10px 4px;margin-top:4px;border-top:1px solid var(--border)}
 #pasteMenu{min-width:0;padding:4px;border-radius:12px}
+/* Erklärung: Karte mit Bild, Text und Schreibfläche */
+#noteCard{width:320px;max-width:calc(100vw - 16px);padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;overflow:auto;overscroll-behavior:contain}
+#noteCard>*{flex-shrink:0}
+#noteCard.big{width:min(760px,calc(100vw - 16px))}
+#ncGrow{position:absolute;top:5px;right:5px;width:30px;height:30px;padding:0;justify-content:center;border-radius:8px;background:var(--panel);border:1px solid var(--border);color:var(--text);z-index:1}
+#ncGrow svg.i{width:17px;height:17px}
+#ncImgBox{position:relative}
+#ncImg{display:block;max-width:100%;max-height:180px;margin:0 auto;border-radius:8px;cursor:zoom-in}
+#noteCard.big #ncImg{max-height:min(560px,70vh);cursor:zoom-out}
+#ncImgDel{position:absolute;top:4px;right:4px;width:30px;height:30px;padding:0;justify-content:center;border-radius:50%;background:rgba(0,0,0,.5);color:#fff}
+#ncImgDel svg.i{width:16px;height:16px}
+#ncText{width:100%;min-height:58px;resize:vertical;font:inherit;font-size:14px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:7px 9px;-webkit-user-select:text;user-select:text}
+#ncText:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.ncink{position:relative;height:140px;border-radius:9px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--border)}
+#ncInk{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.nchint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--muted);pointer-events:none}
+#noteCard.inked .nchint{display:none}
+.ncrow{display:flex;gap:4px}
+.ncrow button{flex:1;justify-content:center;padding:8px 6px;font-size:13px;border:1px solid var(--border);border-radius:9px;gap:6px}
+.ncrow button svg.i{width:18px;height:18px}
+.ncrow .del{flex:0 0 44px;color:var(--danger)}
+/* Erklärung groß: eigenes Fenster in der Mitte (85 % des Bildschirms), dahinter abgedunkelt wie beim Dialog;
+   links Bild, Text und Knöpfe, rechts die große Schreibfläche (hochkant: untereinander) */
+#ncDim{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.35)}
+#noteCard.glance{position:fixed!important;left:7.5vw!important;top:7.5vh!important;width:85vw!important;height:85vh;max-width:none;max-height:none!important;z-index:36;display:grid;grid-template-columns:minmax(220px,28%) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"img ink" "text ink" ". ink" "btns ink";column-gap:14px;row-gap:10px;padding:14px;overflow:hidden;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.35)}
+#noteCard.glance #ncImgBox{grid-area:img}
+#noteCard.glance #ncImg{max-height:min(240px,30vh);cursor:default}
+#noteCard.glance #ncText{grid-area:text}
+#noteCard.glance .ncink{grid-area:ink;height:auto;min-height:0}
+#noteCard.glance .ncrow{grid-area:btns;flex-wrap:wrap}
+#noteCard.glance .ncrow button{flex:1 1 40%}
+@media (max-aspect-ratio:1/1){#noteCard.glance{grid-template-columns:minmax(0,1fr);grid-template-areas:"img" "text" "ink" "btns";grid-template-rows:auto auto minmax(0,1fr) auto}}
 #pasteMenu button{padding:9px 16px 9px 12px;font-weight:600}
 #selbar{position:absolute;z-index:6;display:flex;gap:2px;padding:4px;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);transform:translateX(-50%)}
 #selbar button{padding:8px 12px;font-size:14px}
@@ -358,12 +390,25 @@ html.xp{--icm:none;--icx:inline}   /* bunte Symbole (zweite Gruppe in jedem Symb
 html.xp :is(.rb.back,#hBookMenu,#home :is(#hNewBook,#hNew),.addtile .plus){--icm:inline;--icx:none}
 html.xp .tb:disabled{opacity:1}html.xp .tb:disabled svg.i{filter:grayscale(1) opacity(.45)}
 /* Titelleiste eines Fensters (Einstellungen, Dialog): Verlauf, links Titel, rechts das rote ✕ */
-html.xp :is(#sizeMenu,#graphMenu,#shapeMenu,#colorMenu,#dlgBox)::before{content:attr(data-title);position:sticky;top:0;z-index:2;display:flex;align-items:center;height:30px;padding:0 36px 0 10px;
+html.xp :is(#sizeMenu,#graphMenu,#shapeMenu,#colorMenu,#noteCard,#dlgBox)::before{content:attr(data-title);position:sticky;top:0;z-index:2;display:flex;align-items:center;height:30px;padding:0 36px 0 10px;
   background:var(--xp-x) right 5px center/21px 21px no-repeat,var(--xp-title);color:#fff;font:bold 13.5px "Trebuchet MS",Tahoma,sans-serif;text-shadow:1px 1px 0 #0a1e80;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:6px 6px 0 0}
-html.xp :is(#sizeMenu,#graphMenu,#shapeMenu,#colorMenu){background:#ece9d8;border:3px solid var(--xp-frame);border-top:0;border-radius:8px 8px 0 0;box-shadow:2px 3px 8px rgba(0,0,0,.4);scrollbar-width:auto}
+html.xp :is(#sizeMenu,#graphMenu,#shapeMenu,#colorMenu,#noteCard){background:#ece9d8;border:3px solid var(--xp-frame);border-top:0;border-radius:8px 8px 0 0;box-shadow:2px 3px 8px rgba(0,0,0,.4);scrollbar-width:auto}
 html.xp :is(#sizeMenu,#graphMenu)::before{margin:-12px -16px 10px;top:-12px}
 html.xp #shapeMenu::before{margin:-10px -10px 8px;top:-10px}
 html.xp #colorMenu::before{margin:-12px -14px 10px;top:-12px}
+html.xp #noteCard::before{margin:-10px -12px 2px;top:-10px;flex-shrink:0}
+html.xp #ncText{border:1px solid #7f9db9;border-radius:0;background:#fff;color:#000;font-family:Tahoma,Verdana,sans-serif}
+html.xp #ncText:focus{outline:none;border-color:#316ac5;box-shadow:0 0 0 1px #c1d2ee}
+html.xp .ncink{border-radius:0;background:#fff;box-shadow:inset 1px 1px 0 #808080,inset -1px -1px 0 #fff,inset 2px 2px 0 #404040}
+html.xp #ncImg{border-radius:0;box-shadow:0 0 0 1px #aca899}
+html.xp .ncrow button{border:1px solid #003c74;border-radius:3px;background:var(--xp-btn);color:#000}
+html.xp .ncrow button:hover{box-shadow:inset 0 0 0 1px #fff0cf,inset 0 0 0 2px #f6b43a}
+html.xp .ncrow .del{color:#c0201a}
+html.xp #ncGrow{border:1px solid #003c74;border-radius:3px;background:var(--xp-btn);color:#000}
+html.xp #noteCard.glance{grid-template-rows:auto auto auto minmax(0,1fr) auto;grid-template-areas:"title title" "img ink" "text ink" ". ink" "btns ink"}
+html.xp #noteCard.glance::before{grid-area:title;margin:-14px -14px 0;top:0;position:relative}
+@media (max-aspect-ratio:1/1){html.xp #noteCard.glance{grid-template-areas:"title" "img" "text" "ink" "btns"}}
+html.xp #ncGrow:hover{box-shadow:inset 0 0 0 1px #fff0cf,inset 0 0 0 2px #f6b43a}
 /* Kontextmenüs: weiß, schmaler Rand, Zeile unter dem Finger blau */
 html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#grpMenu,#pasteMenu){background:#fff;border:1px solid #8a867a;border-radius:0;box-shadow:2px 2px 3px rgba(0,0,0,.35);padding:2px}
 html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#pasteMenu)>button{border-radius:0;padding:8px 22px 8px 12px;font-size:13px}
@@ -605,6 +650,7 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
     <button id="sColor">Farbe übernehmen</button>
     <button id="sSize">Dicke übernehmen</button>
     <button id="sGraph" class="hidden">Graph ändern</button>
+    <button id="sNote">Erklärung</button>
     <button id="sDup">Duplizieren</button>
     <button id="sSave">Als Form speichern</button>
     <button id="sDel" class="del">Löschen</button>
@@ -621,6 +667,13 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
   <button id="mImgClip"><svg class="i"><use href="#ic-clip"/></svg>Aus der Zwischenablage</button>
   <button id="mImgFile"><svg class="i"><use href="#ic-img"/></svg>Bild aus einer Datei …</button>
   <div class="mhint">Bildschirmfoto mit Win + Umschalt + S, dann hier einfügen. Mit Tastatur geht auch Strg + V.</div>
+</div>
+<div id="ncDim" class="hidden"></div>
+<div id="noteCard" class="menu hidden" data-title="Erklärung" role="dialog" aria-label="Erklärung">
+  <div id="ncImgBox" class="hidden"><img id="ncImg" alt="Bild der Erklärung" title="Antippen: groß / klein"><button id="ncImgDel" title="Bild entfernen"><svg class="i"><use href="#ic-x"/></svg></button></div>
+  <textarea id="ncText" rows="3" placeholder="Kurze Erklärung …" spellcheck="false" aria-label="Text der Erklärung"></textarea>
+  <div class="ncink"><canvas id="ncInk"></canvas><span class="nchint">Hier mit dem Stift schreiben</span><button id="ncGrow" title="Schreibfläche vergrößern" aria-label="Schreibfläche vergrößern"><svg class="i"><use href="#ic-grow"/></svg></button></div>
+  <div class="ncrow"><button id="ncPaste" title="Bild aus der Zwischenablage (auch Strg + V)"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button><button id="ncFile" title="Bild aus einer Datei"><svg class="i"><use href="#ic-img"/></svg>Bild</button><button id="ncClear" title="Geschriebenes löschen"><svg class="i"><use href="#ic-eraser"/></svg>Leeren</button><button id="ncDel" class="del" title="Erklärung entfernen"><svg class="i"><use href="#ic-trash"/></svg></button></div>
 </div>
 <div id="pasteMenu" class="menu hidden"><button id="pmPaste"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button></div>
 <div id="sizeMenu" class="menu hidden" data-title="Stift">
@@ -701,6 +754,7 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
 <div id="homeMenu" class="menu hidden"></div>
 
 <input type="file" id="fImg" accept="image/*" multiple class="hidden">
+<input type="file" id="fNoteImg" accept="image/*" class="hidden">
 <input type="file" id="fPdf" accept="application/pdf,.pdf" class="hidden">
 <input type="file" id="fRestore" accept=".notizen,.json,application/json" class="hidden">
 <div id="dlg" class="hidden"><form id="dlgBox" data-title="Notizen"><div id="dlgPrev" class="hidden"><span class="pgs"></span><span class="cover"><span class="gl"></span><span class="lbl"><span class="t"></span></span></span></div><div id="dlgMsg"></div><div id="dlgFmt" class="hidden"><div class="fmts"><button type="button" data-f="inf"><span class="pv"><i></i></span><b>Unendlich</b><small>Freie Fläche</small></button><button type="button" data-f="a4"><span class="pv"><i></i></span><b>DIN A4</b><small>210 × 297 mm</small></button><button type="button" data-f="a3"><span class="pv"><i></i></span><b>DIN A3</b><small>297 × 420 mm</small></button></div><div class="ori"><button type="button" data-o="p"><svg viewBox="0 0 24 24"><rect x="6.5" y="3.5" width="11" height="17" rx="2"/></svg>Hochformat</button><button type="button" data-o="l"><svg viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="17" height="11" rx="2"/></svg>Querformat</button></div><div id="dlgFmtHint"></div></div><input id="dlgIn" spellcheck="false" maxlength="80"><div id="dlgSw" class="hidden"></div><div class="row"><button type="button" class="btn" id="dlgNo">Abbrechen</button><button type="submit" class="btn primary" id="dlgOk">OK</button></div></form></div>
@@ -732,6 +786,8 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
   <symbol id="ic-edit" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></g><g style="display:var(--icx,none)" stroke="none"><g transform="rotate(-45 12 12)"><path d="M1.2 12L6 9.2V14.8z" fill="#f6d9ab" stroke="#7a5320" stroke-width=".8" stroke-linejoin="round"/><path d="M1.2 12L3.3 10.8V13.2z" fill="#333"/><rect x="6" y="9.2" width="11" height="5.6" fill="url(#xg-yellow)" stroke="#8a6200" stroke-width=".8"/><path d="M6 11.1h11M6 12.9h11" stroke="#d99a00" stroke-width=".6"/><rect x="17" y="9.2" width="2.4" height="5.6" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".8"/><rect x="19.4" y="9.2" width="3.4" height="5.6" rx="1.2" fill="url(#xg-pink)" stroke="#9b3f62" stroke-width=".8"/></g></g></symbol>
   <symbol id="ic-move" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M3 7.5A2.5 2.5 0 015.5 5H9l2 2h7.5A2.5 2.5 0 0121 9.5v8a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 17.5z"/><path d="M9.5 13.5h6M13 11l2.5 2.5L13 16"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M2.5 6.6A1.6 1.6 0 0 1 4.1 5H9l2 2h8.9a1.6 1.6 0 0 1 1.6 1.6v9.8a1.6 1.6 0 0 1-1.6 1.6H4.1a1.6 1.6 0 0 1-1.6-1.6z" fill="url(#xg-folder)" stroke="#a87410" stroke-width=".9" stroke-linejoin="round"/><path d="M2.9 10h18.2" stroke="#e8b84a" stroke-width=".8"/><path d="M8.2 14.2h5.6v-2.4l3.9 3.2-3.9 3.2v-2.4H8.2z" fill="url(#xg-green)" stroke="#1f6e17" stroke-width=".8" stroke-linejoin="round"/></g></symbol>
   <symbol id="ic-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="ic-grow" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M14 4h6v6M20 4l-6 6M10 20H4v-6M4 20l6-6"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M13 3h8v8l-2.9-2.9-4.2 4.2-2.3-2.3 4.2-4.2z" fill="url(#xg-blue)" stroke="#163c8c" stroke-width=".9" stroke-linejoin="round"/><path d="M11 21H3v-8l2.9 2.9 4.2-4.2 2.3 2.3-4.2 4.2z" fill="url(#xg-blue)" stroke="#163c8c" stroke-width=".9" stroke-linejoin="round"/></g></symbol>
+  <symbol id="ic-shrink" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M14 4v6h6M20 4l-6 6M10 20v-6H4M4 20l6-6"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M13 3l2.85 2.85 3-3 2.3 2.3-3 3L21 11h-8z" fill="url(#xg-blue)" stroke="#163c8c" stroke-width=".9" stroke-linejoin="round"/><path d="M11 13v8l-2.85-2.85-3 3-2.3-2.3 3-3L3 13z" fill="url(#xg-blue)" stroke="#163c8c" stroke-width=".9" stroke-linejoin="round"/></g></symbol>
   <symbol id="ic-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
   <symbol id="ic-trash" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></g><g style="display:var(--icx,none)" stroke="none"><path d="M5.6 7.6h12.8l-1.2 13.1a1.4 1.4 0 0 1-1.4 1.3H8.2a1.4 1.4 0 0 1-1.4-1.3z" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9" stroke-linejoin="round"/><path d="M9.4 10.6v8.6M12 10.6v8.6M14.6 10.6v8.6" stroke="#8a929c" stroke-width="1"/><rect x="4" y="4.6" width="16" height="3" rx="1" fill="url(#xg-silver)" stroke="#5f6670" stroke-width=".9"/><path d="M9.4 4.6V3.2h5.2v1.4" fill="none" stroke="#5f6670" stroke-width=".9"/></g></symbol>
   <symbol id="ic-shape" viewBox="0 0 24 24"><g style="display:var(--icm,inline)"><rect x="3" y="10.5" width="10.5" height="10.5" rx="1.6"/><path d="M10.6 10.5a6 6 0 116.9 6.9"/></g><g style="display:var(--icx,none)" stroke="none"><rect x="2.6" y="9.6" width="11" height="11" rx="1.2" fill="url(#xg-blue)" stroke="#1a3f8f" stroke-width=".9"/><circle cx="15.6" cy="8.6" r="6" fill="url(#xg-orange)" stroke="#a04d00" stroke-width=".9"/><path d="M12.4 5.6a4.2 3 0 0 1 4.4-1.6" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="1.1" stroke-linecap="round"/></g></symbol>
@@ -1258,7 +1314,7 @@ function fillStroke(ctx, s, P) {
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 function drawItem(ctx, it, devScale) {
-  if (it.t === 's') { if (it.tp) drawTape(ctx, it, devScale); else fillStroke(ctx, it, strokePath(it)); }
+  if (it.t === 's') { if (it.tp) drawTape(ctx, it, devScale); else if (it.nt) drawNoteBadge(ctx, it, devScale); else fillStroke(ctx, it, strokePath(it)); }   // Erklärung: nur das „i“
   else if (it.t === 'i') drawImageItem(ctx, it, devScale);
 }
 
@@ -2065,7 +2121,8 @@ function resize() {
   if (cvMain.width !== w + 2 * PADD || cvMain.height !== h + 2 * PADD) { cvMain.width = w + 2 * PADD; cvMain.height = h + 2 * PADD; shownSig = ''; }
   const ms = cvMain.style; ms.left = ms.top = -PADC + 'px'; ms.width = VW + 2 * PADC + 'px'; ms.height = VH + 2 * PADC + 'px';
   if (oldDPR !== DPR) { clearTiles(); patCache.clear(); }
-  closeMenus(); fitBar();
+  if (ncCur) { drawNoteInk(); placeNoteCard(); } else closeMenus();   // offene Erklärung: bleibt (Bildschirmtastatur), Schreibfläche passt sich an
+  fitBar();
   if (S.note) { S.view.tx = snap(S.view.tx); S.view.ty = snap(S.view.ty); draw(); drawLive(); }
   liveVis();
 }
@@ -2159,6 +2216,7 @@ function commit(next, inval = true, sheets) {
 }
 function setSheets(n) { if (!S.note || !S.note.paper || !n || sheetCount() === n) return; S.note.paper.n = n; clearTiles(); }
 function stepHistory(from, to) {
+  if (ncCur) closeMenus();   // offene Erklärung erst speichern
   cancelAction(); if (!from.length) return;
   if (S.items.sheets === undefined) S.items.sheets = sheetCount();
   to.push(S.items); const it = from.pop(); setItems(it); setSheets(it.sheets);
@@ -2190,6 +2248,9 @@ function withGroups(ids) {
   const gs = new Set();
   for (const it of S.items) if (it.g && ids.has(it.id)) gs.add(it.g);
   if (gs.size) for (const it of S.items) if (it.g && gs.has(it.g)) ids.add(it.id);
+  // Erklärung: was markiert ist, nimmt seine Markierung mit (und die Markierung alles, was sie markiert)
+  const marks = new Set(); for (const it of S.items) if (it.nt) marks.add(it.id);
+  if (marks.size) for (const it of S.items) if (it.on && ids.has(it.id) && marks.has(it.on)) ids.add(it.on);
   for (const it of S.items) if (it.on && ids.has(it.on)) ids.add(it.id);
   return ids;
 }
@@ -2234,7 +2295,7 @@ function gridBox(items) {
     if (it.gr) { const q = it.gr.b; add(q[0], q[1]); add(q[2], q[3]); continue; }
     const p = it.pts, sh = shaftOf(it);
     if (sh) { add(p[sh[0]], p[sh[0] + 1]); add(p[sh[1]], p[sh[1] + 1]); continue; }
-    if (GRAPHS.has(it.k)) continue;   // früher gezeichneter Graph: nur die Achsen (eben), nicht Teilstriche und Beschriftung
+    if (GRAPHS.has(it.k) || it.nt) continue;   // früher gezeichneter Graph: nur die Achsen (eben); Markierung einer Erklärung: steht über
     for (let i = 0; i < p.length; i += 3) add(p[i], p[i + 1]);
   }
   return b[0] <= b[2] ? b : geoBox(items);
@@ -2264,6 +2325,7 @@ function placeSelbar() {
   const strokes = S.items.some(it => S.sel.ids.has(it.id) && it.t === 's');
   for (const id of ['#sColor', '#sSize', '#sSave']) $(id).classList.toggle('hidden', !strokes);
   $('#sGraph').classList.toggle('hidden', !selGraph());
+  $('#sNote').classList.toggle('hidden', !S.items.some(it => S.sel.ids.has(it.id) && !it.tp));
   const appear = bar.classList.contains('hidden');   // nur beim Erscheinen aufploppen, nicht bei jedem Nachführen
   bar.classList.remove('hidden');
   const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]);
@@ -2293,6 +2355,11 @@ function pointInPoly(x, y, P) {
     if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
+}
+// Lasso nur angetippt, und zwar auf das „i“ einer Erklärung
+function lassoBadge(P) {
+  let len = 0; for (let i = 2; i < P.length; i += 2) len += Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]);
+  return len * S.view.z < 12 ? noteBadgeAt(P[0], P[1]) : null;
 }
 function lassoSelect(P) {
   const ids = new Set();
@@ -2345,7 +2412,7 @@ function hitStroke(s, x, y, r) {
 }
 function eraseAt(x, y) {
   const r = ERASE_R / S.view.z;
-  for (const it of S.items) if (it.t === 's' && !action.removed.has(it.id) && shown(it) && hitStroke(it, x, y, r)) {
+  for (const it of S.items) if (it.t === 's' && !it.nt && !action.removed.has(it.id) && shown(it) && hitStroke(it, x, y, r)) {
     action.removed.add(it.id); invalidateBox(it.bb);
     if (it.tp) for (const o of S.items) if (o.on === it.id && !action.removed.has(o.id)) { action.removed.add(o.id); invalidateBox(o.bb); }   // was darauf steht, geht mit
   }
@@ -2997,6 +3064,13 @@ function deferLiveClear() {
 function finishStroke(a) {
   clearTimeout(a.holdT);
   if (a.straight) a.pts = straightPts(a); else if (a.redraw) { if (a.raw) catchUp(a); } else settleStroke(a);
+  if (!a.tape && !a.straight) {   // nur angetippt, und zwar auf das „i“ einer Erklärung: die Karte öffnen statt einen Punkt setzen
+    const r = a.raw || a.start;
+    if (Math.hypot(r[0] - a.start[0], r[1] - a.start[1]) < 6 && pathLen(a.pts) * S.view.z < 12) {
+      const [x, y] = toWorld(...a.start), n = noteBadgeAt(x, y);
+      if (n) { liveClear(); requestLive(); openNoteCard(n.id, null, noteBox(n)); return; }
+    }
+  }
   if (a.tape) {
     const r = a.raw || a.start;
     if (!a.straight && Math.hypot(r[0] - a.start[0], r[1] - a.start[1]) < 6 && pathLen(a.pts) * S.view.z < 12) {   // nur angetippt
@@ -3058,7 +3132,7 @@ function endAction(cancel) {
     requestDraw(); requestLive(); placeSelbar(); return;
   }
   if (a.kind === 'erase') { if (a.removed.size) commit(S.items.filter(it => !a.removed.has(it.id)), false); }
-  else if (a.kind === 'lasso') { setSel(lassoSelect(a.pts)); }
+  else if (a.kind === 'lasso') { const n = lassoBadge(a.pts); if (n) openNoteCard(n.id, null, noteBox(n)); else setSel(lassoSelect(a.pts)); }
   else if (a.kind === 'move' || a.kind === 'scale') {
     const moved = a.kind === 'move' ? a.moved && (a.dx || a.dy) : Math.abs(a.s - 1) > 0.005;
     if (moved) {
@@ -3196,7 +3270,10 @@ function pointerEnd(e) {
     if (touches.size === 0) {
       const g = gesture; gesture = null;
       if (g && !g.cancelled && g.maxN === 2 && !g.moved && performance.now() - g.t0 < 350) { undo(); toast('Rückgängig', 900); }
-      else if (g && !g.cancelled && g.maxN === 1 && !g.moved && performance.now() - g.t0 < 350) toggleTapeAt(...toWorld(...g.c0));   // Tape antippen
+      else if (g && !g.cancelled && g.maxN === 1 && !g.moved && performance.now() - g.t0 < 350) {   // Erklärung öffnen oder Tape antippen
+        const [x, y] = toWorld(...g.c0), n = noteAt(x, y);
+        if (n) openNoteCard(n.id, null, noteBox(n)); else toggleTapeAt(x, y);
+      }
       settleZoom(); viewChanged();
     } else gestureStart();
   }
@@ -3750,7 +3827,7 @@ async function loadCustomShapes() {
 }
 async function saveCustomShape() {
   if (!S.sel) return;
-  const strokes = S.items.filter(it => S.sel.ids.has(it.id) && it.t === 's' && !it.tp);   // Tapes nicht als Form
+  const strokes = S.items.filter(it => S.sel.ids.has(it.id) && it.t === 's' && !it.tp && !it.nt);   // Tapes und Markierungen nicht als Form
   if (!strokes.length) return;
   const n = strokes.reduce((m, s) => m + s.pts.length / 3, 0);
   if (n > CUSTOM_MAX_PTS) { toast(`Die Auswahl ist zu groß für eine Form (${n.toLocaleString('de-DE')} Punkte, höchstens ${CUSTOM_MAX_PTS.toLocaleString('de-DE')})`, 4500); return; }
@@ -3877,7 +3954,7 @@ function popOut(el) {
   const a = el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.95)' }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
   a.onfinish = () => { if (el.dataset.closing) { delete el.dataset.closing; el.classList.add('hidden'); } a.cancel(); };
 }
-function closeMenus() { $$('.menu').forEach(popOut); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
+function closeMenus() { saveNoteCard(); hideDim(); $$('.menu').forEach(popOut); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
 function openMenu(menu, btn) {
   const was = isOpen(menu); closeMenus(); if (was) return;
   menu.classList.remove('hidden');
@@ -3887,7 +3964,7 @@ function openMenu(menu, btn) {
   popIn(menu, btn);
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (ncCur && e.pointerType === 'touch' && performance.now() < penActiveUntil) return; if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -3919,8 +3996,10 @@ $('#sDup').onclick = () => {
   const sel = S.items.filter(it => S.sel.ids.has(it.id)), ids = new Set(), groups = new Map();
   let dx = 24 / S.view.z, dy = dx;
   if (S.snap) { const r = snapRef(sel), st = snapStep(); dx = snapX(r[0] + st) - r[0]; dy = snapY(r[1] + st) - r[1]; }   // einen Rasterpunkt weiter, auf dem Raster
+  const newId = new Map(sel.map(it => [it.id, uid()]));   // was auf etwas Kopiertem liegt (Tape, Erklärung), gehört zur Kopie
   const copies = sel.map(it => {
-    const c = transformItem(it, 1, 0, 0, dx, dy); c.id = uid(); ids.add(c.id);
+    const c = transformItem(it, 1, 0, 0, dx, dy); c.id = newId.get(it.id); ids.add(c.id);
+    if (c.on && newId.has(c.on)) c.on = newId.get(c.on);
     if (c.g) { if (!groups.has(c.g)) groups.set(c.g, uid()); c.g = groups.get(c.g); }   // Kopie = eigene Gruppe
     return c;
   });
@@ -3932,7 +4011,7 @@ $('#sSave').onclick = saveCustomShape;
 $('#sColor').onclick = () => {
   if (!S.sel) return;
   commit(S.items.map(it => {
-    if (!S.sel.ids.has(it.id) || it.t !== 's') return it;
+    if (!S.sel.ids.has(it.id) || it.t !== 's' || it.nt) return it;
     if (it.tp) return { ...it, c: S.color.tape };
     const k = it.hl ? 'hl' : 'pen', n = { ...it, c: S.color[k] };
     if (S.alpha[k] !== ALPHA_DEFAULT[k]) n.al = S.alpha[k]; else delete n.al;
@@ -3942,7 +4021,7 @@ $('#sColor').onclick = () => {
 $('#sSize').onclick = () => {
   if (!S.sel) return;
   commit(S.items.map(it => {
-    if (!S.sel.ids.has(it.id) || it.t !== 's') return it;
+    if (!S.sel.ids.has(it.id) || it.t !== 's' || it.nt) return it;
     const w = it.tp ? S.size.tape : it.hl ? S.size.hl : S.size.pen;
     return { ...it, w, bb: bboxOf(it.pts, w) };
   })); refreshSel();
@@ -3962,7 +4041,7 @@ document.addEventListener('keydown', e => {
   }
   // Esc schließt offene Menüs auch, wenn ein Regler darin noch den Fokus hat
   if (k === 'escape' && $$('.menu').some(isOpen)) { closeMenus(); if (e.target.blur) e.target.blur(); return; }
-  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
+  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (k === ' ') { e.preventDefault(); if (!spaceDown && !action) { spaceDown = true; cvLive.style.cursor = 'grab'; } return; }
   if (action) {
     if (k === 'escape') cancelAction();
@@ -4161,10 +4240,10 @@ async function insertPdfPages(pdf, file, note) {
 // Bild aus der Zwischenablage, ohne es erst als Datei zu speichern (etwa ein Bildschirmfoto mit Win + Umschalt + S).
 // Der Browser fragt dabei evtl. nach Erlaubnis; Strg + V geht auch so (paste-Ereignis unten)
 const CLIP_EMPTY = 'In der Zwischenablage ist kein Bild. Bildschirmfoto: Win + Umschalt + S';
-async function pasteImage(at) {
-  if (!S.note) return;
+// Bilder aus der Zwischenablage als Dateien; null (mit Hinweis), wenn keins da ist oder der Zugriff fehlt
+async function clipImages() {
   const cb = navigator.clipboard;
-  if (!cb || !cb.read) { toast('Hier geht das Einfügen aus der Zwischenablage nur mit Strg + V', 4000); return; }
+  if (!cb || !cb.read) { toast('Hier geht das Einfügen aus der Zwischenablage nur mit Strg + V', 4000); return null; }
   const files = [];
   try {
     for (const it of await cb.read()) {
@@ -4172,10 +4251,15 @@ async function pasteImage(at) {
       if (type) files.push(new File([await it.getType(type)], 'Bild aus der Zwischenablage', { type }));
     }
   } catch (e) {
-    toast(e && e.name === 'NotAllowedError' ? 'Kein Zugriff auf die Zwischenablage. Mit Strg + V geht es auch.' : CLIP_EMPTY, 4500); return;
+    toast(e && e.name === 'NotAllowedError' ? 'Kein Zugriff auf die Zwischenablage. Mit Strg + V geht es auch.' : CLIP_EMPTY, 4500); return null;
   }
-  if (!files.length) { toast(CLIP_EMPTY, 4500); return; }
-  return insertImages(files, at);
+  if (!files.length) { toast(CLIP_EMPTY, 4500); return null; }
+  return files;
+}
+async function pasteImage(at) {
+  if (!S.note) return;
+  const files = await clipImages();
+  if (files) return insertImages(files, at);
 }
 /* Finger auf der Seite gedrückt halten (oder Rechtsklick mit der Maus): Blase „Einfügen“. Sie legt ein Bild aus der
    Zwischenablage genau dorthin, mittig unter den Finger. Bewegt sich der Finger, verschiebt er wie sonst die Seite und
@@ -4202,6 +4286,213 @@ function showPasteMenu(sx, sy) {
   popIn(m, { getBoundingClientRect: () => ({ left: x, top: y, width: 0, height: 0 }) });
 }
 $('#pmPaste').onclick = () => { const at = pasteAt; closeMenus(); pasteImage(at); };
+/* ---------- Erklärungen ----------
+   Mit dem Lasso etwas auswählen, dann „Erklärung“: eine Karte mit kurzem Text, einem Bild (Zwischenablage oder Datei)
+   und einer kleinen Fläche zum Schreiben. Sie hängt an einer Markierung: einem unsichtbaren Strich (k 'note', Inhalt
+   in nt), einem Rechteck 6 px um das Markierte; zu sehen ist nur ein blaues „i“ in seiner oberen rechten Ecke. Das
+   Markierte hängt an ihr (on): beides wandert zusammen. Ein Fingertipp auf die Stelle oder ein Stifttipp auf das „i“
+   öffnet die Karte. Gespeichert wird beim Schließen, als ein Schritt fürs Rückgängigmachen; ganz leer heißt: keine
+   Erklärung. (Markierungen mit fl und hl stammen aus der ersten Testversion mit blauer Fläche; sie gelten weiter.) */
+const NOTE_C = '#7fb0ff', NOTE_PAD = 6, NOTE_INK_W = 2.2;
+let ncCur = null;   // offene Karte: { id (Markierung) oder ids (neu zu markieren), box, nt (Arbeitskopie), orig, url }
+const noteOf = id => S.items.find(it => it.id === id && it.nt) || null;
+const noteBox = it => geoBox([it]);   // der Kasten selbst (bb ist um die Strichbreite größer)
+function noteMark(ids, nt) {
+  const items = S.items.filter(it => ids.has(it.id) && !it.tp && !it.nt);
+  if (!items.length) return null;
+  const b = geoBox(items), p = NOTE_PAD, x0 = b[0] - p, y0 = b[1] - p, x1 = b[2] + p, y1 = b[3] + p;
+  return makeStroke([x0, y0, .5, x1, y0, .5, x1, y1, .5, x0, y1, .5, x0, y0, .5], NOTE_C, 1, false, { k: 'note', nt });
+}
+// „i“ in der oberen rechten Ecke, 16 px groß auf dem Bildschirm, nie größer als der Kasten (Weltkoordinaten)
+function noteBadge(it, devScale) {
+  const b = noteBox(it), r = Math.min(8 * DPR / devScale, (b[2] - b[0]) / 2.4, (b[3] - b[1]) / 2.4);
+  return { x: b[2] - r * 0.95, y: b[1] + r * 0.95, r };
+}
+function drawNoteBadge(ctx, it, devScale) {
+  const { x, y, r } = noteBadge(it, devScale); if (!(r > 0)) return;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = '#2f6fd6'; ctx.fill();
+  ctx.lineWidth = r * 0.2; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y - r * 0.42, r * 0.19, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(x - r * 0.15, y - r * 0.12, r * 0.3, r * 0.6);
+  ctx.restore();
+}
+function noteAt(x, y) {
+  for (let k = S.items.length - 1; k >= 0; k--) { const it = S.items[k]; if (!it.nt) continue; const b = noteBox(it); if (x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]) return it; }
+  return null;
+}
+function noteBadgeAt(x, y) {
+  for (let k = S.items.length - 1; k >= 0; k--) {
+    const it = S.items[k]; if (!it.nt) continue;
+    const g = noteBadge(it, S.view.z * DPR); if (Math.hypot(x - g.x, y - g.y) < g.r + 6 / S.view.z) return it;
+  }
+  return null;
+}
+// ohne die Markierung id; was an ihr hing, ist wieder frei
+const dropNote = id => S.items.filter(x => x.id !== id).map(x => x.on === id ? (({ on, ...r }) => r)(x) : x);
+// id: vorhandene Markierung; ids: neu zu markieren; box: wo sie liegt (Welt), die Karte kommt darunter oder darüber
+function openNoteCard(id, ids, box) {
+  closeMenus(); clearSel();
+  const it = id ? noteOf(id) : null; if (id && !it) return;
+  const nt = it ? it.nt : { text: '', img: null, ink: [] };
+  ncCur = { id: it ? it.id : null, ids: it ? null : ids, box, nt: { text: nt.text || '', img: nt.img || null, ink: (nt.ink || []).map(s => ({ ...s })) }, orig: it ? JSON.stringify(nt) : null, url: null };
+  const m = $('#noteCard'); m.classList.remove('big', 'glance'); ncDraw = null;
+  $('#ncText').value = ncCur.nt.text;
+  m.classList.remove('hidden');
+  growBtn(); fitNoteText(); drawNoteInk(); placeNoteCard(); showNoteImg();
+  popIn(m, null);
+}
+// Pfeil oben rechts in der Schreibfläche: großes Fenster auf bzw. zurück zur kleinen Karte
+function growBtn() {
+  const big = $('#noteCard').classList.contains('glance'), b = $('#ncGrow'), txt = big ? 'Schreibfläche verkleinern' : 'Schreibfläche vergrößern';
+  b.title = txt; b.setAttribute('aria-label', txt); b.querySelector('use').setAttribute('href', big ? '#ic-shrink' : '#ic-grow');
+}
+// Groß: eigenes Fenster in der Mitte (85 % des Bildschirms), dahinter abgedunkelt; es wächst aus der Karte heraus und
+// schrumpft beim Zurück wieder in sie hinein (wie „Glance“ im Zen-Browser). Daneben tippen schließt wie bei der Karte.
+const ncDim = $('#ncDim');
+function setGlance(on) {
+  const m = $('#noteCard'); if (!ncCur || m.classList.contains('glance') === on) return;
+  const r0 = m.getBoundingClientRect();
+  m.getAnimations().forEach(a => a.cancel());
+  m.classList.remove('big'); m.classList.toggle('glance', on);
+  if (!on) placeNoteCard();   // zurück an ihren Platz bei der Markierung
+  growBtn(); fitNoteText(); drawNoteInk();
+  if (on) showDim(); else hideDim();
+  if (reduceMotion()) return;
+  const r1 = m.getBoundingClientRect();
+  m.style.transformOrigin = '0 0';
+  const a = m.animate([{ transform: `translate(${r0.left - r1.left}px, ${r0.top - r1.top}px) scale(${r0.width / r1.width}, ${r0.height / r1.height})` }, { transform: 'none' }], sp(spring(0.12, 420)));
+  a.onfinish = () => { m.style.transformOrigin = ''; };
+}
+function showDim() {
+  ncDim.getAnimations().forEach(a => a.cancel()); ncDim.classList.remove('hidden');
+  if (!reduceMotion()) ncDim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
+}
+function hideDim() {
+  if (ncDim.classList.contains('hidden')) return;
+  ncDim.getAnimations().forEach(a => a.cancel());
+  if (reduceMotion()) { ncDim.classList.add('hidden'); return; }
+  const a = ncDim.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
+  a.onfinish = () => { ncDim.classList.add('hidden'); a.cancel(); };   // nicht am versteckten Element stehen lassen (siehe popOut)
+}
+// Textfeld wächst mit dem Text (bis 180 px, dann scrollt es)
+function fitNoteText() { const ta = $('#ncText'); ta.style.height = ''; ta.style.height = clamp(ta.scrollHeight + 2, 58, 180) + 'px'; }
+function placeNoteCard() {
+  const m = $('#noteCard'), c = ncCur; if (!c || !c.box) return;
+  const top = barBottom() + 8; m.style.maxHeight = Math.max(160, innerHeight - top - 8) + 'px';   // passt immer ganz hinein
+  const [x0, y0] = toScreen(c.box[0], c.box[1]), [, y1] = toScreen(c.box[2], c.box[3]), w = m.offsetWidth, h = m.offsetHeight;
+  let y = y1 + 12;
+  if (y + h > innerHeight - 8) y = y0 - 12 - h;          // passt nicht darunter: darüber
+  if (y < top) y = clamp(innerHeight - h - 8, top, innerHeight);
+  m.style.left = clamp(x0, 8, Math.max(8, innerWidth - w - 8)) + 'px'; m.style.top = Math.max(top, y) + 'px';
+}
+// Inhalt der Karte übernehmen (ein Schritt fürs Rückgängigmachen), die Karte bleibt offen. final (beim Schließen):
+// ganz leer heißt keine Erklärung
+function syncNoteCard(final) {
+  const c = ncCur; if (!c || !S.note) return;
+  const nt = { text: $('#ncText').value.trim(), img: c.nt.img || null, ink: c.nt.ink.slice() };
+  const empty = !nt.text && !nt.img && !nt.ink.length, js = JSON.stringify(nt);
+  if (c.id) {
+    if (!noteOf(c.id)) return;
+    if (empty) { if (final) commit(dropNote(c.id)); return; }
+    if (js !== c.orig) { commit(S.items.map(x => x.id === c.id ? { ...x, nt } : x)); c.orig = js; }
+  } else if (!empty && c.ids) {
+    const mark = noteMark(c.ids, nt); if (!mark) return;
+    const linked = S.items.map(x => c.ids.has(x.id) && !x.on && !x.tp && !x.nt && !x.hl ? { ...x, on: mark.id } : x);
+    commit(appendItems(linked, [mark]));
+    c.id = mark.id; c.ids = null; c.orig = js;
+  }
+}
+function saveNoteCard() {
+  const c = ncCur; if (!c) return;
+  syncNoteCard(true); ncCur = null;
+  if (c.url) URL.revokeObjectURL(c.url);
+}
+async function setNoteImage(file) {
+  const c = ncCur; if (!c || !S.note) return;
+  try {
+    const { blob, low, w, h } = await prepareImage(file), id = uid();
+    await dbImagePut({ id, n: S.note.id, blob, low, w, h });
+    if (ncCur !== c) return;
+    c.nt.img = id; showNoteImg(blob);
+  } catch (e) { toast('Das Bild kann nicht geöffnet werden', 3500); }
+}
+async function showNoteImg(blob) {
+  const c = ncCur, box = $('#ncImgBox'); if (!c) return;
+  if (c.url) { URL.revokeObjectURL(c.url); c.url = null; }
+  if (c.nt.img && !blob) { const rec = await dbImageGet(c.nt.img).catch(() => null); if (ncCur !== c) return; blob = rec && rec.blob; }
+  if (!c.nt.img || !blob) { box.classList.add('hidden'); placeNoteCard(); return; }
+  c.url = URL.createObjectURL(blob);
+  const img = $('#ncImg'); img.onload = () => { if (ncCur === c) placeNoteCard(); }; img.src = c.url;
+  box.classList.remove('hidden');
+}
+// kleine Schreibfläche: Stift, Maus oder Finger (nicht der Handballen, solange der Stift da ist)
+const ncInk = $('#ncInk'), inkPaths = new WeakMap(); let ncDraw = null;
+// Maßstab der Schreibfläche: 1, außer das Geschriebene ist größer als die Fläche (im großen Fenster geschrieben) –
+// dann verkleinert, damit alles zu sehen ist. Neu Geschriebenes kommt im selben Maßstab dazu.
+let ncInkS = 1;
+function inkScale(W, H) {
+  let mx = 0, my = 0;
+  for (const s of ncCur ? ncCur.nt.ink : []) for (let i = 0; i < s.pts.length; i += 3) { mx = Math.max(mx, s.pts[i] + s.w + 8); my = Math.max(my, s.pts[i + 1] + s.w + 8); }   // mit etwas Rand
+  return Math.min(1, W / Math.max(1, mx), H / Math.max(1, my));
+}
+function drawNoteInk(extra) {
+  const W = ncInk.clientWidth || 296, H = ncInk.clientHeight || 140;
+  if (ncInk.width !== Math.round(W * DPR) || ncInk.height !== Math.round(H * DPR)) { ncInk.width = Math.round(W * DPR); ncInk.height = Math.round(H * DPR); }
+  if (!ncDraw) ncInkS = inkScale(W, H);   // während eines Strichs bleibt der Maßstab
+  const g = ncInk.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+  g.setTransform(DPR * ncInkS, 0, 0, DPR * ncInkS, 0, 0);
+  const list = ncCur ? ncCur.nt.ink : [];
+  for (const s of extra ? [...list, extra] : list) {
+    if (!s.pts.length) continue;
+    let P = s === extra ? null : inkPaths.get(s);
+    if (!P) { P = buildPath(Float32Array.from(s.pts), s.w, false); if (s !== extra) inkPaths.set(s, P); }
+    g.fillStyle = s.c === 'ink' && isXP() ? '#1b1b1d' : colorOf(s.c); g.fill(P);   // XP: die Karte bleibt auch im Darkmode hell
+  }
+  $('#noteCard').classList.toggle('inked', list.length > 0 || !!extra);
+}
+function addInkPt(e) {
+  const r = ncDraw.r, p = e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : 0.5;
+  ncDraw.s.pts.push((e.clientX - r.left) / ncInkS, (e.clientY - r.top) / ncInkS, p);
+}
+ncInk.addEventListener('pointerdown', e => {
+  if (!ncCur || (e.pointerType === 'touch' && performance.now() < penActiveUntil) || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  e.preventDefault(); try { ncInk.setPointerCapture(e.pointerId); } catch (err) {}
+  ncDraw = { id: e.pointerId, r: ncInk.getBoundingClientRect(), s: { c: S.color.pen, w: NOTE_INK_W, pts: [] } };
+  addInkPt(e); drawNoteInk(ncDraw.s);
+});
+ncInk.addEventListener('pointermove', e => {
+  if (!ncDraw || e.pointerId !== ncDraw.id) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  for (const ev of evs.length ? evs : [e]) addInkPt(ev);
+  drawNoteInk(ncDraw.s);
+});
+const endInk = e => {
+  if (!ncDraw || e.pointerId !== ncDraw.id) return;
+  const s = ncDraw.s; ncDraw = null;
+  if (ncCur && s.pts.length) ncCur.nt.ink.push({ c: s.c, w: s.w, pts: s.pts.map(v => Math.round(v * 10) / 10) });
+  drawNoteInk();
+};
+ncInk.addEventListener('pointerup', endInk); ncInk.addEventListener('pointercancel', endInk);
+let ncPalm = false;
+$('#noteCard').addEventListener('pointerdown', e => { ncPalm = e.pointerType === 'touch' && performance.now() < penActiveUntil; }, true);
+$('#noteCard').addEventListener('click', e => { if (ncPalm && e.target.closest('button,img')) { e.preventDefault(); e.stopPropagation(); } }, true);
+$('#ncText').addEventListener('input', fitNoteText);
+$('#ncGrow').onclick = () => setGlance(!$('#noteCard').classList.contains('glance'));
+$('#ncClear').onclick = () => { if (ncCur) { ncCur.nt.ink = []; drawNoteInk(); } };
+$('#ncPaste').onclick = async () => { const files = await clipImages(); if (files) setNoteImage(files[0]); };
+$('#ncFile').onclick = () => $('#fNoteImg').click();
+$('#fNoteImg').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) setNoteImage(f); };
+$('#ncImgDel').onclick = () => { if (ncCur) { ncCur.nt.img = null; showNoteImg(); } };
+$('#ncImg').onclick = () => { const m = $('#noteCard'); if (m.classList.contains('glance')) return; m.classList.toggle('big'); drawNoteInk(); placeNoteCard(); };   // groß ansehen und wieder klein
+$('#ncDel').onclick = () => { const c = ncCur; if (!c) return; ncCur = null; if (c.url) URL.revokeObjectURL(c.url); if (c.id) commit(dropNote(c.id)); closeMenus(); };
+$('#sNote').onclick = () => {
+  if (!S.sel) return;
+  const sel = S.items.filter(it => S.sel.ids.has(it.id)), mark = sel.find(it => it.nt);
+  if (mark) { openNoteCard(mark.id, null, noteBox(mark)); return; }
+  const ids = new Set(sel.filter(it => !it.tp).map(it => it.id)); if (!ids.size) return;
+  openNoteCard(null, ids, geoBox(sel.filter(it => !it.tp)));
+};
 // Bild-Knopf: kleines Menü, aus der Zwischenablage oder aus einer Datei
 $('#bImg').onclick = () => openMenu($('#imgMenu'), $('#bImg'));
 $('#mImgClip').onclick = () => { closeMenus(); pasteImage(); };
@@ -4211,7 +4502,10 @@ $('#fImg').onchange = e => { insertImages(e.target.files); e.target.value = ''; 
 $('#fPdf').onchange = e => { if (e.target.files[0]) insertPdf(e.target.files[0]); e.target.value = ''; };
 document.addEventListener('paste', e => {
   if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
-  const files = [...(e.clipboardData?.files || [])]; if (files.length) { e.preventDefault(); insertImages(files); }
+  const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+  if (ncCur && files.length) { e.preventDefault(); setNoteImage(files[0]); return; }   // offene Erklärung: Bild hinein
+  if (e.target.tagName === 'TEXTAREA') return;
+  if (files.length) { e.preventDefault(); insertImages(files); }
 });
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => e.preventDefault());
@@ -5126,6 +5420,7 @@ async function flushNote() {
 }
 async function closeNote() {
   if (!S.note || navBusy) return;
+  if (ncCur) closeMenus();
   dropOverview();
   if (S.busy) { toast('Bitte warten, bis der Import fertig ist'); return; }
   navBusy = true;
@@ -5134,6 +5429,7 @@ async function closeNote() {
   if (S.saveError) { navBusy = false; toast('Die Notiz konnte nicht gespeichert werden und bleibt offen: ' + S.saveError.message, 7000); return; }
   // Bilder, die in der Notiz nicht mehr vorkommen, aus dem Speicher entfernen
   const note = S.note, used = new Set(S.items.filter(i => i.t === 'i').map(i => i.img));
+  for (const it of S.items) if (it.nt && it.nt.img) used.add(it.nt.img);   // Bild einer Erklärung
   S.note = null; S.items = []; S.saved = new Map(); S.undo = []; S.redo = [];
   clearTiles(); pathCache.clear(); releaseImages();
   $('#editor').classList.add('hidden'); $('#home').classList.remove('hidden');
@@ -5145,7 +5441,7 @@ async function closeNote() {
     st.index('n').openKeyCursor(IDBKeyRange.only(note.id)).onsuccess = ev => { const c = ev.target.result; if (c) { if (!used.has(c.primaryKey)) st.delete(c.primaryKey); c.continue(); } };
   } catch (e) {}
 }
-window.__flush = () => flushNote().catch(() => {});
+window.__flush = () => { syncNoteCard(); return flushNote().catch(() => {}); };
 $('#bBack').onclick = closeNote;
 $('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } xpTitle(); fitBar(); });
 $('#title').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); });
@@ -5248,7 +5544,7 @@ $('#fRestore').onchange = async e => {
         noteMap.set(r.id, { id: newId, copy, meta, replace: !copy, done: false });
       } else if (r.k === 'items') {
         const m = noteMap.get(r.n); if (!m || m.skip || m.done) continue;
-        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts) } : { img: mapImg(r.n, it.img) }) }));
+        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts), ...(it.nt && it.nt.img ? { nt: { ...it.nt, img: mapImg(r.n, it.nt.img) } } : {}) } : { img: mapImg(r.n, it.img) }) }));
         await writeRecords(m.meta, items, [], m.replace); m.done = true; count++;
       } else if (r.k === 'img') {
         const m = noteMap.get(r.n); if (!m || m.skip) continue;
@@ -5264,8 +5560,8 @@ $('#fRestore').onchange = async e => {
   if (books) homeBook = null;   // neue Bücher stehen im Regal
   renderHome();   // ordnet Seiten ohne Buch (ältere Sicherungen) dem Buch „Meine Notizen“ zu
 };
-document.addEventListener('visibilitychange', () => { if (document.hidden && S.note) flushNote(); });
-window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.note) { syncNoteCard(); flushNote(); } });
+window.addEventListener('pagehide', () => { if (S.note) { syncNoteCard(); saveNow(); } });
 
 /* ---------- Start ---------- */
 applyDark(); applyTheme();

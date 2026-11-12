@@ -1,5 +1,16 @@
 # Notizen für das Surface Pro 11 (Version 1.5.13)
 
+## Bald in 1.5.14: Erklärungen zu markierten Stellen (schon in der Browser-Version zum Ausprobieren)
+- **Erklärung anlegen:** Mit dem Lasso etwas auswählen (ein Wort, eine Formel, ein Bild) und in der Leiste darüber auf „Erklärung“ tippen. Es öffnet sich eine kleine Karte:
+  - **Bild:** „Einfügen“ nimmt es aus der Zwischenablage (zum Beispiel einen Screenshot; mit Tastatur geht auch Strg + V), „Bild“ aus einer Datei. Das Bild antippen zeigt es groß, nochmal antippen wieder klein; das ✕ darauf entfernt es.
+  - **Text:** ein Feld für eine kurze Erklärung zum Tippen.
+  - **Schreibfläche:** darunter mit dem Stift hineinschreiben oder skizzieren; „Leeren“ löscht das Geschriebene. Der Pfeil oben rechts öffnet die Erklärung groß in einem eigenen Fenster in der Mitte (etwa 85 % des Bildschirms, der Rest wird abgedunkelt): links Bild, Text und Knöpfe, rechts eine große Schreibfläche. Der Pfeil darin führt zurück zur kleinen Karte, daneben tippen schließt die Erklärung (gespeichert). Was im großen Fenster geschrieben wurde, zeigt die kleine Karte verkleinert, damit alles zu sehen ist.
+  - Der Mülleimer entfernt die ganze Erklärung.
+- **Speichern:** beim Schließen der Karte (daneben tippen, Esc oder im XP-Stil das rote ✕), als ein Schritt für Rückgängig. Bleibt die Karte leer, entsteht keine Erklärung; wird sie später ganz geleert, ist die Erklärung weg.
+- **Markierung:** Oben rechts an der Stelle steht ein kleines blaues „i“; die Stelle selbst bleibt, wie sie ist.
+- **Öffnen:** mit dem Finger auf die Stelle oder das „i“ tippen, mit dem Stift (auch mit dem Lasso) auf das „i“ tippen, oder die Stelle auswählen und „Erklärung“.
+- **Zusammen:** Die Stelle und ihre Erklärung gehören zusammen. Auswählen, Verschieben, Duplizieren und Löschen nehmen beides mit. Der Radierer lässt das „i“ stehen, „Farbe übernehmen“ ändert es nicht. Bilder der Erklärungen kommen mit in die Sicherung.
+
 ## Neu in 1.5.13: Rauszoomen ohne leere Ränder
 - **Rauszoomen ohne leere Ränder:** Beim Rauszoomen oder schnellen Verschieben war am Rand kurz nur leeres Papier zu sehen, bis die neuen Stellen gezeichnet waren. Jetzt zeigt die Seite dort sofort eine leicht unscharfe Vorschau der ganzen Seite, die Sekundenbruchteile später scharf wird. Die Vorschau wird nur im Leerlauf gezeichnet (bei 5.000 Strichen in wenigen Millisekunden); beim Schreiben kommen neue Striche einzeln dazu, nach Radieren oder Verschieben wird sie nach kurzer Ruhe neu gezeichnet. Im Hintergrund läuft dafür nichts dauerhaft.
 

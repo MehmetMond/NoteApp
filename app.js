@@ -462,7 +462,7 @@ function fillStroke(ctx, s, P) {
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 function drawItem(ctx, it, devScale) {
-  if (it.t === 's') { if (it.tp) drawTape(ctx, it, devScale); else fillStroke(ctx, it, strokePath(it)); }
+  if (it.t === 's') { if (it.tp) drawTape(ctx, it, devScale); else if (it.nt) drawNoteBadge(ctx, it, devScale); else fillStroke(ctx, it, strokePath(it)); }   // Erklärung: nur das „i“
   else if (it.t === 'i') drawImageItem(ctx, it, devScale);
 }
 
@@ -1269,7 +1269,8 @@ function resize() {
   if (cvMain.width !== w + 2 * PADD || cvMain.height !== h + 2 * PADD) { cvMain.width = w + 2 * PADD; cvMain.height = h + 2 * PADD; shownSig = ''; }
   const ms = cvMain.style; ms.left = ms.top = -PADC + 'px'; ms.width = VW + 2 * PADC + 'px'; ms.height = VH + 2 * PADC + 'px';
   if (oldDPR !== DPR) { clearTiles(); patCache.clear(); }
-  closeMenus(); fitBar();
+  if (ncCur) { drawNoteInk(); placeNoteCard(); } else closeMenus();   // offene Erklärung: bleibt (Bildschirmtastatur), Schreibfläche passt sich an
+  fitBar();
   if (S.note) { S.view.tx = snap(S.view.tx); S.view.ty = snap(S.view.ty); draw(); drawLive(); }
   liveVis();
 }
@@ -1363,6 +1364,7 @@ function commit(next, inval = true, sheets) {
 }
 function setSheets(n) { if (!S.note || !S.note.paper || !n || sheetCount() === n) return; S.note.paper.n = n; clearTiles(); }
 function stepHistory(from, to) {
+  if (ncCur) closeMenus();   // offene Erklärung erst speichern
   cancelAction(); if (!from.length) return;
   if (S.items.sheets === undefined) S.items.sheets = sheetCount();
   to.push(S.items); const it = from.pop(); setItems(it); setSheets(it.sheets);
@@ -1394,6 +1396,9 @@ function withGroups(ids) {
   const gs = new Set();
   for (const it of S.items) if (it.g && ids.has(it.id)) gs.add(it.g);
   if (gs.size) for (const it of S.items) if (it.g && gs.has(it.g)) ids.add(it.id);
+  // Erklärung: was markiert ist, nimmt seine Markierung mit (und die Markierung alles, was sie markiert)
+  const marks = new Set(); for (const it of S.items) if (it.nt) marks.add(it.id);
+  if (marks.size) for (const it of S.items) if (it.on && ids.has(it.id) && marks.has(it.on)) ids.add(it.on);
   for (const it of S.items) if (it.on && ids.has(it.on)) ids.add(it.id);
   return ids;
 }
@@ -1438,7 +1443,7 @@ function gridBox(items) {
     if (it.gr) { const q = it.gr.b; add(q[0], q[1]); add(q[2], q[3]); continue; }
     const p = it.pts, sh = shaftOf(it);
     if (sh) { add(p[sh[0]], p[sh[0] + 1]); add(p[sh[1]], p[sh[1] + 1]); continue; }
-    if (GRAPHS.has(it.k)) continue;   // früher gezeichneter Graph: nur die Achsen (eben), nicht Teilstriche und Beschriftung
+    if (GRAPHS.has(it.k) || it.nt) continue;   // früher gezeichneter Graph: nur die Achsen (eben); Markierung einer Erklärung: steht über
     for (let i = 0; i < p.length; i += 3) add(p[i], p[i + 1]);
   }
   return b[0] <= b[2] ? b : geoBox(items);
@@ -1468,6 +1473,7 @@ function placeSelbar() {
   const strokes = S.items.some(it => S.sel.ids.has(it.id) && it.t === 's');
   for (const id of ['#sColor', '#sSize', '#sSave']) $(id).classList.toggle('hidden', !strokes);
   $('#sGraph').classList.toggle('hidden', !selGraph());
+  $('#sNote').classList.toggle('hidden', !S.items.some(it => S.sel.ids.has(it.id) && !it.tp));
   const appear = bar.classList.contains('hidden');   // nur beim Erscheinen aufploppen, nicht bei jedem Nachführen
   bar.classList.remove('hidden');
   const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]);
@@ -1497,6 +1503,11 @@ function pointInPoly(x, y, P) {
     if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
+}
+// Lasso nur angetippt, und zwar auf das „i“ einer Erklärung
+function lassoBadge(P) {
+  let len = 0; for (let i = 2; i < P.length; i += 2) len += Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]);
+  return len * S.view.z < 12 ? noteBadgeAt(P[0], P[1]) : null;
 }
 function lassoSelect(P) {
   const ids = new Set();
@@ -1549,7 +1560,7 @@ function hitStroke(s, x, y, r) {
 }
 function eraseAt(x, y) {
   const r = ERASE_R / S.view.z;
-  for (const it of S.items) if (it.t === 's' && !action.removed.has(it.id) && shown(it) && hitStroke(it, x, y, r)) {
+  for (const it of S.items) if (it.t === 's' && !it.nt && !action.removed.has(it.id) && shown(it) && hitStroke(it, x, y, r)) {
     action.removed.add(it.id); invalidateBox(it.bb);
     if (it.tp) for (const o of S.items) if (o.on === it.id && !action.removed.has(o.id)) { action.removed.add(o.id); invalidateBox(o.bb); }   // was darauf steht, geht mit
   }
@@ -2201,6 +2212,13 @@ function deferLiveClear() {
 function finishStroke(a) {
   clearTimeout(a.holdT);
   if (a.straight) a.pts = straightPts(a); else if (a.redraw) { if (a.raw) catchUp(a); } else settleStroke(a);
+  if (!a.tape && !a.straight) {   // nur angetippt, und zwar auf das „i“ einer Erklärung: die Karte öffnen statt einen Punkt setzen
+    const r = a.raw || a.start;
+    if (Math.hypot(r[0] - a.start[0], r[1] - a.start[1]) < 6 && pathLen(a.pts) * S.view.z < 12) {
+      const [x, y] = toWorld(...a.start), n = noteBadgeAt(x, y);
+      if (n) { liveClear(); requestLive(); openNoteCard(n.id, null, noteBox(n)); return; }
+    }
+  }
   if (a.tape) {
     const r = a.raw || a.start;
     if (!a.straight && Math.hypot(r[0] - a.start[0], r[1] - a.start[1]) < 6 && pathLen(a.pts) * S.view.z < 12) {   // nur angetippt
@@ -2262,7 +2280,7 @@ function endAction(cancel) {
     requestDraw(); requestLive(); placeSelbar(); return;
   }
   if (a.kind === 'erase') { if (a.removed.size) commit(S.items.filter(it => !a.removed.has(it.id)), false); }
-  else if (a.kind === 'lasso') { setSel(lassoSelect(a.pts)); }
+  else if (a.kind === 'lasso') { const n = lassoBadge(a.pts); if (n) openNoteCard(n.id, null, noteBox(n)); else setSel(lassoSelect(a.pts)); }
   else if (a.kind === 'move' || a.kind === 'scale') {
     const moved = a.kind === 'move' ? a.moved && (a.dx || a.dy) : Math.abs(a.s - 1) > 0.005;
     if (moved) {
@@ -2400,7 +2418,10 @@ function pointerEnd(e) {
     if (touches.size === 0) {
       const g = gesture; gesture = null;
       if (g && !g.cancelled && g.maxN === 2 && !g.moved && performance.now() - g.t0 < 350) { undo(); toast('Rückgängig', 900); }
-      else if (g && !g.cancelled && g.maxN === 1 && !g.moved && performance.now() - g.t0 < 350) toggleTapeAt(...toWorld(...g.c0));   // Tape antippen
+      else if (g && !g.cancelled && g.maxN === 1 && !g.moved && performance.now() - g.t0 < 350) {   // Erklärung öffnen oder Tape antippen
+        const [x, y] = toWorld(...g.c0), n = noteAt(x, y);
+        if (n) openNoteCard(n.id, null, noteBox(n)); else toggleTapeAt(x, y);
+      }
       settleZoom(); viewChanged();
     } else gestureStart();
   }
@@ -2954,7 +2975,7 @@ async function loadCustomShapes() {
 }
 async function saveCustomShape() {
   if (!S.sel) return;
-  const strokes = S.items.filter(it => S.sel.ids.has(it.id) && it.t === 's' && !it.tp);   // Tapes nicht als Form
+  const strokes = S.items.filter(it => S.sel.ids.has(it.id) && it.t === 's' && !it.tp && !it.nt);   // Tapes und Markierungen nicht als Form
   if (!strokes.length) return;
   const n = strokes.reduce((m, s) => m + s.pts.length / 3, 0);
   if (n > CUSTOM_MAX_PTS) { toast(`Die Auswahl ist zu groß für eine Form (${n.toLocaleString('de-DE')} Punkte, höchstens ${CUSTOM_MAX_PTS.toLocaleString('de-DE')})`, 4500); return; }
@@ -3081,7 +3102,7 @@ function popOut(el) {
   const a = el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.95)' }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
   a.onfinish = () => { if (el.dataset.closing) { delete el.dataset.closing; el.classList.add('hidden'); } a.cancel(); };
 }
-function closeMenus() { $$('.menu').forEach(popOut); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
+function closeMenus() { saveNoteCard(); hideDim(); $$('.menu').forEach(popOut); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
 function openMenu(menu, btn) {
   const was = isOpen(menu); closeMenus(); if (was) return;
   menu.classList.remove('hidden');
@@ -3091,7 +3112,7 @@ function openMenu(menu, btn) {
   popIn(menu, btn);
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (ncCur && e.pointerType === 'touch' && performance.now() < penActiveUntil) return; if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -3123,8 +3144,10 @@ $('#sDup').onclick = () => {
   const sel = S.items.filter(it => S.sel.ids.has(it.id)), ids = new Set(), groups = new Map();
   let dx = 24 / S.view.z, dy = dx;
   if (S.snap) { const r = snapRef(sel), st = snapStep(); dx = snapX(r[0] + st) - r[0]; dy = snapY(r[1] + st) - r[1]; }   // einen Rasterpunkt weiter, auf dem Raster
+  const newId = new Map(sel.map(it => [it.id, uid()]));   // was auf etwas Kopiertem liegt (Tape, Erklärung), gehört zur Kopie
   const copies = sel.map(it => {
-    const c = transformItem(it, 1, 0, 0, dx, dy); c.id = uid(); ids.add(c.id);
+    const c = transformItem(it, 1, 0, 0, dx, dy); c.id = newId.get(it.id); ids.add(c.id);
+    if (c.on && newId.has(c.on)) c.on = newId.get(c.on);
     if (c.g) { if (!groups.has(c.g)) groups.set(c.g, uid()); c.g = groups.get(c.g); }   // Kopie = eigene Gruppe
     return c;
   });
@@ -3136,7 +3159,7 @@ $('#sSave').onclick = saveCustomShape;
 $('#sColor').onclick = () => {
   if (!S.sel) return;
   commit(S.items.map(it => {
-    if (!S.sel.ids.has(it.id) || it.t !== 's') return it;
+    if (!S.sel.ids.has(it.id) || it.t !== 's' || it.nt) return it;
     if (it.tp) return { ...it, c: S.color.tape };
     const k = it.hl ? 'hl' : 'pen', n = { ...it, c: S.color[k] };
     if (S.alpha[k] !== ALPHA_DEFAULT[k]) n.al = S.alpha[k]; else delete n.al;
@@ -3146,7 +3169,7 @@ $('#sColor').onclick = () => {
 $('#sSize').onclick = () => {
   if (!S.sel) return;
   commit(S.items.map(it => {
-    if (!S.sel.ids.has(it.id) || it.t !== 's') return it;
+    if (!S.sel.ids.has(it.id) || it.t !== 's' || it.nt) return it;
     const w = it.tp ? S.size.tape : it.hl ? S.size.hl : S.size.pen;
     return { ...it, w, bb: bboxOf(it.pts, w) };
   })); refreshSel();
@@ -3166,7 +3189,7 @@ document.addEventListener('keydown', e => {
   }
   // Esc schließt offene Menüs auch, wenn ein Regler darin noch den Fokus hat
   if (k === 'escape' && $$('.menu').some(isOpen)) { closeMenus(); if (e.target.blur) e.target.blur(); return; }
-  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
+  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (k === ' ') { e.preventDefault(); if (!spaceDown && !action) { spaceDown = true; cvLive.style.cursor = 'grab'; } return; }
   if (action) {
     if (k === 'escape') cancelAction();
@@ -3365,10 +3388,10 @@ async function insertPdfPages(pdf, file, note) {
 // Bild aus der Zwischenablage, ohne es erst als Datei zu speichern (etwa ein Bildschirmfoto mit Win + Umschalt + S).
 // Der Browser fragt dabei evtl. nach Erlaubnis; Strg + V geht auch so (paste-Ereignis unten)
 const CLIP_EMPTY = 'In der Zwischenablage ist kein Bild. Bildschirmfoto: Win + Umschalt + S';
-async function pasteImage(at) {
-  if (!S.note) return;
+// Bilder aus der Zwischenablage als Dateien; null (mit Hinweis), wenn keins da ist oder der Zugriff fehlt
+async function clipImages() {
   const cb = navigator.clipboard;
-  if (!cb || !cb.read) { toast('Hier geht das Einfügen aus der Zwischenablage nur mit Strg + V', 4000); return; }
+  if (!cb || !cb.read) { toast('Hier geht das Einfügen aus der Zwischenablage nur mit Strg + V', 4000); return null; }
   const files = [];
   try {
     for (const it of await cb.read()) {
@@ -3376,10 +3399,15 @@ async function pasteImage(at) {
       if (type) files.push(new File([await it.getType(type)], 'Bild aus der Zwischenablage', { type }));
     }
   } catch (e) {
-    toast(e && e.name === 'NotAllowedError' ? 'Kein Zugriff auf die Zwischenablage. Mit Strg + V geht es auch.' : CLIP_EMPTY, 4500); return;
+    toast(e && e.name === 'NotAllowedError' ? 'Kein Zugriff auf die Zwischenablage. Mit Strg + V geht es auch.' : CLIP_EMPTY, 4500); return null;
   }
-  if (!files.length) { toast(CLIP_EMPTY, 4500); return; }
-  return insertImages(files, at);
+  if (!files.length) { toast(CLIP_EMPTY, 4500); return null; }
+  return files;
+}
+async function pasteImage(at) {
+  if (!S.note) return;
+  const files = await clipImages();
+  if (files) return insertImages(files, at);
 }
 /* Finger auf der Seite gedrückt halten (oder Rechtsklick mit der Maus): Blase „Einfügen“. Sie legt ein Bild aus der
    Zwischenablage genau dorthin, mittig unter den Finger. Bewegt sich der Finger, verschiebt er wie sonst die Seite und
@@ -3406,6 +3434,213 @@ function showPasteMenu(sx, sy) {
   popIn(m, { getBoundingClientRect: () => ({ left: x, top: y, width: 0, height: 0 }) });
 }
 $('#pmPaste').onclick = () => { const at = pasteAt; closeMenus(); pasteImage(at); };
+/* ---------- Erklärungen ----------
+   Mit dem Lasso etwas auswählen, dann „Erklärung“: eine Karte mit kurzem Text, einem Bild (Zwischenablage oder Datei)
+   und einer kleinen Fläche zum Schreiben. Sie hängt an einer Markierung: einem unsichtbaren Strich (k 'note', Inhalt
+   in nt), einem Rechteck 6 px um das Markierte; zu sehen ist nur ein blaues „i“ in seiner oberen rechten Ecke. Das
+   Markierte hängt an ihr (on): beides wandert zusammen. Ein Fingertipp auf die Stelle oder ein Stifttipp auf das „i“
+   öffnet die Karte. Gespeichert wird beim Schließen, als ein Schritt fürs Rückgängigmachen; ganz leer heißt: keine
+   Erklärung. (Markierungen mit fl und hl stammen aus der ersten Testversion mit blauer Fläche; sie gelten weiter.) */
+const NOTE_C = '#7fb0ff', NOTE_PAD = 6, NOTE_INK_W = 2.2;
+let ncCur = null;   // offene Karte: { id (Markierung) oder ids (neu zu markieren), box, nt (Arbeitskopie), orig, url }
+const noteOf = id => S.items.find(it => it.id === id && it.nt) || null;
+const noteBox = it => geoBox([it]);   // der Kasten selbst (bb ist um die Strichbreite größer)
+function noteMark(ids, nt) {
+  const items = S.items.filter(it => ids.has(it.id) && !it.tp && !it.nt);
+  if (!items.length) return null;
+  const b = geoBox(items), p = NOTE_PAD, x0 = b[0] - p, y0 = b[1] - p, x1 = b[2] + p, y1 = b[3] + p;
+  return makeStroke([x0, y0, .5, x1, y0, .5, x1, y1, .5, x0, y1, .5, x0, y0, .5], NOTE_C, 1, false, { k: 'note', nt });
+}
+// „i“ in der oberen rechten Ecke, 16 px groß auf dem Bildschirm, nie größer als der Kasten (Weltkoordinaten)
+function noteBadge(it, devScale) {
+  const b = noteBox(it), r = Math.min(8 * DPR / devScale, (b[2] - b[0]) / 2.4, (b[3] - b[1]) / 2.4);
+  return { x: b[2] - r * 0.95, y: b[1] + r * 0.95, r };
+}
+function drawNoteBadge(ctx, it, devScale) {
+  const { x, y, r } = noteBadge(it, devScale); if (!(r > 0)) return;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = '#2f6fd6'; ctx.fill();
+  ctx.lineWidth = r * 0.2; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y - r * 0.42, r * 0.19, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(x - r * 0.15, y - r * 0.12, r * 0.3, r * 0.6);
+  ctx.restore();
+}
+function noteAt(x, y) {
+  for (let k = S.items.length - 1; k >= 0; k--) { const it = S.items[k]; if (!it.nt) continue; const b = noteBox(it); if (x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]) return it; }
+  return null;
+}
+function noteBadgeAt(x, y) {
+  for (let k = S.items.length - 1; k >= 0; k--) {
+    const it = S.items[k]; if (!it.nt) continue;
+    const g = noteBadge(it, S.view.z * DPR); if (Math.hypot(x - g.x, y - g.y) < g.r + 6 / S.view.z) return it;
+  }
+  return null;
+}
+// ohne die Markierung id; was an ihr hing, ist wieder frei
+const dropNote = id => S.items.filter(x => x.id !== id).map(x => x.on === id ? (({ on, ...r }) => r)(x) : x);
+// id: vorhandene Markierung; ids: neu zu markieren; box: wo sie liegt (Welt), die Karte kommt darunter oder darüber
+function openNoteCard(id, ids, box) {
+  closeMenus(); clearSel();
+  const it = id ? noteOf(id) : null; if (id && !it) return;
+  const nt = it ? it.nt : { text: '', img: null, ink: [] };
+  ncCur = { id: it ? it.id : null, ids: it ? null : ids, box, nt: { text: nt.text || '', img: nt.img || null, ink: (nt.ink || []).map(s => ({ ...s })) }, orig: it ? JSON.stringify(nt) : null, url: null };
+  const m = $('#noteCard'); m.classList.remove('big', 'glance'); ncDraw = null;
+  $('#ncText').value = ncCur.nt.text;
+  m.classList.remove('hidden');
+  growBtn(); fitNoteText(); drawNoteInk(); placeNoteCard(); showNoteImg();
+  popIn(m, null);
+}
+// Pfeil oben rechts in der Schreibfläche: großes Fenster auf bzw. zurück zur kleinen Karte
+function growBtn() {
+  const big = $('#noteCard').classList.contains('glance'), b = $('#ncGrow'), txt = big ? 'Schreibfläche verkleinern' : 'Schreibfläche vergrößern';
+  b.title = txt; b.setAttribute('aria-label', txt); b.querySelector('use').setAttribute('href', big ? '#ic-shrink' : '#ic-grow');
+}
+// Groß: eigenes Fenster in der Mitte (85 % des Bildschirms), dahinter abgedunkelt; es wächst aus der Karte heraus und
+// schrumpft beim Zurück wieder in sie hinein (wie „Glance“ im Zen-Browser). Daneben tippen schließt wie bei der Karte.
+const ncDim = $('#ncDim');
+function setGlance(on) {
+  const m = $('#noteCard'); if (!ncCur || m.classList.contains('glance') === on) return;
+  const r0 = m.getBoundingClientRect();
+  m.getAnimations().forEach(a => a.cancel());
+  m.classList.remove('big'); m.classList.toggle('glance', on);
+  if (!on) placeNoteCard();   // zurück an ihren Platz bei der Markierung
+  growBtn(); fitNoteText(); drawNoteInk();
+  if (on) showDim(); else hideDim();
+  if (reduceMotion()) return;
+  const r1 = m.getBoundingClientRect();
+  m.style.transformOrigin = '0 0';
+  const a = m.animate([{ transform: `translate(${r0.left - r1.left}px, ${r0.top - r1.top}px) scale(${r0.width / r1.width}, ${r0.height / r1.height})` }, { transform: 'none' }], sp(spring(0.12, 420)));
+  a.onfinish = () => { m.style.transformOrigin = ''; };
+}
+function showDim() {
+  ncDim.getAnimations().forEach(a => a.cancel()); ncDim.classList.remove('hidden');
+  if (!reduceMotion()) ncDim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
+}
+function hideDim() {
+  if (ncDim.classList.contains('hidden')) return;
+  ncDim.getAnimations().forEach(a => a.cancel());
+  if (reduceMotion()) { ncDim.classList.add('hidden'); return; }
+  const a = ncDim.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
+  a.onfinish = () => { ncDim.classList.add('hidden'); a.cancel(); };   // nicht am versteckten Element stehen lassen (siehe popOut)
+}
+// Textfeld wächst mit dem Text (bis 180 px, dann scrollt es)
+function fitNoteText() { const ta = $('#ncText'); ta.style.height = ''; ta.style.height = clamp(ta.scrollHeight + 2, 58, 180) + 'px'; }
+function placeNoteCard() {
+  const m = $('#noteCard'), c = ncCur; if (!c || !c.box) return;
+  const top = barBottom() + 8; m.style.maxHeight = Math.max(160, innerHeight - top - 8) + 'px';   // passt immer ganz hinein
+  const [x0, y0] = toScreen(c.box[0], c.box[1]), [, y1] = toScreen(c.box[2], c.box[3]), w = m.offsetWidth, h = m.offsetHeight;
+  let y = y1 + 12;
+  if (y + h > innerHeight - 8) y = y0 - 12 - h;          // passt nicht darunter: darüber
+  if (y < top) y = clamp(innerHeight - h - 8, top, innerHeight);
+  m.style.left = clamp(x0, 8, Math.max(8, innerWidth - w - 8)) + 'px'; m.style.top = Math.max(top, y) + 'px';
+}
+// Inhalt der Karte übernehmen (ein Schritt fürs Rückgängigmachen), die Karte bleibt offen. final (beim Schließen):
+// ganz leer heißt keine Erklärung
+function syncNoteCard(final) {
+  const c = ncCur; if (!c || !S.note) return;
+  const nt = { text: $('#ncText').value.trim(), img: c.nt.img || null, ink: c.nt.ink.slice() };
+  const empty = !nt.text && !nt.img && !nt.ink.length, js = JSON.stringify(nt);
+  if (c.id) {
+    if (!noteOf(c.id)) return;
+    if (empty) { if (final) commit(dropNote(c.id)); return; }
+    if (js !== c.orig) { commit(S.items.map(x => x.id === c.id ? { ...x, nt } : x)); c.orig = js; }
+  } else if (!empty && c.ids) {
+    const mark = noteMark(c.ids, nt); if (!mark) return;
+    const linked = S.items.map(x => c.ids.has(x.id) && !x.on && !x.tp && !x.nt && !x.hl ? { ...x, on: mark.id } : x);
+    commit(appendItems(linked, [mark]));
+    c.id = mark.id; c.ids = null; c.orig = js;
+  }
+}
+function saveNoteCard() {
+  const c = ncCur; if (!c) return;
+  syncNoteCard(true); ncCur = null;
+  if (c.url) URL.revokeObjectURL(c.url);
+}
+async function setNoteImage(file) {
+  const c = ncCur; if (!c || !S.note) return;
+  try {
+    const { blob, low, w, h } = await prepareImage(file), id = uid();
+    await dbImagePut({ id, n: S.note.id, blob, low, w, h });
+    if (ncCur !== c) return;
+    c.nt.img = id; showNoteImg(blob);
+  } catch (e) { toast('Das Bild kann nicht geöffnet werden', 3500); }
+}
+async function showNoteImg(blob) {
+  const c = ncCur, box = $('#ncImgBox'); if (!c) return;
+  if (c.url) { URL.revokeObjectURL(c.url); c.url = null; }
+  if (c.nt.img && !blob) { const rec = await dbImageGet(c.nt.img).catch(() => null); if (ncCur !== c) return; blob = rec && rec.blob; }
+  if (!c.nt.img || !blob) { box.classList.add('hidden'); placeNoteCard(); return; }
+  c.url = URL.createObjectURL(blob);
+  const img = $('#ncImg'); img.onload = () => { if (ncCur === c) placeNoteCard(); }; img.src = c.url;
+  box.classList.remove('hidden');
+}
+// kleine Schreibfläche: Stift, Maus oder Finger (nicht der Handballen, solange der Stift da ist)
+const ncInk = $('#ncInk'), inkPaths = new WeakMap(); let ncDraw = null;
+// Maßstab der Schreibfläche: 1, außer das Geschriebene ist größer als die Fläche (im großen Fenster geschrieben) –
+// dann verkleinert, damit alles zu sehen ist. Neu Geschriebenes kommt im selben Maßstab dazu.
+let ncInkS = 1;
+function inkScale(W, H) {
+  let mx = 0, my = 0;
+  for (const s of ncCur ? ncCur.nt.ink : []) for (let i = 0; i < s.pts.length; i += 3) { mx = Math.max(mx, s.pts[i] + s.w + 8); my = Math.max(my, s.pts[i + 1] + s.w + 8); }   // mit etwas Rand
+  return Math.min(1, W / Math.max(1, mx), H / Math.max(1, my));
+}
+function drawNoteInk(extra) {
+  const W = ncInk.clientWidth || 296, H = ncInk.clientHeight || 140;
+  if (ncInk.width !== Math.round(W * DPR) || ncInk.height !== Math.round(H * DPR)) { ncInk.width = Math.round(W * DPR); ncInk.height = Math.round(H * DPR); }
+  if (!ncDraw) ncInkS = inkScale(W, H);   // während eines Strichs bleibt der Maßstab
+  const g = ncInk.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
+  g.setTransform(DPR * ncInkS, 0, 0, DPR * ncInkS, 0, 0);
+  const list = ncCur ? ncCur.nt.ink : [];
+  for (const s of extra ? [...list, extra] : list) {
+    if (!s.pts.length) continue;
+    let P = s === extra ? null : inkPaths.get(s);
+    if (!P) { P = buildPath(Float32Array.from(s.pts), s.w, false); if (s !== extra) inkPaths.set(s, P); }
+    g.fillStyle = s.c === 'ink' && isXP() ? '#1b1b1d' : colorOf(s.c); g.fill(P);   // XP: die Karte bleibt auch im Darkmode hell
+  }
+  $('#noteCard').classList.toggle('inked', list.length > 0 || !!extra);
+}
+function addInkPt(e) {
+  const r = ncDraw.r, p = e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : 0.5;
+  ncDraw.s.pts.push((e.clientX - r.left) / ncInkS, (e.clientY - r.top) / ncInkS, p);
+}
+ncInk.addEventListener('pointerdown', e => {
+  if (!ncCur || (e.pointerType === 'touch' && performance.now() < penActiveUntil) || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  e.preventDefault(); try { ncInk.setPointerCapture(e.pointerId); } catch (err) {}
+  ncDraw = { id: e.pointerId, r: ncInk.getBoundingClientRect(), s: { c: S.color.pen, w: NOTE_INK_W, pts: [] } };
+  addInkPt(e); drawNoteInk(ncDraw.s);
+});
+ncInk.addEventListener('pointermove', e => {
+  if (!ncDraw || e.pointerId !== ncDraw.id) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  for (const ev of evs.length ? evs : [e]) addInkPt(ev);
+  drawNoteInk(ncDraw.s);
+});
+const endInk = e => {
+  if (!ncDraw || e.pointerId !== ncDraw.id) return;
+  const s = ncDraw.s; ncDraw = null;
+  if (ncCur && s.pts.length) ncCur.nt.ink.push({ c: s.c, w: s.w, pts: s.pts.map(v => Math.round(v * 10) / 10) });
+  drawNoteInk();
+};
+ncInk.addEventListener('pointerup', endInk); ncInk.addEventListener('pointercancel', endInk);
+let ncPalm = false;
+$('#noteCard').addEventListener('pointerdown', e => { ncPalm = e.pointerType === 'touch' && performance.now() < penActiveUntil; }, true);
+$('#noteCard').addEventListener('click', e => { if (ncPalm && e.target.closest('button,img')) { e.preventDefault(); e.stopPropagation(); } }, true);
+$('#ncText').addEventListener('input', fitNoteText);
+$('#ncGrow').onclick = () => setGlance(!$('#noteCard').classList.contains('glance'));
+$('#ncClear').onclick = () => { if (ncCur) { ncCur.nt.ink = []; drawNoteInk(); } };
+$('#ncPaste').onclick = async () => { const files = await clipImages(); if (files) setNoteImage(files[0]); };
+$('#ncFile').onclick = () => $('#fNoteImg').click();
+$('#fNoteImg').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) setNoteImage(f); };
+$('#ncImgDel').onclick = () => { if (ncCur) { ncCur.nt.img = null; showNoteImg(); } };
+$('#ncImg').onclick = () => { const m = $('#noteCard'); if (m.classList.contains('glance')) return; m.classList.toggle('big'); drawNoteInk(); placeNoteCard(); };   // groß ansehen und wieder klein
+$('#ncDel').onclick = () => { const c = ncCur; if (!c) return; ncCur = null; if (c.url) URL.revokeObjectURL(c.url); if (c.id) commit(dropNote(c.id)); closeMenus(); };
+$('#sNote').onclick = () => {
+  if (!S.sel) return;
+  const sel = S.items.filter(it => S.sel.ids.has(it.id)), mark = sel.find(it => it.nt);
+  if (mark) { openNoteCard(mark.id, null, noteBox(mark)); return; }
+  const ids = new Set(sel.filter(it => !it.tp).map(it => it.id)); if (!ids.size) return;
+  openNoteCard(null, ids, geoBox(sel.filter(it => !it.tp)));
+};
 // Bild-Knopf: kleines Menü, aus der Zwischenablage oder aus einer Datei
 $('#bImg').onclick = () => openMenu($('#imgMenu'), $('#bImg'));
 $('#mImgClip').onclick = () => { closeMenus(); pasteImage(); };
@@ -3415,7 +3650,10 @@ $('#fImg').onchange = e => { insertImages(e.target.files); e.target.value = ''; 
 $('#fPdf').onchange = e => { if (e.target.files[0]) insertPdf(e.target.files[0]); e.target.value = ''; };
 document.addEventListener('paste', e => {
   if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
-  const files = [...(e.clipboardData?.files || [])]; if (files.length) { e.preventDefault(); insertImages(files); }
+  const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+  if (ncCur && files.length) { e.preventDefault(); setNoteImage(files[0]); return; }   // offene Erklärung: Bild hinein
+  if (e.target.tagName === 'TEXTAREA') return;
+  if (files.length) { e.preventDefault(); insertImages(files); }
 });
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => e.preventDefault());
@@ -4330,6 +4568,7 @@ async function flushNote() {
 }
 async function closeNote() {
   if (!S.note || navBusy) return;
+  if (ncCur) closeMenus();
   dropOverview();
   if (S.busy) { toast('Bitte warten, bis der Import fertig ist'); return; }
   navBusy = true;
@@ -4338,6 +4577,7 @@ async function closeNote() {
   if (S.saveError) { navBusy = false; toast('Die Notiz konnte nicht gespeichert werden und bleibt offen: ' + S.saveError.message, 7000); return; }
   // Bilder, die in der Notiz nicht mehr vorkommen, aus dem Speicher entfernen
   const note = S.note, used = new Set(S.items.filter(i => i.t === 'i').map(i => i.img));
+  for (const it of S.items) if (it.nt && it.nt.img) used.add(it.nt.img);   // Bild einer Erklärung
   S.note = null; S.items = []; S.saved = new Map(); S.undo = []; S.redo = [];
   clearTiles(); pathCache.clear(); releaseImages();
   $('#editor').classList.add('hidden'); $('#home').classList.remove('hidden');
@@ -4349,7 +4589,7 @@ async function closeNote() {
     st.index('n').openKeyCursor(IDBKeyRange.only(note.id)).onsuccess = ev => { const c = ev.target.result; if (c) { if (!used.has(c.primaryKey)) st.delete(c.primaryKey); c.continue(); } };
   } catch (e) {}
 }
-window.__flush = () => flushNote().catch(() => {});
+window.__flush = () => { syncNoteCard(); return flushNote().catch(() => {}); };
 $('#bBack').onclick = closeNote;
 $('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } xpTitle(); fitBar(); });
 $('#title').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); });
@@ -4452,7 +4692,7 @@ $('#fRestore').onchange = async e => {
         noteMap.set(r.id, { id: newId, copy, meta, replace: !copy, done: false });
       } else if (r.k === 'items') {
         const m = noteMap.get(r.n); if (!m || m.skip || m.done) continue;
-        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts) } : { img: mapImg(r.n, it.img) }) }));
+        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts), ...(it.nt && it.nt.img ? { nt: { ...it.nt, img: mapImg(r.n, it.nt.img) } } : {}) } : { img: mapImg(r.n, it.img) }) }));
         await writeRecords(m.meta, items, [], m.replace); m.done = true; count++;
       } else if (r.k === 'img') {
         const m = noteMap.get(r.n); if (!m || m.skip) continue;
@@ -4468,8 +4708,8 @@ $('#fRestore').onchange = async e => {
   if (books) homeBook = null;   // neue Bücher stehen im Regal
   renderHome();   // ordnet Seiten ohne Buch (ältere Sicherungen) dem Buch „Meine Notizen“ zu
 };
-document.addEventListener('visibilitychange', () => { if (document.hidden && S.note) flushNote(); });
-window.addEventListener('pagehide', () => { if (S.note) saveNow(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.note) { syncNoteCard(); flushNote(); } });
+window.addEventListener('pagehide', () => { if (S.note) { syncNoteCard(); saveNow(); } });
 
 /* ---------- Start ---------- */
 applyDark(); applyTheme();

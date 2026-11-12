@@ -165,7 +165,7 @@ const DEMO = {
   const sel1 = await p.evaluate(() => S.sel ? S.items.filter(i => S.sel.ids.has(i.id)).map(i => i.t) : []);
   check('lassoAll', sel1.filter(t => t === 's').length === 4 && sel1.filter(t => t === 'i').length === 1, sel1);
   check('saveButton', await vis('#sSave') && (await p.textContent('#sSave')) === 'Als Form speichern'
-    && (await p.$$eval('#selbar button', l => l.map(b => b.id).join())) === 'sColor,sSize,sGraph,sDup,sSave,sDel' && !(await vis('#sGraph')), await p.$$eval('#selbar button', l => l.map(b => b.id + ':' + b.textContent)));
+    && (await p.$$eval('#selbar button', l => l.map(b => b.id).join())) === 'sColor,sSize,sGraph,sNote,sDup,sSave,sDel' && !(await vis('#sGraph')), await p.$$eval('#selbar button', l => l.map(b => b.id + ':' + b.textContent)));
   await p.keyboard.press('Escape');
   await drag(345, 337, 346, 337, { steps: 1 }); await frames();   // Antippen des Bildes: Auswahl nur mit Bild
   const imgOnly = await p.evaluate(() => S.sel && S.items.filter(i => S.sel.ids.has(i.id)).map(i => i.t).join());
