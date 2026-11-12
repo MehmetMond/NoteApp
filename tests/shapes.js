@@ -154,6 +154,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   // ---------- 3. Zu kurz, Esc, pointercancel ----------
   {
     const n0 = await count();
+    await p.evaluate(() => clearSel()); await frames();   // ohne die Auswahl der vorigen Form
     const empty0 = await p.screenshot({ clip: { x: 560, y: 260, width: 180, height: 160 } });
     await shape('rect', 600, 300, 604, 302);
     const a = await count();
@@ -335,6 +336,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     await p.waitForTimeout(150);
     const live = await p.screenshot({ clip });
     await pen('mouseReleased', x1, y1); await p.waitForTimeout(300);
+    await p.evaluate(() => clearSel()); await p.waitForTimeout(100);   // Rahmen der Auswahl gehört nicht zur Form
     const fin = await p.screenshot({ clip });
     // Kacheln neu zeichnen: wegzoomen und genau zur selben Ansicht zurück, Cache leeren
     const v = await p.evaluate(() => { const v = { ...S.view }; zoomAt(VW / 2, VH / 2, 0.5); return v; }); await p.waitForTimeout(200);
@@ -373,8 +375,10 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     // eigener Knopf nach „Text“: Antippen wählt Formen, unter der Leiste erscheint die Formenleiste (bei Farben und Dicken)
     await p.click('#bShape'); await p.waitForTimeout(300);
     r.first = await p.evaluate(() => [S.tool, $('#bShape').classList.contains('on')]); r.bar = await bar();
-    r.pos = await p.evaluate(() => { const s = $('#shapeBar').getBoundingClientRect(), c = $('#colors').getBoundingClientRect(), b = $('#bar').getBoundingClientRect();
-      return { below: s.top >= b.bottom, atColors: Math.abs(s.left - c.left) <= 12, inside: s.left >= 0 && s.right <= innerWidth, menusBelow: Math.abs(barBottom() - s.bottom) < 1.5 }; });
+    r.pos = await p.evaluate(() => { for (const a of $('#shapeBar').getAnimations()) a.finish();   // nach dem Aufploppen messen
+      const s = $('#shapeBar').getBoundingClientRect(), c = $('#colors').getBoundingClientRect(), b = $('#bar').getBoundingClientRect();
+      // links bündig mit den Farben, oder weiter links, wenn sie dort nicht ganz ins Bild passt
+      return { below: s.top >= b.bottom, atColors: Math.abs(s.left - c.left) <= 12 || (s.left < c.left && innerWidth - s.right < 12), inside: s.left >= 0 && s.right <= innerWidth, menusBelow: Math.abs(barBottom() - s.bottom) < 1.5 }; });
     r.items = await p.$$eval('#shapeBar [data-shape]', l => l.map(b => b.dataset.shape + ':' + b.title));
     r.onMark = await p.$$eval('#shapeBar [data-shape].on', l => l.map(b => b.dataset.shape));
     await p.click('#shapeBar [data-shape=arrow]'); await p.waitForTimeout(100);
@@ -387,23 +391,23 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     r.colorSize = await p.evaluate(() => [S.tool, S.color.pen, S.size.pen, $('#colors').style.opacity, $('#bShape').classList.contains('on')]);
     await p.keyboard.press('p'); r.hiddenAgain = await p.waitForFunction(() => $('#shapeBar').classList.contains('hidden'), null, { timeout: 2000 }).then(() => true, () => false);
     await p.keyboard.press('f'); await p.waitForTimeout(150); r.keyF = await p.evaluate(() => [S.tool, cvLive.style.cursor]); r.barKeyF = await bar();
-    // der Lasso-Knopf hat nur noch Lasso und Tape; Taste T: der Knopf zeigt Tape
-    await p.keyboard.press('t'); await p.keyboard.press('p'); r.keyT = await p.evaluate(() => [$('#bGroup').dataset.tool, $('#bGroup use').getAttribute('href'), $('#bGroup').classList.contains('on')]);
-    await p.click('#bGroup'); r.tapeAgain = await p.evaluate(() => [S.tool, isOpen($('#grpMenu'))]);
-    await p.click('#bGroup'); r.grp = await p.evaluate(() => [isOpen($('#grpMenu')), $$('#grpMenu [data-gtool]').map(b => b.dataset.gtool + (b.classList.contains('on') ? '*' : '')).join()]);
-    await p.click('#grpMenu [data-gtool=lasso]'); r.toLasso = await p.evaluate(() => [S.tool, $('#bGroup').dataset.tool, isOpen($('#grpMenu'))]);
+    // Lasso und Tape mit eigenem Knopf: Antippen wählt, Taste T und L ebenso
+    await p.keyboard.press('t'); r.keyT = await p.evaluate(() => [S.tool, $('#bTape').classList.contains('on'), $('#bLasso').classList.contains('on')]);
+    await p.click('#bLasso'); r.toLasso = await p.evaluate(() => [S.tool, $('#bLasso').classList.contains('on'), $('#bTape').classList.contains('on')]);
+    await p.click('#bTape'); r.toTape = await p.evaluate(() => [S.tool, $$('.menu').filter(m => isOpen(m)).length]);
+    await p.keyboard.press('l');
     await p.keyboard.press('f'); await p.keyboard.press('Escape');
     await p.keyboard.press('g'); r.keyG = await p.evaluate(() => [S.snap, $('#toast').textContent]); await p.keyboard.press('g');
-    r.titles = await p.evaluate(() => [$('#bSnap').title, $('#bGroup').title]);
+    r.titles = await p.evaluate(() => [$('#bSnap').title, $('#bLasso').title, $('#bTape').title]);
     r.order = await p.$$eval('#bar > *', l => l.map(e => e.id || e.dataset.tool || e.className).join(' '));
     const ok = r.hiddenPen && r.first.join() === 'shape,true' && r.bar && r.pos.below && r.pos.atColors && r.pos.inside && r.pos.menusBelow
       && r.items.length === 11 && r.items[1] === 'arrow:Pfeil' && r.items[8] === 'axes2:Koordinatensystem (x, y)' && r.onMark.join() === 'rect'
       && r.picked[0] === 'arrow' && r.picked[1] === '"arrow"' && r.picked[2] === 'Formen (F) – Pfeil' && r.picked[3] === '#sh-arrow' && r.picked[4] === 'shape' && r.onMark2.join() === 'arrow' && r.barAfterPick && r.canvasTap
       && r.colorSize[0] === 'shape' && r.colorSize[1] === '#1e88e5' && r.colorSize[2] === 6 && r.colorSize[3] === '1' && r.colorSize[4]
       && r.hiddenAgain && r.keyF.join() === 'shape,crosshair' && r.barKeyF
-      && r.keyT.join() === 'tape,#ic-tape,false' && r.tapeAgain.join() === 'tape,false' && r.grp.join() === 'true,lasso,tape*' && r.toLasso.join() === 'lasso,lasso,false'
-      && r.keyG[0] === true && r.keyG[1] === 'Am Raster ausrichten: an' && r.titles[1] === 'Auswählen / Verschieben (L) · nochmal antippen: Lasso oder Tape'
-      && /pen hl text bShape bGroup eraser hand/.test(r.order) && /bBg bSnap/.test(r.order);
+      && r.keyT.join() === 'tape,true,false' && r.toLasso.join() === 'lasso,true,false' && r.toTape.join() === 'tape,0'
+      && r.keyG[0] === true && r.keyG[1] === 'Am Raster ausrichten: an' && r.titles[1] === 'Auswählen / Verschieben (L)' && r.titles[2] === 'Tape: abdecken, antippen deckt auf (T)'
+      && /pen hl text bShape bLasso bTape eraser hand/.test(r.order) && /bBg bSnap/.test(r.order);
     check('menuUI', ok, r);
     // Farbe/Dicke werden für die Form übernommen
     await drag(300, 300, 500, 420); const [s] = await last();

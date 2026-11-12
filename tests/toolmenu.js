@@ -1,5 +1,6 @@
 // Einstellungs-Knopf neben den Dicken: öffnet das Menü des aktuellen Werkzeugs (Stift, Textmarker, Tape), schließt es
 // wieder, leuchtet solange; Radierer: erst zum Stift; das zweite Antippen der Dicke geht weiter; Leiste bleibt einzeilig
+// Dicken bei Textmarker und Tape: ein kurzes Stück (Muster, Farbe, Deckkraft) statt Punkt, ohne Lücke vor dem Knopf
 const { chromium } = require('playwright');
 const path = require('path'), DIR = path.resolve(__dirname, '..');
 (async () => {
@@ -56,9 +57,32 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   await p.fill('#title', 'Notiz vom 20.10.2026'); await p.keyboard.press('Enter'); await p.waitForTimeout(100);
   const pos = () => p.evaluate(() => [Math.round($('#title').getBoundingClientRect().width), Math.round($('#title').scrollWidth), Math.round($('[data-tool=pen]').getBoundingClientRect().x), Math.round($('#bTune').getBoundingClientRect().x)]);
   res.layout = {}; for (const k of ['p', 'm', 't', 'e', 'f']) { await p.keyboard.press(k); res.layout[k] = await pos(); }
+  // Dicken: beim Stift Punkte, bei Textmarker und Tape ein Stück; der letzte Knopf endet am Einstellungs-Knopf
+  const strips = () => p.evaluate(() => {
+    const sz = [...$$('#sizes .sz')], t = $('#bTune').getBoundingClientRect();
+    const sig = c => { if (!c) return null; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let h = 0, ink = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 20) { ink++; h = (h * 31 + d[i] * 7 + d[i + 1] * 3 + d[i + 2] + d[i + 3]) % 1000000007; } return { h, ink, w: c.getBoundingClientRect().width, hgt: c.getBoundingClientRect().height }; };
+    return { n: sz.length, strip: sz.every(b => b.classList.contains('strip') && b.querySelector('canvas')), dots: sz.every(b => b.querySelector('span')), gap: Math.round(t.left - sz.at(-1).getBoundingClientRect().right), on: sig(sz.find(b => b.classList.contains('on')).querySelector('canvas')), all: sz.map(b => sig(b.querySelector('canvas'))) };
+  });
+  res.strips = {};
+  for (const k of ['p', 'm', 't']) { await p.keyboard.press(k); res.strips[k] = await strips(); }
+  const S3 = res.strips;
+  check(S3.p.dots && S3.p.n === 5 && S3.p.gap === 0, 'Stift: fünf Punkte, ohne Lücke vor dem Knopf (' + JSON.stringify(S3.p) + ')');
+  check(['m', 't'].every(k => S3[k].strip && S3[k].n === 4 && S3[k].gap === 0 && S3[k].all.every(q => q.ink > 20)), 'Textmarker und Tape: vier Stücke, ohne Lücke vor dem Knopf (' + JSON.stringify({ m: S3.m.gap, t: S3.t.gap }) + ')');
+  check(['m', 't'].every(k => S3[k].all.every((q, i) => !i || q.hgt > S3[k].all[i - 1].hgt)), 'Die Stücke werden mit der Dicke höher (' + JSON.stringify(['m', 't'].map(k => S3[k].all.map(q => q.hgt))) + ')');
+  // Tape: anderes Muster, Textmarker: andere Farbe und Deckkraft ändern das Stück
+  await p.keyboard.press('t'); await p.click('#sizes .sz.on'); await p.click('#tpPats button:nth-child(3)'); await p.keyboard.press('Escape'); await p.waitForTimeout(150);
+  res.patChanged = await strips();
+  check(res.patChanged.on.h !== S3.t.on.h, 'Tape: anderes Muster zeigt sich im Stück');
+  await p.keyboard.press('m'); await p.click('#colors .sw:nth-child(2)'); await p.waitForTimeout(100);
+  res.hlColor = await strips();
+  check(res.hlColor.on.h !== S3.m.on.h, 'Textmarker: andere Farbe zeigt sich im Stück');
+  await p.evaluate(() => { S.alpha.hl = 0.9; renderSizes(); });
+  res.hlAlpha = await strips();
+  check(res.hlAlpha.on.h !== res.hlColor.on.h, 'Textmarker: Deckkraft zeigt sich im Stück');
+  await p.evaluate(() => { S.alpha.hl = ALPHA_DEFAULT.hl; S.color.hl = '#fdd835'; renderColors(); });
   const L = Object.values(res.layout); res.titleTip = await p.evaluate(() => $('#title').title);
   // der Name darf schmaler werden (… am Ende); gekürzt steht er ganz im Hinweis beim Draufzeigen
-  check(L.every(v => v.join() === L[0].join()) && L[0][0] >= 120 && (L[0][0] >= L[0][1] || res.titleTip === 'Notiz vom 20.10.2026'),
+  check(L.every(v => v.join() === L[0].join()) && L[0][0] >= 80 && (L[0][0] >= L[0][1] || res.titleTip === 'Notiz vom 20.10.2026'),
     'Gleiche Lage für alle Werkzeuge (auch Formen), Name höchstens etwas gekürzt und dann ganz beim Draufzeigen (' + JSON.stringify(res.layout) + ' ' + res.titleTip + ')');
   // schmal (halbes Fenster) und Hochformat: Knopf bleibt neben den Dicken, Menü unter der ganzen Leiste
   res.narrow = {};

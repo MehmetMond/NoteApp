@@ -66,6 +66,7 @@ const check = (name, ok, detail) => { res.checks++; res[name] = detail === undef
   await drag(400, 300, 720, 580, { finish: false }); await p.waitForTimeout(150);
   const live = await p.screenshot({ clip });
   await pen('mouseReleased', 720, 580); await p.waitForTimeout(300);
+  await p.evaluate(() => clearSel()); await p.waitForTimeout(100);   // Rahmen der Auswahl gehört nicht zur Form
   const fin = await p.screenshot({ clip });
   const d = await diff(live, fin);
   check('graphLiveEqualsFinal', d.changedPixels === 0 && d.inkPixels > 300, d);

@@ -56,11 +56,11 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
       shapes: $$('#shapeBar [data-shape]').length, labels: $$('#shStyle button').every(b => b.title && b.getAttribute('aria-label')) };
   });
   check('Formenleiste: Stil mit Kontur, Kanten und Sauberkeit, acht Knöpfe in einer Reihe; Vorgabe durchgezogen, eckig, exakt',
-    menu.visible && menu.groups.join() === 'Kontur,Kanten,Sauberkeit' && menu.btns === 8 && menu.rows === 1 && menu.fits && menu.labels && menu.on.join() === 'Durchgezogen,Eckig,Exakt' && menu.shapes === 11, menu);
+    menu.visible && menu.groups.join() === 'Kontur,Kanten,Sauberkeit,Füllung' && menu.btns === 12 && menu.rows === 1 && menu.fits && menu.labels && menu.on.join() === 'Durchgezogen,Eckig,Exakt,Ohne Füllung' && menu.shapes === 11, menu);
   if (SHOTS) await p.screenshot({ path: path.join(SHOTS, 'shapestyle_menu.png'), clip: { x: 0, y: 0, width: 1440, height: 140 } });
   await p.click('#shStyle [data-ds="dash"]');
   const clicked = await p.evaluate(() => ({ st: { ...S.shapeStyle }, saved: JSON.parse(localStorage.getItem('notizen.shapeStyle')), open: !$('#shapeBar').classList.contains('hidden'), on: $$('#shStyle button.on').map(b => b.title) }));
-  check('Antippen: gewählt und gespeichert, die Leiste bleibt', clicked.st.ds === 'dash' && clicked.saved.ds === 'dash' && clicked.open && clicked.on.join() === 'Gestrichelt,Eckig,Exakt', clicked);
+  check('Antippen: gewählt und gespeichert, die Leiste bleibt', clicked.st.ds === 'dash' && clicked.saved.ds === 'dash' && clicked.open && clicked.on.join() === 'Gestrichelt,Eckig,Exakt,Ohne Füllung', clicked);
   await p.evaluate(() => setShape('axes2'));
   await p.click('#shStyle [data-ds="solid"]');
   const fromGraph = await p.evaluate(() => ({ shape: S.shape, on: $$('#shapeBar [data-shape].on').map(b => b.dataset.shape) }));
@@ -175,7 +175,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     return { st, on, ds: ids.map(id => (S.items.find(i => i.id === id) || {}).ds) };
   }, [solid.id, dash.id, dot.id, ad.id]);
   check('Neu geladen: Wahl gespeichert (gepunktet, rund, skizzenhaft), Striche behalten ihre Kontur',
-    after.st.ds === 'dot' && after.st.rnd === 1 && after.st.sl === 2 && after.on.join() === 'Gepunktet,Rund,Skizzenhaft' && JSON.stringify(after.ds) === JSON.stringify([undefined, 'dash', 'dot', 'dash']), after);
+    after.st.ds === 'dot' && after.st.rnd === 1 && after.st.sl === 2 && after.on.join() === 'Gepunktet,Rund,Skizzenhaft,Ohne Füllung' && JSON.stringify(after.ds) === JSON.stringify([undefined, 'dash', 'dot', 'dash']), after);
   const junk = await p.evaluate(async () => { localStorage.setItem('notizen.shapeStyle', JSON.stringify({ ds: 'wellig', rnd: 5, sl: 'x' })); return true; });
   await p.reload(); await p.waitForTimeout(400);
   const fixed = await p.evaluate(() => ({ ...S.shapeStyle }));

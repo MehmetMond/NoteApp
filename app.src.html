@@ -167,11 +167,6 @@ html.dark #home.inbook{background:linear-gradient(180deg,color-mix(in srgb,var(-
 #bar{position:absolute;left:10px;right:10px;top:10px;display:flex;align-items:center;gap:5px;padding:6px 8px;background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);z-index:5;flex-wrap:nowrap}
 #bar.wrap{flex-wrap:wrap}  /* nur wenn es auch mit schmalem Titel nicht in eine Zeile passt (fitBar) */
 #bar>*{flex-shrink:0}
-#bGroup{position:relative}
-#bGroup::after{content:"";position:absolute;right:5px;bottom:5px;border:2.5px solid transparent;border-right-color:currentColor;border-bottom-color:currentColor;opacity:.5}  /* Ecke: hier gibt es mehr */
-#grpMenu{min-width:0;display:flex;gap:2px}
-#grpMenu button{flex-direction:column;gap:4px;width:auto;min-width:76px;padding:9px 10px 8px;font-size:13px;text-align:center}
-#grpMenu button.on{background:var(--accent-soft)}
 .tb{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--text)}
 .tb:hover{background:var(--hover)}
 .tb.on{background:var(--accent-soft);color:var(--accent)}
@@ -218,6 +213,9 @@ html.dark #colorMenu .cpsw button,html.dark #cpChip{box-shadow:inset 0 0 0 1px r
 .sz:hover{background:var(--hover)}
 .sz.on{background:var(--accent-soft)}
 .sz.on span{background:var(--accent)}
+/* Textmarker und Tape: die Dicke als kurzes Stück (sizeStrip); vier breitere Knöpfe füllen den Platz von fünf Punkten,
+   damit vor den Einstellungen keine Lücke bleibt */
+.sz.strip{width:40px}.sz canvas{display:block;pointer-events:none}
 :is(#sizeMenu,#graphMenu){min-width:0;width:280px;padding:12px 16px 14px;overflow-y:auto;overscroll-behavior:contain}
 :is(#sizeMenu,#graphMenu) .szhead{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;color:var(--muted)}
 :is(#sizeMenu,#graphMenu) .szhead b{color:var(--text);font-size:16px;font-variant-numeric:tabular-nums}
@@ -265,7 +263,15 @@ html.dark #colorMenu .cpsw button,html.dark #cpChip{box-shadow:inset 0 0 0 1px r
 #imgMenu .mhint{font-size:12px;line-height:1.4;color:var(--muted);padding:8px 10px 4px;margin-top:4px;border-top:1px solid var(--border)}
 #pasteMenu{min-width:0;padding:4px;border-radius:12px}
 /* Blase an einem Tape: Bild des Tapes, Schalter „Abgedeckt“, Mülleimer */
-#tapeMenu{min-width:0;display:flex;align-items:center;gap:4px;padding:5px 5px 5px 12px;border-radius:14px}
+#tapeMenu{min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 5px 5px 12px;border-radius:14px;max-width:320px}
+#tmColors{flex-basis:100%;display:flex;justify-content:center;gap:7px;margin:2px 7px 0 0;padding:8px 0 4px;border-top:1px solid var(--border)}
+#tapeMenu .tmc{width:26px;height:26px;padding:0;flex:none;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--border)}
+#tapeMenu .tmc.on{box-shadow:0 0 0 2px var(--accent)}
+#tmPats{flex-basis:100%;display:flex;justify-content:center;gap:1px;margin:0 7px 0 0;padding:2px 0 3px}
+#tapeMenu .tmp{width:auto;height:30px;padding:0 1px;flex:none;justify-content:center;background:transparent;border-radius:6px}
+#tapeMenu .tmp:hover{background:transparent}
+#tapeMenu .tmp canvas{display:block;transform:rotate(var(--r,0deg));transition:transform .18s ease}
+#tapeMenu .tmp:hover canvas{transform:rotate(var(--r,0deg)) translateY(-1.5px)}
 #tmPic canvas{display:block;transform:rotate(-4deg)}
 #tapeMenu #tmCover{width:auto;gap:10px;padding:7px 8px 7px 10px;border-radius:10px;font-weight:600;white-space:nowrap}
 #tapeMenu #tmCover:hover,#tapeMenu #tmDel:hover{background:var(--hover)}
@@ -363,6 +369,16 @@ html.xp #txBar .txc{border-radius:2px;border:1px solid #fff;box-shadow:0 0 0 1px
 #selbar button{padding:8px 12px;font-size:14px}
 #selbar button:hover{background:var(--hover)}
 #selbar .del{color:var(--danger)}
+/* Stil einer mit dem Lasso gewählten Form: Popup neben der Auswahl, Zeilen mit den Umschaltern der Formenleiste */
+#shapePop{position:absolute;z-index:6;display:flex;flex-direction:column;gap:5px;padding:7px 7px 7px 13px;background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
+#shapePop .sprow{display:flex;align-items:center;justify-content:space-between;gap:14px}
+#shapePop .sprow[hidden]{display:none}
+#shapePop .sprow>span{font-size:12.5px;color:var(--muted);white-space:nowrap}
+#shapePop .sprow>div{display:flex;gap:2px;padding:2px;border-radius:11px;background:var(--hover)}
+#shapePop button{width:32px;height:32px;padding:0;justify-content:center;border-radius:9px;background:transparent}
+#shapePop button:hover{background:var(--panel)}
+#shapePop button.on{background:var(--accent-soft);color:var(--accent)}
+#shapePop svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:12px;z-index:50;box-shadow:var(--shadow);font-size:14px;transition:opacity .2s;pointer-events:none;max-width:90vw}
 html.dark #toast{background:#eee;color:#111}
 #dlg{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
@@ -511,15 +527,12 @@ html.xp #noteCard.glance:has(#ncImgBox.hidden){grid-template-areas:"title title"
 html.xp #noteCard.glance::before{grid-area:title;margin:-14px -14px 0;top:0;position:relative}
 html.xp #ncGrow:hover{box-shadow:inset 0 0 0 1px #fff0cf,inset 0 0 0 2px #f6b43a}
 /* Kontextmenüs: weiß, schmaler Rand, Zeile unter dem Finger blau */
-html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#grpMenu,#pasteMenu){background:#fff;border:1px solid #8a867a;border-radius:0;box-shadow:2px 2px 3px rgba(0,0,0,.35);padding:2px}
+html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#pasteMenu){background:#fff;border:1px solid #8a867a;border-radius:0;box-shadow:2px 2px 3px rgba(0,0,0,.35);padding:2px}
 html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#pasteMenu)>button{border-radius:0;padding:8px 22px 8px 12px;font-size:13px}
-html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#grpMenu,#pasteMenu) button:hover{background:#316ac5;color:#fff}
-html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#grpMenu,#pasteMenu) button:hover :is(svg.i,.sub){color:#fff}
+html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#pasteMenu) button:hover{background:#316ac5;color:#fff}
+html.xp :is(#moreMenu,#bgMenu,#imgMenu,#homeMenu,#pasteMenu) button:hover :is(svg.i,.sub){color:#fff}
 html.xp .menu button.on{color:#000;font-weight:bold}
 html.xp .menu hr{border-top:1px solid #aca899;margin:3px 2px}
-html.xp #grpMenu button{border-radius:0;padding:8px 12px 7px}
-html.xp #grpMenu button.on{background:#c1d2ee;box-shadow:inset 0 0 0 1px #316ac5}
-html.xp #grpMenu button.on:hover{background:#316ac5}
 html.xp #imgMenu .mhint{border-top:1px solid #aca899;color:#55534c}
 html.xp #pasteMenu button{padding:7px 18px 7px 10px;font-weight:bold}
 html.xp #homeMenu .head{color:#215dc6}
@@ -731,7 +744,8 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
     <button class="tb" data-tool="hl" title="Textmarker (M)"><svg class="i"><use href="#ic-hl"/></svg></button>
     <button class="tb" data-tool="text" title="Text: antippen schreibt, Text antippen bearbeitet (X)"><svg class="i"><use href="#ic-text"/></svg></button>
     <button class="tb" data-tool="shape" id="bShape" title="Formen (F)"><svg class="i"><use href="#sh-rect"/></svg></button>
-    <button class="tb" data-tool="lasso" id="bGroup" title="Auswählen / Verschieben (L) · nochmal antippen: Lasso oder Tape"><svg class="i"><use href="#ic-lasso"/></svg></button>
+    <button class="tb" data-tool="lasso" id="bLasso" title="Auswählen / Verschieben (L)"><svg class="i"><use href="#ic-lasso"/></svg></button>
+    <button class="tb" data-tool="tape" id="bTape" title="Tape: abdecken, antippen deckt auf (T)"><svg class="i"><use href="#ic-tape"/></svg></button>
     <button class="tb" data-tool="eraser" title="Radierer (E)"><svg class="i"><use href="#ic-eraser"/></svg></button>
     <button class="tb" data-tool="hand" title="Verschieben der Ansicht (H)"><svg class="i"><use href="#ic-hand"/></svg></button>
     <div class="sep"></div>
@@ -784,6 +798,11 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
         <button data-sl="0" title="Exakt" aria-label="Exakt"><svg viewBox="0 0 24 24"><path d="M5.5 5.5h13v13h-13z"/></svg></button>
         <button data-sl="1" title="Leicht von Hand" aria-label="Leicht von Hand"><svg viewBox="0 0 24 24"><path d="M4.8 5.7c4.4-.5 9-.2 14.2-.3M18.6 4.9c.4 4.6.2 9 .1 14M19.3 18.4c-4.6.5-9.1.3-14-.1M5.6 19.3c-.4-4.5-.3-9-.1-14.1"/></svg></button>
         <button data-sl="2" title="Skizzenhaft" aria-label="Skizzenhaft"><svg viewBox="0 0 24 24" stroke-width="1.35"><path d="M4.6 5.9c4.4-.6 9.2-.2 14.6-.5M18.8 4.6c.5 4.7.3 9.4 0 14.6M19.4 18.6c-4.6.6-9.4.3-14.6 0M5.5 19.4c-.5-4.6-.3-9.3.2-14.6"/><path d="M5.3 4.4c4.2.9 8.8.6 13.6.9M20 5.6c-.6 4.4-.4 9 .2 13.6M18.6 19.9c-4.4-.8-8.7-.5-13.4-.7M4.1 18.7c.4-4.3.1-8.8-.3-13.4"/></svg></button></div></div>
+      <div class="shgrp" role="group" aria-label="Füllung" title="Füllung"><div>
+        <button data-fs="none" title="Ohne Füllung" aria-label="Ohne Füllung"><svg viewBox="0 0 24 24"><path d="M5.5 5.5h13v13h-13z"/></svg></button>
+        <button data-fs="hachure" title="Schraffur" aria-label="Füllung Schraffur"><svg viewBox="0 0 24 24"><path d="M5.5 5.5h13v13h-13z"/><path d="M5.5 11.5l6-6M5.5 17.5l12-12M11.5 18.5l7-7" stroke-width="1.3"/></svg></button>
+        <button data-fs="cross" title="Kreuzschraffur" aria-label="Füllung Kreuzschraffur"><svg viewBox="0 0 24 24"><path d="M5.5 5.5h13v13h-13z"/><path d="M5.5 11.5l6-6M5.5 17.5l12-12M11.5 18.5l7-7M5.5 12.5l6 6M5.5 6.5l12 12M11.5 5.5l7 7" stroke-width="1.3"/></svg></button>
+        <button data-fs="solid" title="Gefüllt" aria-label="Füllung voll"><svg viewBox="0 0 24 24"><path d="M5.5 5.5h13v13h-13z" fill="currentColor" fill-opacity=".35"/></svg></button></div></div>
     </div>
   </div>
   <div id="selbar" class="hidden">
@@ -795,6 +814,7 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
     <button id="sSave">Als Form speichern</button>
     <button id="sDel" class="del">Löschen</button>
   </div>
+  <div id="shapePop" class="hidden" role="group" aria-label="Stil der ausgewählten Form"></div>
 </div>
 
 <div id="bgMenu" class="menu hidden">
@@ -820,7 +840,7 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
   <div class="ncrow"><button id="ncPaste" title="Text oder Bild aus der Zwischenablage (auch Strg + V)"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button><button id="ncFile" title="Bild aus einer Datei"><svg class="i"><use href="#ic-img"/></svg>Bild</button><button id="ncClear" title="Geschriebenes löschen"><svg class="i"><use href="#ic-eraser"/></svg>Leeren</button><button id="ncDel" class="del" title="Notiz entfernen"><svg class="i"><use href="#ic-trash"/></svg></button></div>
 </div>
 <div id="pasteMenu" class="menu hidden"><button id="pmPaste"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button></div>
-<div id="tapeMenu" class="menu hidden" role="dialog" aria-label="Dieses Tape"><span id="tmPic" aria-hidden="true"></span><button id="tmCover" role="switch" aria-checked="true"><span>Abgedeckt</span><i class="tmsw" aria-hidden="true"></i></button><i class="tmsep"></i><button id="tmDel" title="Dieses Tape entfernen (mit dem, was darauf steht)" aria-label="Dieses Tape entfernen"><svg class="i"><use href="#ic-trash"/></svg></button></div>
+<div id="tapeMenu" class="menu hidden" role="dialog" aria-label="Dieses Tape"><span id="tmPic" aria-hidden="true"></span><button id="tmCover" role="switch" aria-checked="true"><span>Abgedeckt</span><i class="tmsw" aria-hidden="true"></i></button><i class="tmsep"></i><button id="tmDel" title="Dieses Tape entfernen (mit dem, was darauf steht)" aria-label="Dieses Tape entfernen"><svg class="i"><use href="#ic-trash"/></svg></button><div id="tmColors" role="group" aria-label="Farbe dieses Tapes"></div><div id="tmPats" role="group" aria-label="Muster dieses Tapes"></div></div>
 <div id="sizeMenu" class="menu hidden" data-title="Stift">
   <div class="szhead"><span id="szLabel">Stift</span><b id="szVal"></b></div>
   <input type="range" id="szRange" min="0" max="1000" step="1" aria-label="Strichstärke">
@@ -874,10 +894,6 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
   <button id="mClear" style="color:var(--danger)">Seite leeren</button>
 </div>
 
-<div id="grpMenu" class="menu hidden">
-  <button data-gtool="lasso"><svg class="i"><use href="#ic-lasso"/></svg>Lasso</button>
-  <button data-gtool="tape"><svg class="i"><use href="#ic-tape"/></svg>Tape</button>
-</div>
 <div id="homeMenu" class="menu hidden"></div>
 
 <input type="file" id="fImg" accept="image/*" multiple class="hidden">
@@ -1400,29 +1416,86 @@ function dashPath(P, pts, w, hl, ds) {
   });
   return P;
 }
-function solidPath(P, pts, w, hl) {
-  const n = pts.length / 3;
-  let px = 0, py = 0, has = false;   // Richtung des vorherigen Abschnitts
-  for (let i = 0; i < n; i++) {
-    const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl);
-    let circle = i === 0 || i === n - 1;
-    if (i > 0) {
-      const x0 = pts[i * 3 - 3], y0 = pts[i * 3 - 2], r0 = radAt(pts, i - 1, w, hl);
-      const dx = x - x0, dy = y - y0, L = Math.hypot(dx, dy);
-      if (L > 0.01) {
-        const ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
-        P.moveTo(x0 + nx * r0, y0 + ny * r0); P.lineTo(x0 - nx * r0, y0 - ny * r0);
-        P.lineTo(x - nx * r, y - ny * r); P.lineTo(x + nx * r, y + ny * r);
-        if (has) {
-          if (px * ux + py * uy < COS20) circleAt(P, pts, i - 1, w, hl);
-          else { const qx = -py, qy = px; tri(P, x0, y0, x0 + qx * r0, y0 + qy * r0, x0 + nx * r0, y0 + ny * r0); tri(P, x0, y0, x0 - qx * r0, y0 - qy * r0, x0 - nx * r0, y0 - ny * r0); }
-        }
-        px = ux; py = uy; has = true;
-      }
+// Stück i eines Strichs (ab 1): die Verbindung von Punkt i-1 nach i und das Gelenk bei i-1 zum vorigen Stück (Kreis in
+// Kurven über 20°, sonst zwei Dreiecke). st: Richtung des vorigen Stücks, wird fortgeschrieben; ohne P nur sie (der
+// Textmarker füllt beim Schreiben einzelne Stellen neu und braucht dafür die Richtungen davor)
+function joinPiece(P, pts, i, w, hl, st) {
+  const x = pts[i * 3], y = pts[i * 3 + 1], x0 = pts[i * 3 - 3], y0 = pts[i * 3 - 2];
+  const dx = x - x0, dy = y - y0, L = Math.hypot(dx, dy);
+  if (L <= 0.01) return;
+  const ux = dx / L, uy = dy / L;
+  if (P) {
+    const r = radAt(pts, i, w, hl), r0 = radAt(pts, i - 1, w, hl), nx = -uy, ny = ux;
+    P.moveTo(x0 + nx * r0, y0 + ny * r0); P.lineTo(x0 - nx * r0, y0 - ny * r0);
+    P.lineTo(x - nx * r, y - ny * r); P.lineTo(x + nx * r, y + ny * r);
+    if (st.has) {
+      if (st.px * ux + st.py * uy < COS20) circleAt(P, pts, i - 1, w, hl);
+      else { const qx = -st.py, qy = st.px; tri(P, x0, y0, x0 + qx * r0, y0 + qy * r0, x0 + nx * r0, y0 + ny * r0); tri(P, x0, y0, x0 - qx * r0, y0 - qy * r0, x0 - nx * r0, y0 - ny * r0); }
     }
-    if (circle) { P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); }
   }
+  st.px = ux; st.py = uy; st.has = true;
+}
+function solidPath(P, pts, w, hl) {
+  const n = pts.length / 3, st = { px: 0, py: 0, has: false };
+  for (let i = 1; i < n; i++) joinPiece(P, pts, i, w, hl, st);
+  if (!n) return P;
+  if (hl) flatEnds(P, pts, w);   // Textmarker: flache Enden
+  else { circleAt(P, pts, 0, w, hl); if (n > 1) circleAt(P, pts, n - 1, w, hl); }
   return P;
+}
+// Textmarker wie ein echter Marker mit Keilspitze: gerade abgeschnittene Enden, etwas (w · 0,22) über den ersten und
+// letzten Punkt hinaus, im gleichen Umlaufsinn wie die übrigen Teile; nur angetippt: ein kleines Quadrat.
+// flatDir: Richtung vom Punkt i zum nächsten (step 1) bzw. vorigen (step -1) Punkt, der mehr als 0,5 entfernt ist
+function flatDir(pts, i, step) {
+  const n = pts.length / 3;
+  for (let j = i + step; j >= 0 && j < n; j += step) { const dx = pts[j * 3] - pts[i * 3], dy = pts[j * 3 + 1] - pts[i * 3 + 1], L = Math.hypot(dx, dy); if (L > 0.5) return [dx / L, dy / L]; }
+  return null;
+}
+function flatQuad(P, x0, y0, x1, y1, r) { const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L * r, ny = dx / L * r; P.moveTo(x0 + nx, y0 + ny); P.lineTo(x0 - nx, y0 - ny); P.lineTo(x1 - nx, y1 - ny); P.lineTo(x1 + nx, y1 + ny); }
+// Anfang (u: Richtung in den Strich hinein), Ende (zurück in den Strich, sonst -u), nur angetippt
+function flatStart(P, pts, w, u) { const x = pts[0], y = pts[1], e = w * 0.22; flatQuad(P, x - u[0] * e, y - u[1] * e, x, y, w / 2); }
+function flatEnd(P, pts, w, u) {
+  const k = pts.length / 3 - 1, x = pts[k * 3], y = pts[k * 3 + 1], e = w * 0.22, v = flatDir(pts, k, -1) || [-u[0], -u[1]];
+  flatQuad(P, x, y, x - v[0] * e, y - v[1] * e, w / 2);
+}
+function flatTap(P, pts, w) { const x = pts[0], y = pts[1], r = w / 2; flatQuad(P, x - r, y, x + r, y, r); }
+function flatEnds(P, pts, w) {
+  const u = flatDir(pts, 0, 1);
+  if (!u) { flatTap(P, pts, w); return; }
+  flatStart(P, pts, w, u); flatEnd(P, pts, w, u);
+}
+// Textmarker beim Schreiben: Stück für Stück wie der Stift (den ganzen Strich in jedem Bild neu zu füllen kostete bei
+// langen Strichen viele Millisekunden je Bild), aus denselben Teilen wie der fertige Strich: Verbindungen mit Gelenken,
+// der flache Anfang, sobald seine Richtung feststeht, und das flache Ende als Spitze (nur angetippt: das Quadrat). Die
+// Spitze wandert mit: ihr Kasten wird geleert und mit den Stücken darin neu gefüllt (auf den Kasten beschnitten, auch
+// wo der Strich über sich selbst geht), dann kommen die neuen Stücke und die neue Spitze. Am Ende sieht die Ebene aus
+// wie der fertige Strich. g: Live-Ebene oder Schreibfläche der Notiz; k, ox, oy: Welt -> Gerätepixel; a: der Strich
+// (pts, w, c; drawn: gezeichnete Punkte, hs: Richtung am Anfang, sobald gezeichnet, hst: Richtung, tip: Kasten der Spitze)
+function hlLive(g, a, k, ox, oy) {
+  const pts = a.pts, n = pts.length / 3, w = a.w, r = w / 2;
+  if (!n || (a.tip && a.drawn >= n)) return;
+  g.fillStyle = colorOf(a.c);
+  if (a.tip) {
+    const [x0, y0, x1, y1] = a.tip, b = [(x0 - ox) / k, (y0 - oy) / k, (x1 - ox) / k, (y1 - oy) / k];
+    const P = new Path2D(), st = { px: 0, py: 0, has: false };
+    for (let i = 1; i < a.drawn; i++) {   // nur die Stücke, die den Kasten der alten Spitze berühren
+      const xa = pts[i * 3 - 3], ya = pts[i * 3 - 2], xb = pts[i * 3], yb = pts[i * 3 + 1];
+      const hit = Math.min(xa, xb) - r < b[2] && Math.max(xa, xb) + r > b[0] && Math.min(ya, yb) - r < b[3] && Math.max(ya, yb) + r > b[1];
+      joinPiece(hit ? P : null, pts, i, w, true, st);
+    }
+    if (a.hs) flatStart(P, pts, w, a.hs);
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(x0, y0, x1 - x0, y1 - y0);
+    g.save(); g.beginPath(); g.rect(x0, y0, x1 - x0, y1 - y0); g.clip(); g.setTransform(k, 0, 0, k, ox, oy); g.fill(P); g.restore();
+  }
+  g.setTransform(k, 0, 0, k, ox, oy);
+  const P = new Path2D(), st = a.hst || (a.hst = { px: 0, py: 0, has: false });
+  for (let i = Math.max(1, a.drawn); i < n; i++) joinPiece(P, pts, i, w, true, st);
+  if (!a.hs) { const u = flatDir(pts, 0, 1); if (u) { flatStart(P, pts, w, u); a.hs = u; } }
+  a.drawn = n;
+  if (a.hs) flatEnd(P, pts, w, a.hs); else flatTap(P, pts, w);
+  g.fill(P);
+  const j = a.hs ? n - 1 : 0, x = pts[j * 3] * k + ox, y = pts[j * 3 + 1] * k + oy, m = w * 0.72 * k + 2;   // Spitze: höchstens 0,72 · w vom Punkt
+  a.tip = [Math.floor(x - m), Math.floor(y - m), Math.ceil(x + m), Math.ceil(y + m)];
 }
 function circleAt(P, pts, i, w, hl) { const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl); P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); }
 function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl, s.fl, s.ds); pathCache.set(s, p); } return p; }
@@ -1454,8 +1527,38 @@ function fillStroke(ctx, s, P) {
   ctx.fill(P);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
+// Füllung einer geschlossenen Form (fs: 'solid' | 'hachure' | 'cross') unter ihrer Kontur. Die Fläche sind die Punkte
+// der Form (nonzero: auch skizzenhaft zweimal herum bleibt sie voll). Voll ist zart (FILL_A) in der Farbe der Form, damit
+// Kontur und was darunter steht sichtbar bleiben; Schraffur sind dünne Linien „/“ (Kreuzschraffur dazu „\“), auf die
+// Fläche beschnitten, ihr Abstand wächst mit der Strichbreite.
+const FILL_A = 0.25, fillCache = new WeakMap(), hitCtx = document.createElement('canvas').getContext('2d');   // hitCtx: Treffer in Weltkoordinaten
+function fillGeo(s) {
+  let g = fillCache.get(s); if (g) return g;
+  const p = s.pts, n = p.length / 3, P = new Path2D();
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const x = p[i * 3], y = p[i * 3 + 1]; if (i) P.lineTo(x, y); else P.moveTo(x, y);
+    if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y;
+  }
+  P.closePath(); g = { P };
+  if (s.fs === 'hachure' || s.fs === 'cross') {
+    const H = new Path2D(), step = Math.max(6, s.w * 3.2) * Math.SQRT2, a = x0 - 2, b = x1 + 2;
+    for (let c = x0 + y0 + step / 2; c < x1 + y1; c += step) { H.moveTo(a, c - a); H.lineTo(b, c - b); }   // „/“: y = c − x
+    if (s.fs === 'cross') for (let c = y0 - x1 + step / 2; c < y1 - x0; c += step) { H.moveTo(a, a + c); H.lineTo(b, b + c); }   // „\“: y = x + c
+    g.H = H;
+  }
+  fillCache.set(s, g); return g;
+}
+function fillShape(ctx, s) {
+  const g = fillGeo(s), al = strokeAlpha(s);
+  ctx.save();
+  if (s.fs === 'solid') { ctx.globalAlpha = FILL_A * al; ctx.fillStyle = colorOf(s.c); ctx.fill(g.P); }
+  else if (g.H) { ctx.clip(g.P); ctx.globalAlpha = 0.8 * al; ctx.strokeStyle = colorOf(s.c); ctx.lineWidth = Math.max(0.8, s.w * 0.45); ctx.lineCap = 'round'; ctx.stroke(g.H); }
+  ctx.restore();
+}
+const shapeDraw = (ctx, s, P) => { if (s.fs) fillShape(ctx, s); fillStroke(ctx, s, P); };
 function drawItem(ctx, it, devScale) {
-  if (it.t === 's') { if (it.tp) drawTape(ctx, it, devScale); else if (it.nt) drawNoteBadge(ctx, it, devScale); else fillStroke(ctx, it, strokePath(it)); }   // Erklärung: nur das „i“
+  if (it.t === 's') { if (it.tp) drawTape(ctx, it, devScale); else if (it.nt) drawNoteBadge(ctx, it, devScale); else shapeDraw(ctx, it, strokePath(it)); }   // Erklärung: nur das „i“
   else if (it.t === 'i') drawImageItem(ctx, it, devScale);
   else if (it.t === 'x') drawText(ctx, it);
 }
@@ -1844,7 +1947,7 @@ function drawTape(ctx, s, ds = 1, flat = false) {   // flat: ohne Schatten (gew�
   const g = tapeGeo(s), on = covered(s);
   ctx.save(); ctx.lineCap = 'butt'; ctx.lineJoin = 'round'; ctx.lineWidth = s.w;
   if (!on) ctx.globalAlpha = 0.16;
-  else if (!flat) {
+  else if (!flat && !s.live) {   // beim Ziehen ohne Schatten (spart viel bei langen Tapes)
     // abgedeckt liegt es mit einem Schatten nach unten auf dem Papier, mit der Dicke wachsend. Nur der Schatten wird
     // hier gemalt (die Form liegt weit daneben, der Versatz in Gerätepixeln holt den Schatten zurück)
     const far = 30000 / ds;
@@ -1870,9 +1973,17 @@ const orderCache = new WeakMap();
 function tapeInfo(items = S.items) {
   let r = orderCache.get(items); if (r) return r;
   const open = new Set(); for (const it of items) if (it.tp && !covered(it)) open.add(it.id);
-  const img = [], hl = [], rest = [];
-  for (const it of items) { if (it.on && open.has(it.on)) continue; (it.t === 'i' ? img : it.hl && !it.on ? hl : rest).push(it); }
-  orderCache.set(items, r = { order: [...img, ...hl, ...rest], open }); return r;
+  // Tapes liegen immer oben, jedes mit dem, was darauf geschrieben steht (on); on kann auch eine Erklärung meinen
+  const img = [], hl = [], rest = [], tapes = [], onTape = new Map(), tapeIds = new Set();
+  for (const it of items) if (it.tp) tapeIds.add(it.id);
+  for (const it of items) {
+    if (it.on && open.has(it.on)) continue;
+    if (it.tp) tapes.push(it);
+    else if (it.on && tapeIds.has(it.on)) { let l = onTape.get(it.on); if (!l) onTape.set(it.on, l = []); l.push(it); }
+    else (it.t === 'i' ? img : it.hl && !it.on ? hl : rest).push(it);
+  }
+  const top = []; for (const t of tapes) top.push(t, ...(onTape.get(t.id) || []));
+  orderCache.set(items, r = { order: [...img, ...hl, ...rest, ...top], open }); return r;
 }
 const paintOrder = (items = S.items) => tapeInfo(items).order;
 // sichtbar (nicht mit einem aufgedeckten Tape verschwunden)
@@ -1918,6 +2029,28 @@ function syncTapeMenu(t) {
   b.setAttribute('aria-checked', on ? 'true' : 'false');
   b.title = on ? 'Dieses Tape aufdecken' : 'Dieses Tape wieder abdecken';
   $('#tmPic').replaceChildren(tapeSwatch(t.tp || 'uni', 30, 14, false, t.c));
+  const box = $('#tmColors'); box.replaceChildren();
+  for (const c of TAPE_PALETTE) {   // Farbe genau dieses Tapes
+    const b = document.createElement('button'); b.className = 'tmc' + (t.c === c ? ' on' : ''); b.style.background = colorOf(c);
+    b.title = 'Dieses Tape in dieser Farbe'; b.setAttribute('aria-label', 'Farbe dieses Tapes: ' + c); b.onclick = () => recolorTape(c);
+    box.appendChild(b);
+  }
+  const pats = $('#tmPats'), cur = typeof t.tp === 'string' ? t.tp : 'uni'; pats.replaceChildren();
+  TAPE_PATTERNS.forEach(([k, name], i) => {   // Muster genau dieses Tapes (in seiner Farbe; Figuren in ihrer)
+    const b = document.createElement('button'); b.className = 'tmp' + (cur === k ? ' on' : ''); b.title = name; b.setAttribute('aria-label', 'Muster dieses Tapes: ' + name);
+    const c = tapeSwatch(k, 26, 13, cur === k, TAPE_MOTIFS[k] ? null : t.c); c.style.setProperty('--r', TAPE_TILT[i % TAPE_TILT.length] + 'deg');
+    b.appendChild(c); b.onclick = () => repatternTape(k); pats.appendChild(b);
+  });
+}
+function repatternTape(k) {
+  const t = S.items.find(it => it.id === tmTape && it.tp); if (!t || t.tp === k) return;
+  const n = { ...t, tp: k }; if (TAPE_MOTIFS[k]) n.c = TAPE_MOTIFS[k].c;   // Figuren: ihre Farbe gleich mit
+  commit(S.items.map(it => it.id === t.id ? n : it)); syncTapeMenu(n);
+}
+function recolorTape(c) {
+  const t = S.items.find(it => it.id === tmTape && it.tp); if (!t || t.c === c) return;
+  commit(S.items.map(it => it.id === t.id ? { ...it, c } : it));
+  syncTapeMenu(S.items.find(it => it.id === t.id));
 }
 const hideTapeMenu = () => { const m = $('#tapeMenu'); if (!m.classList.contains('hidden')) popOut(m); };
 $('#tmCover').onclick = () => {
@@ -1972,6 +2105,7 @@ function newTile() {
 function hiddenIds() {
   if (action && action.kind === 'erase') return action.removed;
   if (action && (action.kind === 'move' || action.kind === 'scale')) return S.sel.ids;
+  if (action && action.kind === 'bend') return new Set([action.it.id]);   // wird gerade gebogen: die Live-Ebene zeigt sie
   if (txEd && txEd.id) return new Set([txEd.id]);   // wird gerade bearbeitet: das Textfeld zeigt ihn
   return null;
 }
@@ -2292,7 +2426,9 @@ function markPts(pts, m, i0 = 0) {
 function drawLive() {
   liveQ = false;
   if (action && action.kind === 'draw') {   // der Strich wird direkt gezeichnet; Tape und Geraden hier jedes Mal ganz
-    const a = action; if (!a.redraw) return;
+    const a = action;
+    if (a.hlInc && !a.redraw) { hlLivePage(a); return; }   // Textmarker: nur das Neue und die Spitze
+    if (!a.redraw) return;
     liveClear(); liveWorld();
     const pts = a.straight ? straightPts(a) : a.pts;
     markPts(pts, a.tape ? a.w * 1.5 : a.w);   // Tape: mit Zacken und Schatten
@@ -2301,9 +2437,16 @@ function drawLive() {
     return;
   }
   liveClear();
-  if (!S.sel && !(action && (action.kind === 'shape' || action.kind === 'lasso' || action.kind === 'erase'))) return;
+  if (!S.sel && !(action && (action.kind === 'shape' || action.kind === 'lasso' || action.kind === 'erase' || action.kind === 'bend'))) return;
   liveWorld();
   const ctx = ctxLive, z = S.view.z, blue = S.dark ? '#8fb0ff' : '#2f6fed';
+  if (action && action.kind === 'bend') {   // gebogene Form mit ihrem Kasten und dem Punkt
+    const s = action.tmp || action.it, b = s.bb; liveMark(b[0], b[1], b[2], b[3]);
+    drawItem(ctx, s, DPR * z);
+    ctx.setLineDash([6 / z, 5 / z]); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = blue; const g = contentBox([s]);
+    liveMark(g[0] - 2 / z, g[1] - 2 / z, g[2] + 2 / z, g[3] + 2 / z); ctx.strokeRect(g[0], g[1], g[2] - g[0], g[3] - g[1]); ctx.setLineDash([]);
+    drawEditHandles(ctx, s, z, blue); return;
+  }
   if (action && action.kind === 'shape') liveShape(action);
   if (action && action.kind === 'lasso' && action.pts.length > 2) {
     const p = action.pts; let x0 = p[0], y0 = p[1], x1 = x0, y1 = y0;
@@ -2347,8 +2490,11 @@ function drawLive() {
     liveMark(Math.min(a0, a1) - m, Math.min(b0, b1) - m, Math.max(a0, a1) + m, Math.max(b0, b1) + m);
     ctx.setLineDash([6 / z, 5 / z]); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = blue;
     ctx.strokeRect(a0, b0, a1 - a0, b1 - b0); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(a1, b1, 9 / z, 0, 6.2832); ctx.fillStyle = blue; ctx.fill();
-    ctx.lineWidth = 2 / z; ctx.strokeStyle = '#fff'; ctx.stroke();
+    if (!(S.sel.auto && S.tool === 'shape')) {   // Griff zum Skalieren (nicht an der eben gezeichneten Form)
+      ctx.beginPath(); ctx.arc(a1, b1, 9 / z, 0, 6.2832); ctx.fillStyle = blue; ctx.fill();
+      ctx.lineWidth = 2 / z; ctx.strokeStyle = '#fff'; ctx.stroke();
+    }
+    const et = !mv && editTarget(); if (et) drawEditHandles(ctx, et, z, blue);
   }
 }
 // Rand von cvMain: etwa 384 Gerätepixel, so gewählt, dass er in CSS- und in Gerätepixeln ganz aufgeht (sonst läge die
@@ -2416,7 +2562,10 @@ function setView(tx, ty, z, settle) {
   if (txEd) styleTextEd();   // Textfeld wandert mit (Zoom mit Rad oder Tasten)
   placeCornellBtn(); hideTapeMenu();
   if (action && action.kind === 'draw') {   // Ansicht ändert sich während des Schreibens: Strich neu zeichnen
-    action.noComposite = true; liveClear(); liveWorld(); ctxLive.fillStyle = colorOf(action.c); action.drawn = 0; livePiece(action);
+    const a = action; a.noComposite = true; liveClear(); a.drawn = 0;
+    if (a.redraw) requestLive();
+    else if (a.hlInc) { a.hs = a.hst = a.tip = null; hlLivePage(a); }
+    else { liveWorld(); ctxLive.fillStyle = colorOf(a.c); livePiece(a); }
   }
   if (settle) settleZoom();
   else if (z / S.level < 0.6 || z / S.level > 1.8) { fallbackL = S.level; S.level = z; }
@@ -2475,8 +2624,11 @@ function stepHistory(from, to) {
   if (txEd) commitText();   // offener Text ebenso
   cancelAction(); if (!from.length) return;
   if (S.items.sheets === undefined) S.items.sheets = sheetCount();
-  to.push(S.items); const it = from.pop(); setItems(it); setSheets(it.sheets);
-  clearSel(); markDirty(); requestDraw(); updateUndo();
+  const keep = S.sel ? [...S.sel.ids] : [], auto = !!(S.sel && S.sel.auto);
+  to.push(S.items); const it = from.pop(); setItems(it); setSheets(it.sheets); hideTapeMenu();
+  const still = new Set(keep.filter(id => it.some(i => i.id === id)));   // Auswahl bleibt, soweit es sie noch gibt
+  if (still.size) setSel(still, auto); else clearSel();
+  markDirty(); requestDraw(); updateUndo();
 }
 function undo() { stepHistory(S.undo, S.redo); }
 function redo() { stepHistory(S.redo, S.undo); }
@@ -2564,20 +2716,20 @@ function snapRef(items) {
   if (d) return d.o;
   const b = gridBox(items); return [b[0], b[1]];
 }
-function setSel(ids) {
+function setSel(ids, auto = false) {   // auto: eben gezeichnet (nur im Formen-Werkzeug, ohne Auswahlleiste)
   if (!ids.size) return clearSel();
   const items = S.items.filter(it => ids.has(it.id));
   if (!items.length) return clearSel();
-  S.sel = { ids: new Set(items.map(i => i.id)), bb: contentBox(items) }; requestLive(); placeSelbar();
+  S.sel = { ids: new Set(items.map(i => i.id)), bb: contentBox(items), auto: !!auto }; requestLive(); placeSelbar();
 }
 function clearSel() {
-  if (action && (action.kind === 'move' || action.kind === 'scale')) cancelAction();
-  S.sel = null; $('#selbar').classList.add('hidden'); requestLive();
+  if (action && (action.kind === 'move' || action.kind === 'scale' || action.kind === 'bend')) cancelAction();
+  S.sel = null; $('#selbar').classList.add('hidden'); $('#shapePop').classList.add('hidden'); requestLive();
 }
-function refreshSel() { if (S.sel) setSel(S.sel.ids); }
+function refreshSel() { if (S.sel) setSel(S.sel.ids, S.sel.auto); }
 function placeSelbar() {
   const bar = $('#selbar');
-  if (!S.sel || !S.note || (action && (action.kind === 'move' || action.kind === 'scale'))) { bar.classList.add('hidden'); return; }
+  if (!S.sel || !S.note || (S.tool === 'shape' && S.sel.auto) || (action && (action.kind === 'move' || action.kind === 'scale' || action.kind === 'bend'))) { bar.classList.add('hidden'); placeShapePop(false); return; }
   const strokes = S.items.some(it => S.sel.ids.has(it.id) && it.t === 's');
   for (const id of ['#sColor', '#sSize', '#sSave']) $(id).classList.toggle('hidden', !strokes);
   $('#sGraph').classList.toggle('hidden', !selGraph());
@@ -2592,6 +2744,7 @@ function placeSelbar() {
   bar.style.left = clamp((x0 + x1) / 2, hw, VW - hw) + 'px';
   bar.style.top = y + 'px';
   if (appear) popIn(bar, null, 'translateX(-50%)', 0, 0.8);   // die Leiste ist mittig verschoben, das bleibt
+  placeShapePop(true);
 }
 function transformItem(it, s, ox, oy, dx, dy) {
   const f = (x, o) => o + (x - o) * s;
@@ -2600,6 +2753,7 @@ function transformItem(it, s, ox, oy, dx, dy) {
     for (let i = 0; i < pts.length; i += 3) { pts[i] = f(pts[i], ox) + dx; pts[i + 1] = f(pts[i + 1], oy) + dy; }
     const n = { ...it, pts, w: it.w * s, bb: bboxOf(pts, it.w * s) };
     if (it.gr) { const g = it.gr; n.gr = { ...g, b: [f(g.b[0], ox) + dx, f(g.b[1], oy) + dy, f(g.b[2], ox) + dx, f(g.b[3], oy) + dy], o: [f(g.o[0], ox) + dx, f(g.o[1], oy) + dy], f: (g.f || 1) * s }; }
+    if (it.sh) { const q = v => [f(v[0], ox) + dx, f(v[1], oy) + dy]; n.sh = { ...it.sh, a: q(it.sh.a), b: q(it.sh.b) }; if (it.sh.m) n.sh.m = q(it.sh.m); }   // Ecken, Enden und Knick
     return n;
   }
   return { ...it, x: f(it.x, ox) + dx, y: f(it.y, oy) + dy, w: it.w * s, h: it.h * s, ...(it.t === 'x' ? { fs: it.fs * s } : {}) };
@@ -2624,7 +2778,7 @@ function lassoSelect(P) {
     const x = P[0], y = P[1];
     for (let k = S.items.length - 1; k >= 0; k--) {
       const it = S.items[k]; if (!shown(it)) continue;
-      if (isBox(it) ? (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) : hitStroke(it, x, y, 8 / S.view.z)) { ids.add(it.id); break; }
+      if (isBox(it) ? (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) : hitStroke(it, x, y, 8 / S.view.z) || (it.fs && hitCtx.isPointInPath(fillGeo(it).P, x, y))) { ids.add(it.id); break; }
     }
     return withGroups(ids);
   }
@@ -2686,8 +2840,9 @@ const SQUARE_MAGNET = new Set(['rect', 'ellipse', 'diamond']);
    gerechnet, mit einem Startwert je Form (gleiche Form, gleiches Wackeln; die Vorschau beim Ziehen bleibt ruhig).
    Koordinatensysteme und eigene Formen bleiben, wie sie sind. */
 const SHAPE_BASIC = new Set(['line', 'arrow', 'arrow2', 'rect', 'ellipse', 'tri', 'rtri', 'diamond']), SHAPE_CLOSED = new Set(['rect', 'tri', 'rtri', 'diamond']);
-S.shapeStyle = { ds: 'solid', rnd: 0, sl: 0 };
-{ const v = store.get('shapeStyle'); if (v) { if (['solid', 'dash', 'dot'].includes(v.ds)) S.shapeStyle.ds = v.ds; if (v.rnd === 0 || v.rnd === 1) S.shapeStyle.rnd = v.rnd; if ([0, 1, 2].includes(v.sl)) S.shapeStyle.sl = v.sl; } }
+const SHAPE_FILL = new Set(['rect', 'ellipse', 'tri', 'rtri', 'diamond']), FILLS = ['none', 'hachure', 'cross', 'solid'];
+S.shapeStyle = { ds: 'solid', rnd: 0, sl: 0, fs: 'none' };
+{ const v = store.get('shapeStyle'); if (v) { if (FILLS.includes(v.fs)) S.shapeStyle.fs = v.fs; if (['solid', 'dash', 'dot'].includes(v.ds)) S.shapeStyle.ds = v.ds; if (v.rnd === 0 || v.rnd === 1) S.shapeStyle.rnd = v.rnd; if ([0, 1, 2].includes(v.sl)) S.shapeStyle.sl = v.sl; } }
 // kleiner Zufallsgenerator mit Startwert (xorshift32)
 function seeded(seed) { let x = (seed | 0) || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967296; }; }
 // Ecken eines geschlossenen Linienzugs (erster = letzter Punkt) runden: Bogen mit Radius r, höchstens 45 % der Kanten
@@ -2779,6 +2934,179 @@ function roughArrow(xy, sl, rnd, w) {
   }
   out.fl = xy.fl.map(([a, b]) => [map[a], map[b]]);
   return out;
+}
+/* Grundformen neu rechnen: am Strich steht sh = { a, b (Ecken der Form bzw. Enden der Linie, beim Pfeil die Spitze),
+   rnd, sl, seed (Stil und Startwert wie beim Zeichnen), m (nur Linien: Punkt, durch den sie gebogen ist) }. Ältere
+   Formen ohne sh: aus den Punkten. reshape ändert Stil, Füllung, Farbe, Dicke oder den Knick und rechnet die Punkte neu.
+   Die eben gezeichnete Form bleibt im Formen-Werkzeug ausgewählt; was dann in der Formenleiste, bei den Farben oder
+   Dicken gewählt wird, gilt auch für sie. Linien und Pfeile haben in der Mitte einen Punkt zum Biegen (ausgewählt
+   nach dem Zeichnen oder mit dem Lasso); zurück in die Mitte gezogen werden sie wieder gerade. */
+// Linie, Pfeil oder Doppelpfeil von A nach B, gerade (M null, genau wie beim Zeichnen) oder durch M gebogen
+function lineXY(k, A, B, M, w, sl, seed) {
+  if (!M) return styledLines(k, shapeLines(k, A[0], A[1], B[0], B[1], w), { rnd: 0, sl, seed, w }, null);
+  return [bentLine(k, A, B, M, w, sl, seed)];
+}
+// Gebogen: quadratische Kurve von A nach B, die bei t = 0,5 durch M geht. Pfeilspitzen sitzen wie bei geraden Pfeilen an
+// den Enden, ausgerichtet nach der Richtung der Kurve dort; der Schaft endet an ihrer Kerbe. Von Hand wackelt der
+// Schaft sanft (an den Spitzen fest), skizzenhaft kommt er ein zweites Mal etwas daneben.
+function bentLine(k, A, B, M, w, sl, seed) {
+  const C = [2 * M[0] - (A[0] + B[0]) / 2, 2 * M[1] - (A[1] + B[1]) / 2];
+  const at = t => { const q = 1 - t; return [q * q * A[0] + 2 * q * t * C[0] + t * t * B[0], q * q * A[1] + 2 * q * t * C[1] + t * t * B[1]]; };
+  let len = 0; { let p = A; for (let i = 1; i <= 32; i++) { const q = at(i / 32); len += Math.hypot(q[0] - p[0], q[1] - p[1]); p = q; } }
+  const N = clamp(Math.round(len / 5), 16, 160), P = Array.from({ length: N + 1 }, (_, i) => at(i / N));
+  const two = k === 'arrow2', head = k === 'arrow' || two, L = head ? headSize(len, w, two ? 0.3 : 0.4) : 0, back = L * (1 - HEAD_N);   // Kerbe: so weit hinter der Spitze
+  let i0 = 0, i1 = N;
+  if (head) while (i1 > 1 && Math.hypot(P[i1][0] - B[0], P[i1][1] - B[1]) < back) i1--;
+  if (two) while (i0 < i1 - 1 && Math.hypot(P[i0][0] - A[0], P[i0][1] - A[1]) < back) i0++;
+  const unit = (p, q) => { const dx = q[0] - p[0], dy = q[1] - p[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
+  const uB = unit(P[i1], B), uA = unit(P[i0], A);
+  let shaft = []; for (let i = i0; i <= i1; i++) shaft.push(P[i][0], P[i][1]);
+  let second = null;
+  if (sl) ({ xy: shaft, second } = roughShaft(shaft, sl, seeded(seed), w, two, head));
+  const out = [];
+  if (!head) { out.push(...shaft); if (second) out.push(...second); return out; }
+  const fl = [];
+  if (two) fl.push(headPts(out, A[0], A[1], uA[0], uA[1], L));
+  out.push(...shaft);
+  fl.push(headPts(out, B[0], B[1], uB[0], uB[1], L));
+  if (second) out.push(...second);
+  out.fl = fl;
+  return out;
+}
+// von Hand, Schaft einer gebogenen Linie: sanftes Wackeln quer zur Richtung, an Pfeilspitzen (fix0, fix1) fest;
+// skizzenhaft ein zweiter Durchgang zurück, etwas daneben
+function roughShaft(xy, sl, rnd, w, fix0, fix1) {
+  const m = xy.length / 2, L = [0];
+  for (let i = 1; i < m; i++) L.push(L[i - 1] + Math.hypot(xy[i * 2] - xy[i * 2 - 2], xy[i * 2 + 1] - xy[i * 2 - 1]));
+  const tot = L[m - 1]; if (!(m > 1 && tot > 1)) return { xy, second: null };
+  const amp = clamp(tot * (sl === 1 ? 0.006 : 0.012), 0.6, sl === 1 ? 3 : 6) + w * 0.1;
+  const f1 = 1 + rnd() * 0.6, p1 = rnd() * 6.283, f2 = 2.2 + rnd() * 0.8, p2 = rnd() * 6.283, sep = sl === 2 ? roughOff(rnd, w, tot) : 0;
+  const win = t => Math.min(1, fix0 ? t / 0.2 : 1, fix1 ? (1 - t) / 0.2 : 1);
+  const nrm = i => { const a = Math.max(0, i - 1), b = Math.min(m - 1, i + 1), dx = xy[b * 2] - xy[a * 2], dy = xy[b * 2 + 1] - xy[a * 2 + 1], l = Math.hypot(dx, dy) || 1; return [-dy / l, dx / l]; };
+  const pass = (k, s, rev) => {
+    const out = [];
+    for (let j = 0; j < m; j++) {
+      const i = rev ? m - 1 - j : j, t = L[i] / tot, [nx, ny] = nrm(i);
+      const o = amp * win(t) * (0.65 * Math.sin(6.283 * f1 * t + p1 + k) + 0.35 * Math.sin(6.283 * f2 * t + p2 + k * 1.7)) + s * (0.3 + 0.7 * win(t));
+      out.push(xy[i * 2] + nx * o, xy[i * 2 + 1] + ny * o);
+    }
+    return out;
+  };
+  return { xy: pass(0, 0, false), second: sl === 2 ? pass(2.1, sep, true) : null };
+}
+// Ecken bzw. Enden, Stil und Knick einer Grundform (ältere ohne sh: aus den Punkten, genau und mit Startwert 1)
+function shOf(it) {
+  if (it.sh) return it.sh;
+  const p = it.pts, n = p.length / 3, keep = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]) > 4 ? { a, b, rnd: 0, sl: 0, seed: 1 } : null;
+  if (LINE_SHAPES.has(it.k)) {
+    if (it.k === 'line') return keep([p[0], p[1]], [p[n * 3 - 3], p[n * 3 - 2]]);
+    const sh = shaftOf(it); return sh ? keep([p[sh[0]], p[sh[0] + 1]], [p[sh[1]], p[sh[1] + 1]]) : null;
+  }
+  if (!SHAPE_BASIC.has(it.k)) return null;
+  if ((it.k === 'rect' && n === 5) || (it.k === 'rtri' && n === 4)) return keep([p[0], p[1]], [p[6], p[7]]);   // Ecke a, gegenüber b
+  const g = geoBox([it]); return keep([g[0], g[1]], [g[2], g[3]]);
+}
+const restylable = it => !!it && it.t === 's' && SHAPE_BASIC.has(it.k) && !it.g && !it.tp && !it.nt && !!shOf(it);
+const bendable = it => restylable(it) && LINE_SHAPES.has(it.k);
+function bendPoint(it) { const L = shOf(it); return L.m || [(L.a[0] + L.b[0]) / 2, (L.a[1] + L.b[1]) / 2]; }
+// Punkt einer Linie unter (sx, sy): 'a' Anfang, 'b' Ende bzw. Spitze, 'm' Mitte zum Biegen; knapp daneben: verschieben
+function lineHandleAt(it, sx, sy) {
+  const L = shOf(it), on = p => { const [x, y] = toScreen(p[0], p[1]); return Math.hypot(sx - x, sy - y) < 11; };
+  return on(L.b) ? 'b' : on(L.a) ? 'a' : on(bendPoint(it)) ? 'm' : null;
+}
+// Griffe an den Seiten einer Kastenform (Rechteck, Ellipse, Dreiecke, Raute): Mitte jeder Seite ihres Kastens
+function boxHandles(it) {
+  const L = shOf(it), x0 = Math.min(L.a[0], L.b[0]), x1 = Math.max(L.a[0], L.b[0]), y0 = Math.min(L.a[1], L.b[1]), y1 = Math.max(L.a[1], L.b[1]), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  return { left: [x0, cy], right: [x1, cy], top: [cx, y0], bottom: [cx, y1] };
+}
+// wo die Griffe sitzen: etwas außerhalb der Form, vor dem gestrichelten Rahmen (die Kante selbst greift man zum Verschieben)
+function boxGrips(it) {
+  const h = boxHandles(it), o = it.w / 2 + 10 / S.view.z;
+  return { left: [h.left[0] - o, h.left[1]], right: [h.right[0] + o, h.right[1]], top: [h.top[0], h.top[1] - o], bottom: [h.bottom[0], h.bottom[1] + o] };
+}
+function boxHandleAt(it, sx, sy) {
+  const h = boxGrips(it);
+  for (const k of ['right', 'bottom', 'left', 'top']) { const [x, y] = toScreen(h[k][0], h[k][1]); if (Math.hypot(sx - x, sy - y) < 9) return k; }
+  return null;
+}
+// genau eine Grundform ausgewählt (nach dem Zeichnen oder mit dem Lasso): Linien haben Punkte (Enden, Mitte), Kastenformen
+// Griffe an den Seiten
+function editTarget() {
+  if (!S.sel || S.sel.ids.size !== 1) return null;
+  const it = S.items.find(i => S.sel.ids.has(i.id)); return restylable(it) ? it : null;
+}
+const editPartAt = (it, sx, sy) => LINE_SHAPES.has(it.k) ? lineHandleAt(it, sx, sy) : SHAPE_FILL.has(it.k) ? boxHandleAt(it, sx, sy) : null;
+const bendHit = (it, sx, sy) => !!editPartAt(it, sx, sy);
+function bendTarget() { const it = editTarget(); return it && LINE_SHAPES.has(it.k) ? it : null; }
+// Form neu mit geändertem Stil (ds, rnd, sl, fs), Farbe (c), Dicke (w), Knick (m, null = gerade) oder Enden (a, b); gleiche id
+function reshape(it, o = {}) {
+  const sh = shOf(it); if (!sh) return null;
+  const k = it.k, line = LINE_SHAPES.has(k), w = o.w ?? it.w, c = o.c ?? it.c, sl = o.sl ?? sh.sl ?? 0, rnd = o.rnd ?? sh.rnd ?? 0, seed = sh.seed || 1, A = o.a || sh.a, B = o.b || sh.b;
+  const ds = o.ds ?? it.ds ?? 'solid', fs = o.fs ?? it.fs ?? 'none', m = 'm' in o ? o.m : sh.m || null;
+  const box = [Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.max(A[0], B[0]), Math.max(A[1], B[1])];
+  const xy = line ? lineXY(k, A, B, m, w, sl, seed)[0] : styledLines(k, shapeLines(k, A[0], A[1], B[0], B[1], w), { rnd, sl, seed, w }, box)[0];
+  if (!xy || xy.length < 4) return null;
+  const n = xy.length / 2, p = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { p[i * 3] = xy[i * 2]; p[i * 3 + 1] = xy[i * 2 + 1]; p[i * 3 + 2] = 0.5; }
+  const s = { ...it, c, w, pts: p, bb: bboxOf(p, w), sh: { a: [A[0], A[1]], b: [B[0], B[1]], rnd, sl, seed } };
+  if (line && m) s.sh.m = [m[0], m[1]];
+  if (xy.fl) s.fl = xy.fl.map(r => [r[0], r[1]]); else delete s.fl;
+  if (ds !== 'solid') s.ds = ds; else delete s.ds;
+  if (fs !== 'none' && SHAPE_FILL.has(k)) s.fs = fs; else delete s.fs;
+  return s;
+}
+// ausgewählte Grundformen mit geändertem Stil, Farbe oder Dicke; ein Schritt. Im Formen-Werkzeug (die eben gezeichnete);
+// any: auch sonst (Popup neben einer mit dem Lasso gewählten Form)
+function restyleSel(o, any = false) {
+  if (!S.sel || (!any && S.tool !== 'shape')) return false;
+  let changed = false;
+  const next = S.items.map(it => { if (!S.sel.ids.has(it.id) || !restylable(it)) return it; const n = reshape(it, o); if (!n) return it; changed = true; return n; });
+  if (!changed) return false;
+  commit(next); refreshSel(); return true;
+}
+function beginBend(e, it, wx, wy) {
+  const [sx, sy] = localXY(e), part = editPartAt(it, sx, sy) || 'm', p = part === 'm' ? bendPoint(it) : part.length > 1 ? boxHandles(it)[part] : shOf(it)[part];
+  action = { kind: 'bend', part, id: e.pointerId, it, off: [p[0] - wx, p[1] - wy], m: p, s0: [sx, sy], tmp: null, moved: false, touch: e.pointerType === 'touch' };
+  invalidateBox(it.bb); $('#selbar').classList.add('hidden'); $('#shapePop').classList.add('hidden'); requestLive();
+}
+function moveBend(a, sx, sy, wx, wy) {
+  if (!a.moved && Math.hypot(sx - a.s0[0], sy - a.s0[1]) < 3) return;
+  a.moved = true;
+  const L = shOf(a.it), mx = (L.a[0] + L.b[0]) / 2, my = (L.a[1] + L.b[1]) / 2;
+  a.m = [wx + a.off[0], wy + a.off[1]];
+  if (a.part.length > 1) {   // Seite eines Kastens: nur Breite bzw. nur Höhe; mit Raster rastet die Seite ein
+    const A = [...L.a], B = [...L.b], h = a.part === 'left' || a.part === 'right', v = h ? (S.snap ? snapX(a.m[0]) : a.m[0]) : (S.snap ? snapY(a.m[1]) : a.m[1]), i = h ? 0 : 1;
+    const maxSide = a.part === 'right' || a.part === 'bottom';   // die Ecke (a oder b) mit dem größeren bzw. kleineren Wert wandert
+    if ((A[i] >= B[i]) === maxSide) A[i] = v; else B[i] = v;
+    if (Math.abs(A[i] - B[i]) * S.view.z >= 4) a.tmp = reshape(a.it, { a: A, b: B });
+    requestLive(); return;
+  }
+  if (a.part !== 'm') {   // Anfang oder Spitze versetzen, ein Bogen bleibt; mit Raster rastet das Ende ein
+    if (S.snap) a.m = [snapX(a.m[0]), snapY(a.m[1])];
+    a.tmp = reshape(a.it, { [a.part]: a.m }); requestLive(); return;
+  }
+  const straight = Math.hypot(a.m[0] - mx, a.m[1] - my) * S.view.z < 6;   // zurück in die Mitte: wieder gerade
+  if (straight) a.m = [mx, my];
+  a.tmp = reshape(a.it, { m: straight ? null : a.m });
+  requestLive();
+}
+// Griffe der ausgewählten Grundform: Linie (Anfang, Ende bzw. Spitze, Mitte) oder Kasten (vier Seiten)
+function drawEditHandles(ctx, it, z, blue) { if (LINE_SHAPES.has(it.k)) drawLineHandles(ctx, it, z, blue); else if (SHAPE_FILL.has(it.k)) drawBoxHandles(ctx, it, z, blue); }
+function drawBoxHandles(ctx, it, z, blue) {
+  const h = boxGrips(it), r = 3.5 / z, l = 8 / z;   // kleine Striche quer zur Seite: links/rechts senkrecht, oben/unten waagerecht
+  for (const k of ['left', 'right', 'top', 'bottom']) {
+    const [x, y] = h[k], vert = k === 'left' || k === 'right', w = vert ? r : l, hh = vert ? l : r;
+    liveMark(x - w - 3 / z, y - hh - 3 / z, x + w + 3 / z, y + hh + 3 / z);
+    ctx.beginPath(); ctx.roundRect(x - w, y - hh, 2 * w, 2 * hh, r); ctx.fillStyle = S.dark ? '#232427' : '#fff'; ctx.fill();
+    ctx.lineWidth = 2.2 / z; ctx.strokeStyle = blue; ctx.stroke();
+  }
+}
+// Punkte einer ausgewählten Linie: Anfang, Ende bzw. Spitze und Mitte
+function drawLineHandles(ctx, it, z, blue) { const L = shOf(it); if (!L) return; for (const p of [L.a, L.b, bendPoint(it)]) drawBendHandle(ctx, p, z, blue); }
+function drawBendHandle(ctx, p, z, blue) {
+  const r = 7 / z, [x, y] = p; liveMark(x - r - 3 / z, y - r - 3 / z, x + r + 3 / z, y + r + 3 / z);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fillStyle = S.dark ? '#232427' : '#fff'; ctx.fill();
+  ctx.lineWidth = 2.5 / z; ctx.strokeStyle = blue; ctx.stroke();
 }
 // Stil einer Grundform anwenden: erst Kanten runden, dann von Hand; box = umschließendes Rechteck der Form
 function styledLines(k, lines, a, box) {
@@ -3118,9 +3446,12 @@ function shapeGeo(a) {
     // Koordinatensystem: alle Striche tragen dieselben Daten, damit es sich später neu zeichnen lässt
     const gr = GRAPHS.has(a.shape) && Math.hypot(bx - ax, by - ay) >= 1e-6 ? graphParams(a.shape, Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)) : null;
     const box = [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
-    for (const xy of gr ? graphLines(gr, a.w) : styledLines(a.shape, shapeLines(a.shape, ax, ay, bx, by, a.w), a, box)) {
+    const line = !gr && LINE_SHAPES.has(a.shape);
+    for (const xy of gr ? graphLines(gr, a.w) : line ? lineXY(a.shape, [ax, ay], [bx, by], null, a.w, a.sl || 0, a.seed) : styledLines(a.shape, shapeLines(a.shape, ax, ay, bx, by, a.w), a, box)) {
       const st = shapeStroke(xy, a.c, a.w, a.shape, a.g, gr);
-      if (!gr && a.ds !== 'solid' && SHAPE_BASIC.has(a.shape)) st.ds = a.ds;   // gestrichelt oder gepunktet
+      if (!gr && a.ds && a.ds !== 'solid' && SHAPE_BASIC.has(a.shape)) st.ds = a.ds;   // gestrichelt oder gepunktet
+      if (!gr && a.fs && a.fs !== 'none' && SHAPE_FILL.has(a.shape)) st.fs = a.fs;   // Füllung
+      if (!gr && SHAPE_BASIC.has(a.shape)) st.sh = { a: [ax, ay], b: [bx, by], rnd: a.rnd || 0, sl: a.sl || 0, seed: a.seed || 1 };   // zum Neurechnen (Stil ändern, biegen)
       strokes.push(st);
     }
   }
@@ -3165,6 +3496,7 @@ function stampStrokes(r, s, x, y, g) {
     if (st.al) k.al = st.al;
     if (st.fl) k.fl = st.fl.map(r => [r[0], r[1]]);
     if (st.ds) k.ds = st.ds;
+    if (st.fs) k.fs = st.fs;
     return k;
   });
 }
@@ -3222,7 +3554,7 @@ function liveStampBitmap(a, xf) {
     const c = b0 ? b0.c : document.createElement('canvas');
     c.width = Math.max(1, Math.ceil((r.w + 2 * m) * kk) + 1); c.height = Math.max(1, Math.ceil((r.h + 2 * m) * kk) + 1);
     const cx = c.getContext('2d'); cx.setTransform(kk, 0, 0, kk, m * kk + fx, m * kk + fy);
-    r.strokes.forEach((st, i) => fillStroke(cx, st, d.paths[i]));
+    r.strokes.forEach((st, i) => shapeDraw(cx, st, d.paths[i]));
     d.bmp = { c, k: kk, fx, fy, dark: S.dark, t: performance.now(), cost: performance.now() - now, pend: false };
   }
   const b = d.bmp, q = k / b.k, x = ox - b.fx * q, y = oy - b.fy * q, w = b.c.width * q, h = b.c.height * q;
@@ -3252,12 +3584,12 @@ function liveShape(a) {
   liveMark(cb[0], cb[1], cb[2], cb[3], 5);   // die Rechtecke mit Kachelpixeln liegen höchstens 3 Gerätepixel um die Striche
   if (S.view.z !== S.level) {   // mitten im Zoomen
     if (xf) ctx.transform(xf[0], 0, 0, xf[0], xf[1], xf[2]);
-    g.strokes.forEach((k, n) => fillStroke(ctx, k, g.paths[n]));
+    g.strokes.forEach((k, n) => shapeDraw(ctx, k, g.paths[n]));
     liveWorld(); return;
   }
   const L = S.level, s = L * DPR, r = tileRange(L), bb = contentBox(g.strokes);
   // eigene Formen sind kompakt: ein Rechteck um die ganze Form statt Stücken entlang der Linien
-  const rects = g.box ? [[Math.floor(bb[0] * s - 3), Math.floor(bb[1] * s - 3), Math.ceil(bb[2] * s + 3), Math.ceil(bb[3] * s + 3)]] : shapeRects(g, s);
+  const rects = g.box || g.strokes.some(k => k.fs) ? [[Math.floor(bb[0] * s - 3), Math.floor(bb[1] * s - 3), Math.ceil(bb[2] * s + 3), Math.ceil(bb[3] * s + 3)]] : shapeRects(g, s);
   const i0 = Math.max(r.i0, Math.floor(bb[0] * s / T)), i1 = Math.min(r.i1, Math.floor(bb[2] * s / T));
   const j0 = Math.max(r.j0, Math.floor(bb[1] * s / T)), j1 = Math.min(r.j1, Math.floor(bb[3] * s / T));
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -3274,7 +3606,7 @@ function liveShape(a) {
     ctx.save(); ctx.beginPath(); ctx.rect(sx, sy, T, T); ctx.clip();
     ctx.setTransform(s, 0, 0, s, r.txD, r.tyD);
     if (xf) ctx.transform(xf[0], 0, 0, xf[0], xf[1], xf[2]);
-    g.strokes.forEach((k, n) => { if (boxHit(k.bb, wb)) fillStroke(ctx, k, g.paths[n]); });   // einzeln, genau wie renderTile
+    g.strokes.forEach((k, n) => { if (boxHit(k.bb, wb)) shapeDraw(ctx, k, g.paths[n]); });   // einzeln, genau wie renderTile
     ctx.restore();
   }
   liveWorld();
@@ -3290,6 +3622,7 @@ function finishShape(a) {
   // Textmarker in einer eigenen Form: Kacheln neu zeichnen statt Pixel übernehmen
   if (g.xf) { const d = stampData(a.custom); if (d.bmp) { d.bmp.c.width = 0; d.bmp = null; } }   // Vorschaubild freigeben
   commitLive(list, list.some(s => s.hl) || !!g.xf, !!a.custom);
+  setSel(withGroups(new Set(list.map(s => s.id))), true);   // bleibt ausgewählt (nur im Formen-Werkzeug): Stil, Farbe, Dicke ändern, biegen
 }
 // Auswahl beim Skalieren: geometrischer rechter (bei hohen Auswahlen unterer) Rand aufs Raster
 function snapScale(a) {
@@ -3358,7 +3691,7 @@ function strokeInput(a, sx, sy, p, t) {
   filterStep(a, sx, sy, p, t);
   const pushed = pushFiltered(a);
   if (a.holdT !== undefined && Math.hypot(sx - a.still[0], sy - a.still[1]) > 4) { a.still = [sx, sy]; armHold(a); }
-  if (a.redraw) requestLive(); else if (pushed) livePiece(a);
+  if (a.redraw || a.hlInc) requestLive(); else if (pushed) livePiece(a);
 }
 // Halten zum Begradigen (Textmarker, Tape): bleibt der Stift eine knappe halbe Sekunde fast still, wird der Strich zur
 // Geraden vom Anfang bis zum Stift, Weiterziehen dreht und verlängert sie (wie bei Goodnotes)
@@ -3381,6 +3714,12 @@ function catchUp(a) {
   for (let i = 0; i < 400 && Math.hypot(x - g.x, y - g.y) > 0.5; i++) { t += 4; filterStep(a, x, y, p, t); pushFiltered(a); }
 }
 function settleStroke(a) { if (a.raw) { catchUp(a); livePiece(a); } }
+// Textmarker auf der Live-Ebene (in der Ansicht der Seite), mit dem Bereich, den er berührt hat
+function hlLivePage(a) {
+  const from = Math.max(0, a.drawn - 1), { tx, ty, z } = S.view;
+  hlLive(ctxLive, a, DPR * z, DPR * tx, DPR * ty);
+  markPts(a.pts, a.w, from);
+}
 function livePiece(a) {
   const P = new Path2D(), n = a.pts.length / 3;
   if (a.drawn >= n) return;
@@ -3397,6 +3736,7 @@ const penButton = e => e.pointerType === 'pen' && !penErase(e) && (e.button === 
 // Wo ein Punkt die Auswahl trifft: 'scale' am Griff, 'move' darin (mit etwas Rand), sonst null
 function selHit(sx, sy, wx, wy) {
   if (!S.sel) return null;
+  { const et = editTarget(); if (et && bendHit(et, sx, sy)) return 'bend'; }   // Punkte einer Linie (Enden, Mitte), Seiten eines Kastens
   const b = S.sel.bb, [hx, hy] = toScreen(b[2], b[3]), m = 6 / S.view.z;
   if (Math.hypot(sx - hx, sy - hy) < 22) return 'scale';
   return wx >= b[0] - m && wx <= b[2] + m && wy >= b[1] - m && wy <= b[3] + m ? 'move' : null;
@@ -3405,11 +3745,11 @@ function startAction(e) {
   const [sx, sy] = localXY(e), [wx, wy] = toWorld(sx, sy);
   let tool = S.tool;
   if (penErase(e)) tool = 'eraser';
-  else if (penButton(e) || (e.pointerType === 'pen' && tool !== 'hand' && selHit(sx, sy, wx, wy))) tool = 'lasso';
+  else if (penButton(e) || (e.pointerType === 'pen' && tool !== 'hand' && !(tool === 'shape' && S.sel && S.sel.auto) && selHit(sx, sy, wx, wy))) tool = 'lasso';
   if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || spaceDown)) tool = 'hand';
   if (tool === 'text') { clearSel(); action = { kind: 'text', id: e.pointerId, sx, sy, wx, wy, ex: sx, cx: e.clientX, cy: e.clientY, t0: e.timeStamp, touch: e.pointerType === 'touch' }; return; }
   if (tool === 'hand') { action = { kind: 'pan', id: e.pointerId, sx, sy, tx: S.view.tx, ty: S.view.ty, touch: e.pointerType === 'touch', right: e.pointerType === 'mouse' && e.button === 2 }; return; }
-  if (tool !== 'lasso' && S.sel) clearSel();
+  if (tool !== 'lasso' && tool !== 'shape' && S.sel) clearSel();
   if (tool === 'pen' || tool === 'hl' || tool === 'tape') {
     const hl = tool === 'hl', tape = tool === 'tape', p = pressureOf(e);
     action = { kind: 'draw', id: e.pointerId, hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[tool], w: S.size[tool], al: tape ? undefined : S.alpha[tool], drawn: 0,
@@ -3417,20 +3757,27 @@ function startAction(e) {
     if (!tape) { const t = tapeAt(wx, wy); if (t && covered(t)) action.on = t.id; }   // auf ein abgedecktes Tape geschrieben
     liveClear(); liveStyle(tape ? null : action);
     if (tape || action.straight) { action.redraw = true; requestLive(); }
+    else if (hl) { action.hlInc = true; hlLivePage(action); }   // Textmarker: Stück für Stück mit flachen Enden (hlLive)
     else { liveWorld(); ctxLive.fillStyle = colorOf(action.c); livePiece(action); }
     if (hl || tape) armHold(action);
   } else if (tool === 'shape') {
+    if (S.sel) {   // die eben gezeichnete Form: Punkt zum Biegen; sonst entsteht eine neue (auch an ihrer Ecke)
+      const et = e.pointerType === 'touch' ? null : editTarget();
+      if (et && bendHit(et, sx, sy)) { beginBend(e, et, wx, wy); return; }
+      clearSel();
+    }
     let cs = null;
     if (isCustom(S.shape)) { cs = customOf(S.shape); if (!cs) { if (!customReady) return; setShape('rect'); } }   // Bibliothek lädt noch / Form fehlt
     // eigene Form und Graph: alle Striche bekommen eine gemeinsame Gruppe (Antippen mit dem Lasso wählt alles)
     action = { kind: 'shape', id: e.pointerId, shape: S.shape, custom: cs, c: S.color.pen, w: S.size.pen, a0: [wx, wy], b: [wx, wy], shift: e.shiftKey, g: GRAPHS.has(S.shape) || cs ? uid() : null, geo: null,
-      ds: S.shapeStyle.ds, rnd: S.shapeStyle.rnd, sl: S.shapeStyle.sl, seed: (Math.random() * 4294967296) >>> 0 };   // Stil und Startwert für diese Form
+      ds: S.shapeStyle.ds, rnd: S.shapeStyle.rnd, sl: S.shapeStyle.sl, fs: S.shapeStyle.fs, seed: (Math.random() * 4294967296) >>> 0 };   // Stil und Startwert für diese Form
     liveClear(); liveStyle(null); requestLive();
   } else if (tool === 'eraser') {
     action = { kind: 'erase', id: e.pointerId, removed: new Set(), at: [wx, wy] }; eraseAt(wx, wy); requestLive();
   } else if (tool === 'lasso') {
     if (S.sel) {
       const h = selHit(sx, sy, wx, wy);
+      if (h === 'bend') { beginBend(e, editTarget(), wx, wy); return; }
       if (h === 'scale') { const gb = S.snap ? gridBox(S.items.filter(it => S.sel.ids.has(it.id))) : S.sel.bb;   // mit Raster: an der Ecke, die auf dem Raster liegt
         beginTransform({ kind: 'scale', id: e.pointerId, anchor: [gb[0], gb[1]], s: 1, p0: [wx, wy] }); return; }
       if (h === 'move') { beginTransform({ kind: 'move', id: e.pointerId, wx, wy, sx, sy, dx: 0, dy: 0, moved: false }); return; }
@@ -3458,6 +3805,7 @@ function moveAction(e) {
     else if (a.kind === 'erase') { a.at = [wx, wy]; eraseAt(wx, wy); }
     else if (a.kind === 'lasso') { if (Math.hypot(sx - a.last[0], sy - a.last[1]) >= 3) { a.pts.push(wx, wy); a.last = [sx, sy]; } }
     else if (a.kind === 'text') a.ex = sx;
+    else if (a.kind === 'bend') moveBend(a, sx, sy, wx, wy);
     else if (a.kind === 'shape') { a.b[0] = wx; a.b[1] = wy; a.shift = ev.shiftKey; a.mt = performance.now(); a.rest = false; }
     else if (a.kind === 'move') {
       a.dx = wx - a.wx; a.dy = wy - a.wy;
@@ -3482,7 +3830,7 @@ function deferLiveClear() {
 // Textmarker und Tape: Kacheln neu zeichnen statt die Live-Ebene übernehmen (Textmarker liegt unter der Schrift)
 function finishStroke(a) {
   clearTimeout(a.holdT);
-  if (a.straight) a.pts = straightPts(a); else if (a.redraw) { if (a.raw) catchUp(a); } else settleStroke(a);
+  if (a.straight) a.pts = straightPts(a); else if (a.redraw) { if (a.raw) catchUp(a); } else if (a.hlInc) { if (a.raw) { catchUp(a); hlLivePage(a); } } else settleStroke(a);
   if (!a.tape && !a.straight) {   // nur angetippt, und zwar auf das „i“ einer Erklärung: die Karte öffnen statt einen Punkt setzen
     const r = a.raw || a.start;
     if (Math.hypot(r[0] - a.start[0], r[1] - a.start[1]) < 6 && pathLen(a.pts) * S.view.z < 12) {
@@ -3510,7 +3858,8 @@ function finishStroke(a) {
 function commitLive(list, noComposite, sync) {
   const bb = contentBox(list), hl = list[0].hl;
   const [vx0, vy0] = toWorld(0, 0), [vx1, vy1] = toWorld(VW, VH);
-  const inView = !noComposite && bb[0] > vx0 && bb[1] > vy0 && bb[2] < vx1 && bb[3] < vy1 && S.view.z === S.level;
+  const underTape = list.some(s => !s.tp && !s.on) && S.items.some(t => t.tp && boxHit(t.bb, bb));   // Tapes liegen obendrauf
+  const inView = !noComposite && !underTape && bb[0] > vx0 && bb[1] > vy0 && bb[2] < vx1 && bb[3] < vy1 && S.view.z === S.level;
   commit(appendItems(S.items, list), !inView);
   if (!inView && sync && S.view.z === S.level) {
     const L = S.level, s = L * DPR, r = tileRange(L);
@@ -3546,6 +3895,11 @@ function endAction(cancel) {
   }
   if (a.kind === 'text') { if (!cancel) textTap(a); return; }
   if (a.kind === 'pan') { lastPan = { right: a.right, moved: S.view.tx !== a.tx || S.view.ty !== a.ty, t: performance.now() }; viewChanged(); requestLive(); return; }
+  if (a.kind === 'bend') {
+    if (!cancel && a.moved && a.tmp) { commit(S.items.map(x => x.id === a.it.id ? a.tmp : x)); if (S.sel) refreshSel(); }
+    else invalidateBox(a.it.bb);
+    requestDraw(); requestLive(); placeSelbar(); return;
+  }
   if (cancel) {
     if (a.kind === 'erase') for (const id of a.removed) { const it = S.items.find(i => i.id === id); if (it) invalidateBox(it.bb); }
     if ((a.kind === 'move' || a.kind === 'scale') && S.sel) invalidateBox(S.sel.bb);
@@ -3737,21 +4091,14 @@ function setTool(t) {
   if (txEd && t !== 'text') commitText();
   if (action && t !== S.tool) cancelAction();
   S.tool = t;
-  if (GROUP[t]) setGroupTool(t);
   $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
-  if (t !== 'lasso') clearSel();
+  if (t !== 'lasso' || (S.sel && S.sel.auto)) clearSel(); else if (S.sel) placeSelbar();   // die Auswahl nach dem Zeichnen gilt nur im Formen-Werkzeug
   $('#sizeMenu').classList.add('hidden'); $('#colorMenu').classList.add('hidden'); $('#tapeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes(); fitBar();
 }
 // Lasso, Tape und Formen teilen sich einen Knopf, damit die Leiste einzeilig bleibt. Er zeigt das zuletzt gewählte der
 // drei: Antippen wählt es (Formen: mit der Auswahl der Form), ist es schon gewählt, öffnet sich die Auswahl der drei
-const GROUP = { lasso: ['ic-lasso', 'Auswählen / Verschieben (L)'], tape: ['ic-tape', 'Tape: abdecken, antippen deckt auf (T)'] };   // Formen haben einen eigenen Knopf
-function setGroupTool(t) {
-  const b = $('#bGroup'); if (b.dataset.tool === t) return;
-  b.dataset.tool = t; b.querySelector('use').setAttribute('href', '#' + GROUP[t][0]); store.set('groupTool', t);
-  shapeTitle();
-}
 // Die Leiste bleibt einzeilig: wird es eng, wird zuerst der Titel schmaler; erst wenn das nicht reicht, bricht sie um
 function fitBar() {
   const bar = $('#bar'); if (!bar.offsetParent) return;
@@ -3781,7 +4128,7 @@ function renderColors() {
   const k = toolKind();
   const show = penLike();
   box.style.opacity = show ? 1 : 0.35;
-  const pick = () => { store.set('color', S.color); if (!show) setTool('pen'); else renderColors(); };
+  const pick = () => { store.set('color', S.color); if (!show) setTool('pen'); else { renderColors(); if (k === 'pen') restyleSel({ c: S.color.pen }); } };
   for (const c of k === 'tape' ? TAPE_PALETTE : PALETTE) {
     const b = document.createElement('button'); b.className = 'sw' + (S.color[k] === c ? ' on' : '');
     b.style.background = colorOf(c); b.title = c === 'ink' ? 'Schwarz / Weiß' : c;
@@ -3793,6 +4140,7 @@ function renderColors() {
   if (custom) cb.style.setProperty('--cc', S.color[k]);   // innen die Farbe, außen der Regenbogen-Ring (CSS)
   cb.onclick = openColorMenu;
   box.appendChild(cb);
+  renderSizes();   // die Stücke bei Textmarker und Tape zeigen die Farbe
 }
 
 /* Eigene Farbe: ein Farbwähler im Stil der App statt des Fensters von Windows/Chrome. Feld für Sättigung (nach
@@ -3858,7 +4206,7 @@ function cpApply(commit, exact) {
   const hex = cp.hex = exact || hsvHex(cp.h, cp.s, cp.v), sw = $('#colors .sw.custom');
   S.color[cp.k] = hex;
   if (sw) { sw.style.setProperty('--cc', hex); $$('#colors .sw').forEach(b => b.classList.toggle('on', b === sw)); sw.classList.add('has'); }
-  if (commit) { const first = recentColors[0]; store.set('color', S.color); cpRemember(hex); cpRecentRow(recentColors[0] !== first); renderColors(); }
+  if (commit) { const first = recentColors[0]; store.set('color', S.color); cpRemember(hex); cpRecentRow(recentColors[0] !== first); renderColors(); if (cp.k === 'pen') restyleSel({ c: hex }); }
   cpShow();
 }
 function openColorMenu() {
@@ -3919,6 +4267,41 @@ const fmtSize = v => String(v).replace('.', ',');
 const fmtSmooth = v => v ? Math.round(v * 100) + ' %' : 'Aus';
 const dotPx = (k, v) => k === 'tape' ? clamp(2 + v * 0.42, 6, 26) : k === 'hl' ? clamp(2 + v * 0.55, 4, 26) : clamp(1.5 + v * 1.65, 3, 24);
 function setSize(k, i) { S.sizeIdx[k] = i; S.size[k] = S.presets[k][i]; store.set('sizeIdx', S.sizeIdx); }
+// Dicke von Textmarker und Tape als kurzes Stück, so wie es auf der Seite aussieht: das Tape im gewählten Muster und
+// seiner Farbe mit gerissenen Enden; der Textmarker als Schwung (ein kurzer Strich mit dem Marker: erst nach unten, dann
+// hinauf), mit dem echten Textmarker-Pfad und seinen flachen Enden, in seiner Farbe und Deckkraft, an den Rändern etwas
+// kräftiger und an den Enden mit weich etwas mehr Tinte. In der Leiste kräftiger als auf der Seite, damit er auch
+// dunkel leuchtet; hell wie auf Papier multipliziert. Die Dicke wächst wie die Punkte beim Stift (dotPx), der Schwung
+// wird dabei flacher, damit er in den Knopf passt
+function sizeStrip(k, v) {
+  const h = Math.round(dotPx(k, v));
+  if (k === 'tape') return tapeSwatch(S.tapePat, 26, h + 2);
+  const W = 34, A = Math.max(3.5, 8 - h * 0.22), H = Math.ceil(h + 2 * A + 6), c = document.createElement('canvas');
+  c.width = Math.round(W * DPR); c.height = Math.round(H * DPR); c.style.width = W + 'px'; c.style.height = H + 'px';
+  if (!isDark()) c.style.mixBlendMode = 'multiply';
+  const x0 = h * 0.37 + 1.5, L = W - 2 * x0, cy = H / 2, q = [];
+  const B = [[x0, cy - A * 0.3], [x0 + L * 0.28, cy + A * 1.9], [x0 + L * 0.62, cy + A * 0.9], [x0 + L, cy - A * 1.1]];
+  for (let i = 0; i <= 32; i++) {
+    const t = i / 32, u = 1 - t, f = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+    q.push(f.reduce((s, m, j) => s + m * B[j][0], 0), f.reduce((s, m, j) => s + m * B[j][1], 0), 0.5);
+  }
+  const P = Float32Array.from(q), col = colorOf(S.color.hl), a = Math.min(1, strokeAlpha({ hl: true, al: S.alpha.hl }) * (isDark() ? 1.45 : 1.6));
+  const layer = () => { const o = document.createElement('canvas'); o.width = c.width; o.height = c.height; const g = o.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.fillStyle = col; g.fill(buildPath(P, h, true)); return [o, g]; };
+  const g = c.getContext('2d');
+  const [body] = layer(); g.globalAlpha = a; g.drawImage(body, 0, 0);   // der Strich deckend, dann mit Deckkraft: gleichmäßig
+  const [rim, rg] = layer(); rg.globalCompositeOperation = 'destination-out'; rg.fill(buildPath(P, h * 0.62, true));   // Ränder
+  g.globalAlpha = a * 0.32; g.drawImage(rim, 0, 0);
+  const [ends, eg] = layer(); eg.globalCompositeOperation = 'destination-in';   // Enden: nach innen weich auslaufend
+  const m = document.createElement('canvas'); m.width = c.width; m.height = c.height; const mg = m.getContext('2d'); mg.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for (const j of [0, q.length / 3 - 1]) {
+    const x = q[j * 3], y = q[j * 3 + 1], R = h * 0.9 + 3, gr = mg.createRadialGradient(x, y, 0, x, y, R);
+    gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.45, 'rgba(0,0,0,.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    mg.fillStyle = gr; mg.fillRect(x - R, y - R, 2 * R, 2 * R);
+  }
+  eg.setTransform(1, 0, 0, 1, 0, 0); eg.drawImage(m, 0, 0);
+  g.globalAlpha = a * 0.5; g.drawImage(ends, 0, 0);
+  return c;
+}
 function renderSizes() {
   const box = $('#sizes'); box.innerHTML = '';
   const k = toolKind();
@@ -3928,13 +4311,15 @@ function renderSizes() {
     const on = S.sizeIdx[k] === i;
     const b = document.createElement('button'); b.className = 'sz' + (on ? ' on' : '');
     b.title = 'Strichstärke ' + fmtSize(v) + (on ? ' (nochmal tippen zum Anpassen)' : '');
-    const d = document.createElement('span'); d.style.width = d.style.height = dotPx(k, v) + 'px';
-    const fa = k === 'tape' ? 1 : S.alpha[k] / ALPHA_DEFAULT[k]; if (fa < 1) d.style.opacity = Math.max(0.25, fa);   // durchsichtiger eingestellt
-    b.appendChild(d);
+    if (k === 'pen') {
+      const d = document.createElement('span'); d.style.width = d.style.height = dotPx(k, v) + 'px';
+      const fa = S.alpha.pen / ALPHA_DEFAULT.pen; if (fa < 1) d.style.opacity = Math.max(0.25, fa);   // durchsichtiger eingestellt
+      b.appendChild(d);
+    } else { b.classList.add('strip'); b.appendChild(sizeStrip(k, v)); }   // Textmarker, Tape: ein Stück zum Vorstellen
     b.onclick = () => {
       if (on && show) { openSizeMenu(k, b); return; }
       popOut($('#sizeMenu')); $('#bTune').classList.remove('on'); setSize(k, i);
-      if (!show) setTool(k); else renderSizes();
+      if (!show) setTool(k); else { renderSizes(); if (k === 'pen') restyleSel({ w: S.size.pen }); }
     };
     box.appendChild(b);
   });
@@ -3981,12 +4366,14 @@ function drawSizePreview(k, v) {
     else { g.globalAlpha = strokeAlpha({ hl: true, al: S.alpha.hl }); g.fillStyle = colorOf(S.color.hl); g.fill(buildPath(pts, w, true)); }
     return;
   }
-  let seed = 7, a = null; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647 - 0.5;
-  for (let i = 0; i <= 160; i++) {
-    const u = i / 160, x = m + u * (W - 2 * m), p = 0.45 + 0.25 * Math.sin(u * Math.PI);
-    const y = H / 2 - amp * Math.sin(u * Math.PI * 4) + 1.4 * Math.sin(i / 3.2) + 1.2 * rnd();
-    if (!a) a = smoothStart(x, y, p, 0, (x, y) => [x, y]); else { filterStep(a, x, y, p, i * 8); pushFiltered(a); }
-    a.raw = [x, y, p, i * 8];
+  // Schreibprobe wie Handschrift: vier Schlaufen, leichtes Zittern, etwa 1 s geschrieben (4 ms je Punkt), in den Bögen langsamer
+  let seed = 7, a = null, t = 0; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647 - 0.5, N = 240, loops = 4, adv = (W - 2 * m - 24) / loops;
+  for (let i = 0; i <= N; i++) {
+    const u = i / N, ph = 2 * Math.PI * loops * u, x = m + 12 + u * (W - 2 * m - 24) - adv * 0.32 * Math.sin(ph), y = H / 2 - amp * 0.95 * Math.cos(ph) * (0.75 + 0.25 * Math.sin(u * Math.PI));   // Schlaufen oben wie bei „ℓ“
+    const p = 0.45 + 0.2 * Math.sin(u * Math.PI) + 0.08 * Math.sin(ph), jx = 0.45 * rnd(), jy = 0.45 * rnd();
+    t += 4 * (1 + 0.35 * Math.abs(Math.sin(ph)));
+    if (!a) a = smoothStart(x + jx, y + jy, p, 0, (x, y) => [x, y]); else { filterStep(a, x + jx, y + jy, p, t); pushFiltered(a); }
+    a.raw = [x + jx, y + jy, p, t];
   }
   catchUp(a);
   const P = new Path2D();
@@ -4032,7 +4419,7 @@ function renderTapePats() {
     b.onclick = () => {
       S.tapePat = k; store.set('tapePat', k);
       if (TAPE_MOTIFS[k]) { S.color.tape = TAPE_MOTIFS[k].c; store.set('color', S.color); renderColors(); }   // Figuren: ihre Farbe gleich mit
-      renderTapePats(); showSize();
+      renderTapePats(); showSize(); renderSizes();
     };
     box.appendChild(b);
   });
@@ -4064,21 +4451,11 @@ $('#smRange').oninput = () => {
   const b = $('#smPresets').children[S.smoothIdx]; b.textContent = fmtSmooth(v); b.title = 'Glättung ' + fmtSmooth(v); showSize();
 };
 $$('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
-// Auswahl Lasso oder Tape unter dem Knopf (unter der ganzen Leiste, auch wenn sie umbricht)
-function openGroupMenu() {
-  const g = $('#grpMenu'), r = $('#bGroup').getBoundingClientRect();
-  closeMenus();
-  $$('#grpMenu [data-gtool]').forEach(x => x.classList.toggle('on', x.dataset.gtool === S.tool));
-  g.classList.remove('hidden');
-  g.style.top = Math.max(r.bottom, barBottom()) + 8 + 'px';
-  g.style.left = clamp(r.left + r.width / 2 - g.offsetWidth / 2, 8, innerWidth - g.offsetWidth - 8) + 'px';
-  popIn(g, $('#bGroup'));
-}
 // Eigene Formen: klappt unter ihrem Knopf in der Formenleiste auf
 function openShapeMenu() {
   if (S.tool !== 'shape') setTool('shape');
   for (const a of $('#shapeBar').getAnimations()) a.finish();   // gerade erschienen: erst an ihrem Platz messen
-  const m = $('#shapeMenu'), btn = $('#sbCustom'), r = btn.getBoundingClientRect(), top = r.bottom + 10;
+  const m = $('#shapeMenu'), btn = $('#sbCustom'), r = btn.getBoundingClientRect(), top = Math.max(r.bottom, barBottom()) + 10;   // auch unter einer umbrochenen Formenleiste
   closeMenus(); renderCustomGrid(); markShapeMenu();
   m.classList.remove('hidden');
   m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
@@ -4092,15 +4469,60 @@ function markShapeStyle() {
   $$('#shStyle [data-ds]').forEach(b => b.classList.toggle('on', b.dataset.ds === st.ds));
   $$('#shStyle [data-rnd]').forEach(b => b.classList.toggle('on', +b.dataset.rnd === st.rnd));
   $$('#shStyle [data-sl]').forEach(b => b.classList.toggle('on', +b.dataset.sl === st.sl));
+  $$('#shStyle [data-fs]').forEach(b => b.classList.toggle('on', b.dataset.fs === st.fs));
 }
 $$('#shStyle button').forEach(b => b.onclick = () => {
   const st = S.shapeStyle;
-  if (b.dataset.ds) st.ds = b.dataset.ds; if (b.dataset.rnd) st.rnd = +b.dataset.rnd; if (b.dataset.sl) st.sl = +b.dataset.sl;
+  if (b.dataset.ds) st.ds = b.dataset.ds; if (b.dataset.rnd) st.rnd = +b.dataset.rnd; if (b.dataset.sl) st.sl = +b.dataset.sl; if (b.dataset.fs) st.fs = b.dataset.fs;
   store.set('shapeStyle', st);
+  restyleSel(b.dataset.ds ? { ds: st.ds } : b.dataset.rnd ? { rnd: st.rnd } : b.dataset.sl ? { sl: st.sl } : { fs: st.fs });   // gilt auch für die eben gezeichnete Form
   if (isCustom(S.shape) || GRAPHS.has(S.shape)) setShape('rect');   // der Stil gilt für Grundformen: sonst weiter mit dem Rechteck
   if (S.tool !== 'shape') setTool('shape');
   markShapeMenu();
 });
+/* Popup neben einer mit dem Lasso gewählten Form (nur Grundformen in der Auswahl, nicht im Formen-Werkzeug, dort ist die
+   Formenleiste): Kontur, Kanten, Sauberkeit und Füllung mit denselben Knöpfen wie in der Formenleiste, aber nur für die
+   gewählten Formen; der Stil für neue Formen bleibt. Jede Änderung ist ein Schritt. Es zeigt, was gerade gilt (bei
+   mehreren Formen nur, was alle gemeinsam haben), und nur, was zu ihnen passt: Kanten bei Rechteck, Dreiecken und
+   Raute, Füllung bei Kastenformen. Es kommt und geht mit der Auswahlleiste und sitzt rechts neben der Auswahl (sonst
+   links), oben bündig; liegt die Auswahlleiste unter der Auswahl, unten bündig. */
+const SP_NAMES = { ds: 'Kontur', rnd: 'Kanten', sl: 'Sauberkeit', fs: 'Füllung' };
+const SP_VAL = { ds: it => it.ds || 'solid', rnd: it => shOf(it).rnd || 0, sl: it => shOf(it).sl || 0, fs: it => it.fs || 'none' };
+const SP_FITS = { ds: () => true, rnd: it => SHAPE_CLOSED.has(it.k), sl: () => true, fs: it => SHAPE_FILL.has(it.k) };
+$$('#shStyle .shgrp').forEach(gp => {
+  const g = ['ds', 'rnd', 'sl', 'fs'].find(k => gp.querySelector(`[data-${k}]`));
+  const row = document.createElement('div'), lab = document.createElement('span'); row.className = 'sprow'; row.dataset.g = g; lab.textContent = SP_NAMES[g];
+  row.append(lab, gp.firstElementChild.cloneNode(true)); $('#shapePop').appendChild(row);
+});
+$$('#shapePop button').forEach(b => b.onclick = () => {
+  const d = b.dataset;
+  restyleSel(d.ds ? { ds: d.ds } : d.rnd ? { rnd: +d.rnd } : d.sl ? { sl: +d.sl } : { fs: d.fs }, true);
+});
+function popShapes() {
+  if (!S.sel || S.sel.auto || S.tool === 'shape') return null;
+  const items = S.items.filter(it => S.sel.ids.has(it.id));
+  return items.length && items.every(restylable) ? items : null;
+}
+function placeShapePop(show) {
+  const pop = $('#shapePop'), items = show ? popShapes() : null;
+  if (!items) { pop.classList.add('hidden'); return; }
+  for (const g of ['ds', 'rnd', 'sl', 'fs']) {
+    const its = items.filter(SP_FITS[g]), vs = new Set(its.map(SP_VAL[g])), one = vs.size === 1 ? String([...vs][0]) : null;
+    pop.querySelector(`.sprow[data-g=${g}]`).hidden = !its.length;
+    pop.querySelectorAll(`button[data-${g}]`).forEach(b => b.classList.toggle('on', b.dataset[g] === one));
+  }
+  const appear = pop.classList.contains('hidden'); pop.classList.remove('hidden');
+  const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]), w = pop.offsetWidth, h = pop.offsetHeight, gap = 24;
+  let x = x1 + gap; if (x + w > VW - 8) x = x0 - gap - w >= 8 ? x0 - gap - w : VW - 8 - w;
+  const bar = $('#selbar'), shown = !bar.classList.contains('hidden'), top = barBottom() + 8, below = shown && parseFloat(bar.style.top) >= y1;
+  let y = clamp(below ? y1 - h : y0, top, VH - h - 8);
+  if (shown) {   // nie über der Auswahlleiste (kleine Form dicht unter der Leiste): dann darunter, sonst darüber
+    const bw = bar.offsetWidth, bl = parseFloat(bar.style.left) - bw / 2, bt = parseFloat(bar.style.top), bh = bar.offsetHeight;
+    if (x < bl + bw && x + w > bl && y < bt + bh && y + h > bt) y = bt + bh + 8 + h <= VH - 8 ? bt + bh + 8 : Math.max(top, bt - 8 - h);
+  }
+  pop.style.left = x + 'px'; pop.style.top = y + 'px';
+  if (appear) popIn(pop, null, '', 0, 0.8);
+}
 // gewählte Form überall zeigen: Formenleiste, eigene Formen (Knopf mit ihrem Bild), Knopf „Formen“ in der Leiste
 function markShapeMenu() {
   markShapeStyle(); $('#shStyle').classList.toggle('dim', isCustom(S.shape) || GRAPHS.has(S.shape));   // Stil gilt nur für Grundformen
@@ -4113,20 +4535,12 @@ function markShapeMenu() {
   $('#bShape use').setAttribute('href', '#' + (isCustom(S.shape) ? 'ic-shape' : 'sh-' + S.shape));
 }
 function shapeTitle() {
-  const g = $('#bGroup'), cs = customOf(S.shape), b = !isCustom(S.shape) && $(`#shapeBar [data-shape="${S.shape}"]`);
-  g.title = (GROUP[g.dataset.tool] || GROUP.lasso)[1] + ' · nochmal antippen: Lasso oder Tape';
+  const cs = customOf(S.shape), b = !isCustom(S.shape) && $(`#shapeBar [data-shape="${S.shape}"]`);
   $('#bShape').title = 'Formen (F)' + (cs ? ' – ' + cs.name : b ? ' – ' + b.title : '');
 }
 function setShape(k) { S.shape = k; store.set('shape', k); shapeTitle(); markShapeMenu(); renderColors(); renderSizes(); }
 function pickShape(k) { setShape(k); closeMenus(); if (S.tool !== 'shape') setTool('shape'); }
-$('#bGroup').onclick = () => {
-  const t = $('#bGroup').dataset.tool, open = isOpen($('#grpMenu'));
-  if (S.tool !== t) { setTool(t); return; }
-  if (open) closeMenus(); else openGroupMenu();
-};
-$$('#grpMenu [data-gtool]').forEach(b => b.onclick = () => { setTool(b.dataset.gtool); closeMenus(); });
 $$('#shapeBar [data-shape]').forEach(b => b.onclick = () => pickShape(b.dataset.shape));
-{ const t = store.get('groupTool'); if (GROUP[t]) setGroupTool(t); }
 shapeTitle(); markShapeMenu();
 
 /* ---------- Koordinatensysteme: Einstellungen ----------
@@ -4312,6 +4726,7 @@ async function saveCustomShape() {
     if (s.al) st.al = s.al;
     if (s.fl) st.fl = s.fl.map(r => [r[0], r[1]]);
     if (s.ds) st.ds = s.ds;
+    if (s.fs) st.fs = s.fs;
     return st;
   });
   const b = geoBox(list), rec = { id: uid(), name: name.trim() || 'Form ' + k, created: Date.now(), w: b[2], h: b[3], strokes: list };
@@ -4337,7 +4752,7 @@ function customThumb(r) {
   c = document.createElement('canvas'); c.width = c.height = Math.round(SZ * DPR);
   const g = c.getContext('2d'), f = c.width / SZ;
   g.setTransform(f * k, 0, 0, f * k, f * (SZ / 2 - r.w / 2 * k), f * (SZ / 2 - r.h / 2 * k));
-  for (const st of r.strokes) fillStroke(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl, st.fl, st.ds));
+  for (const st of r.strokes) shapeDraw(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl, st.fl, st.ds));
   thumbCache.set(key, c);
   return c;
 }
@@ -4437,7 +4852,7 @@ function openMenu(menu, btn) {
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
 document.addEventListener('pointerdown', e => { if (txEd && !e.target.closest('#txEd,#txBar,#txGrip,#txMove')) { commitText(); txClosedAt = e.timeStamp; }   // daneben: Text fertig (dieser Tipp legt keinen neuen an)
-  if (ncCur && e.pointerType === 'touch' && performance.now() < penActiveUntil) return; if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph,#sbCustom,#grOpen') && e.target !== cvLive) closeMenus(); }, true);
+  if (ncCur && e.pointerType === 'touch' && performance.now() < penActiveUntil) return; if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,.mbtn,#dlg,.sw.custom,#sGraph,#sbCustom,#grOpen') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -4944,7 +5359,8 @@ function drawNoteInk() {
   g.setTransform(DPR * s, 0, 0, DPR * s, 0, 0);
   const vis = inkShown(list);
   for (const st of list) if (st.pts.length && st.hl && !st.on) paintInk(g, st, s);   // Textmarker unter der Schrift
-  for (const st of list) if (st.pts.length && !(st.hl && !st.on) && vis(st)) paintInk(g, st, s);
+  for (const st of list) if (st.pts.length && !st.tp && !st.on && !st.hl) paintInk(g, st, s);   // Schrift
+  for (const t of list) if (t.tp && t.pts.length) { paintInk(g, t, s); for (const st of list) if (st.on === t.id && st.pts.length && vis(st)) paintInk(g, st, s); }   // Tapes immer oben, mit dem, was darauf steht
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   $('#noteCard').classList.toggle('inked', list.length > 0 || !!(ncDraw && !ncDraw.erase));
 }
@@ -4966,7 +5382,7 @@ function inkStraight(d) {
 function inkRedraw(d) {
   const g = ncLiveCtx, s = d.s; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ncLive.width, ncLive.height); g.setTransform(DPR * s, 0, 0, DPR * s, 0, 0);
   const pts = d.straight ? inkStraight(d) : d.pts;
-  if (d.tape) { if (pts.length < 6) return; const o = d.live || (d.live = { c: d.c, w: d.w, tp: d.tp, hid: true }); o.pts = pts; pathCache.delete(o); drawTape(g, o, DPR * s); }
+  if (d.tape) { if (pts.length < 6) return; const o = d.live || (d.live = { c: d.c, w: d.w, tp: d.tp, hid: true, live: true }); o.pts = pts; drawTape(g, o, DPR * s); }
   else { g.fillStyle = colorOf(d.c); g.fill(buildPath(Float32Array.from(pts), d.w, d.hl)); }
 }
 // Textmarker und Tape: knapp eine halbe Sekunde still halten macht den Strich gerade (wie auf der Seite)
@@ -5017,6 +5433,7 @@ ncLive.addEventListener('pointerdown', e => {
   liveInkClear();
   if (!tape) { const al = strokeAlpha(d); if (al < 1) ncLive.style.opacity = String(al); if (hl && !isDark()) ncLive.style.mixBlendMode = 'multiply'; }   // wie auf der Seite
   if (tape || d.straight) { d.redraw = true; inkRedraw(d); }
+  else if (hl) { d.hlInc = true; hlLive(ncLiveCtx, d, DPR * s, 0, 0); }   // Textmarker: Stück für Stück (wie auf der Seite)
   else { ncLiveCtx.setTransform(DPR * s, 0, 0, DPR * s, 0, 0); ncLiveCtx.fillStyle = colorOf(d.c); inkPiece(d); }
   if (hl || tape) armInkHold(d);
   $('#noteCard').classList.add('inked');
@@ -5033,14 +5450,15 @@ ncLive.addEventListener('pointermove', e => {
     if (d.holdT !== undefined && Math.hypot(x - d.still[0], y - d.still[1]) > 4) { d.still = [x, y]; armInkHold(d); }
   }
   if (d.erase) return;
-  if (d.redraw) inkRedraw(d); else inkPiece(d);
+  if (d.redraw || d.hlInc) { if (!d.rq) { d.rq = true; requestAnimationFrame(() => { d.rq = false; if (ncDraw === d) { if (d.redraw) inkRedraw(d); else hlLive(ncLiveCtx, d, DPR * d.s, 0, 0); } }); } }   // höchstens einmal pro Bild
+  else inkPiece(d);
 });
 ncLive.addEventListener('pointerleave', () => { if (ncDot.style.display) ncDot.style.display = ''; });
 const endInk = e => {
   const d = ncDraw; if (!d || e.pointerId !== d.id) return;
   ncDraw = null; clearTimeout(d.holdT);
   if (!d.erase && ncCur) {
-    if (d.straight) d.pts = inkStraight(d); else if (d.raw) { catchUp(d); if (!d.redraw) inkPiece(d); }   // bis dorthin, wo der Stift abgehoben hat
+    if (d.straight) d.pts = inkStraight(d); else if (d.raw) { catchUp(d); if (!d.redraw && !d.hlInc) inkPiece(d); }   // bis dorthin, wo der Stift abgehoben hat
     const r = d.raw || d.start, tap = !d.straight && Math.hypot(r[0] - d.start[0], r[1] - d.start[1]) < 6 && pathLen(d.pts) * d.s < 12;
     const tp = tap && (d.tape || d.touch) ? inkTapeAt(d.start[0] / d.s, d.start[1] / d.s) : null;
     if (tp) ncCur.nt.ink = ncCur.nt.ink.map(x => x === tp ? { ...x, hid: !covered(x) } : x);   // Tape antippen: auf- bzw. abdecken
@@ -5102,7 +5520,7 @@ function renderNcPal() {
     for (const [pk, name] of TAPE_PATTERNS) add('ncp', name, S.tapePat === pk, () => {
       S.tapePat = pk; store.set('tapePat', pk);
       if (TAPE_MOTIFS[pk]) { S.color.tape = TAPE_MOTIFS[pk].c; store.set('color', S.color); renderColors(); }   // Figuren: ihre Farbe gleich mit
-      done();
+      renderSizes(); done();
     }, b => b.appendChild(tapeSwatch(pk, 20, 12, S.tapePat === pk)));
   }
   sep();
@@ -5394,6 +5812,8 @@ async function renderTo(items, box, scale, bg, o = {}) {
       ctx.strokeStyle = colorOf(it.c); ctx.lineWidth = it.w; ctx.lineCap = ctx.lineJoin = 'round';
       if (!it.tp) { const a = strokeAlpha(it); if (a < 1) ctx.globalAlpha = a; if (it.hl && !isDark()) ctx.globalCompositeOperation = 'multiply'; }
       if (it.tp) { ctx.lineCap = 'butt'; if (!covered(it)) ctx.globalAlpha = 0.16; }
+      if (it.hl) ctx.lineCap = 'square';
+      if (it.fs) { const al = ctx.globalAlpha; ctx.globalAlpha = al * FILL_A; ctx.fillStyle = colorOf(it.c); ctx.fill(fillGeo(it).P); ctx.globalAlpha = al; }   // Füllung
       if (it.ds) ctx.setLineDash(it.ds === 'dot' ? [0.01, Math.max(4.5, it.w * 2.9)] : [Math.max(6, it.w * 3.4), Math.max(4.5, it.w * 2.3)]);   // gestrichelt, gepunktet
       ctx.beginPath(); ctx.moveTo(it.pts[0], it.pts[1]);
       const step = Math.max(3, Math.floor(it.pts.length / 3 / 20) * 3);
@@ -6332,7 +6752,7 @@ function shapeFromBackup(r) {
   if (typeof r.id !== 'string' || !r.id || !Array.isArray(r.strokes)) return null;
   const strokes = r.strokes.filter(st => st && Array.isArray(st.pts) && st.pts.length >= 3 && st.pts.length % 3 === 0 && st.pts.every(Number.isFinite))
     .map(st => ({ c: typeof st.c === 'string' ? st.c : 'ink', w: st.w > 0 ? +st.w : 2, hl: !!st.hl, pts: Float32Array.from(st.pts),
-      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}), ...(validFl(st.fl, st.pts.length / 3) ? { fl: st.fl.map(r => [r[0], r[1]]) } : {}), ...(st.ds === 'dash' || st.ds === 'dot' ? { ds: st.ds } : {}) }));
+      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}), ...(validFl(st.fl, st.pts.length / 3) ? { fl: st.fl.map(r => [r[0], r[1]]) } : {}), ...(st.ds === 'dash' || st.ds === 'dot' ? { ds: st.ds } : {}), ...(FILLS.includes(st.fs) && st.fs !== 'none' ? { fs: st.fs } : {}) }));
   if (!strokes.length) return null;
   const [x0, y0] = geoBox(strokes);
   if (x0 || y0) for (const st of strokes) for (let i = 0; i < st.pts.length; i += 3) { st.pts[i] -= x0; st.pts[i + 1] -= y0; }

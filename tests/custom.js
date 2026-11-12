@@ -124,6 +124,7 @@ const DEMO = {
     await p.waitForTimeout(o.wait || 150);
     const live = await p.screenshot({ clip });
     await pen('mouseReleased', o.tap ? x0 : x1, o.tap ? y0 : y1); await p.waitForTimeout(300);
+    await p.evaluate(() => clearSel()); await p.waitForTimeout(100);   // Rahmen der Auswahl gehört nicht zur Form
     const fin = await p.screenshot({ clip });
     const v = await p.evaluate(() => { const v = { ...S.view }; zoomAt(VW / 2, VH / 2, 0.5); return v; }); await p.waitForTimeout(200);
     await p.evaluate(v => { setView(v.tx, v.ty, v.z, true); clearTiles(); pathCache.clear(); draw(); }, v); await p.waitForTimeout(250);

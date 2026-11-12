@@ -39,8 +39,8 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
 
   // ---------- Werkzeug: eigener Knopf in der Leiste (nach dem Textmarker) ----------
   await p.click('#bar [data-tool=text]'); await wait(300);
-  { const t = await p.evaluate(() => ({ tool: S.tool, on: $('#bar [data-tool=text]').classList.contains('on'), after: $('#bar [data-tool=text]').previousElementSibling.dataset.tool, grp: $('#bGroup').dataset.tool, cur: cvLive.style.cursor, menu: $$('#grpMenu [data-gtool]').map(b => b.dataset.gtool).join() }));
-    check('Werkzeug „Text“ mit eigenem Knopf in der Leiste (nicht im Knopf mit Lasso und Tape)', t.tool === 'text' && t.on && t.after === 'hl' && t.grp === 'lasso' && t.cur === 'text' && t.menu === 'lasso,tape', t); }
+  { const t = await p.evaluate(() => ({ tool: S.tool, on: $('#bar [data-tool=text]').classList.contains('on'), after: $('#bar [data-tool=text]').previousElementSibling.dataset.tool, grp: !!$('#bLasso') && !!$('#bTape'), cur: cvLive.style.cursor, menu: !document.querySelector('#grpMenu') }));
+    check('Werkzeug „Text“ mit eigenem Knopf in der Leiste (Lasso und Tape haben auch eigene Knöpfe)', t.tool === 'text' && t.on && t.after === 'hl' && t.grp && t.cur === 'text' && t.menu, t); }
 
   // ---------- Antippen, tippen, formatieren ----------
   const c0 = await count();

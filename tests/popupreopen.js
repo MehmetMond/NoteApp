@@ -22,7 +22,7 @@ const FILE = path.resolve(process.argv[2] || path.join(DIR, 'Notizen.html'));
   }, id);
   const shown = s => s.open && s.op === 1 && s.tf === 'none';
   // [Menü, Knopf, Taste vorher]
-  const MENUS = [['sizeMenu', '#bTune'], ['colorMenu', '#colors .sw.custom'], ['bgMenu', '#bBg'], ['moreMenu', '#bMore'], ['grpMenu', '#bGroup', 'l']];
+  const MENUS = [['sizeMenu', '#bTune'], ['colorMenu', '#colors .sw.custom'], ['bgMenu', '#bBg'], ['moreMenu', '#bMore']];
   for (const [id, sel, key] of MENUS) {
     if (key) { await p.keyboard.press(key); await p.waitForTimeout(150); }
     await p.click(sel); await p.waitForTimeout(700); const first = await st(id);

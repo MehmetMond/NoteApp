@@ -43,7 +43,7 @@ const onG = (v, o = 0, G = 28) => near((v - o) / G, Math.round((v - o) / G), 1e-
   const item = id => p.evaluate(id => { const s = S.items.find(i => i.id === id); return s && (s.t === 'i' ? { x: s.x, y: s.y, w: s.w, h: s.h } : { pts: Array.from(s.pts), w: s.w }); }, id);
   const select = id => p.evaluate(id => { setTool('lasso'); setSel(withGroups(new Set([id]))); }, id);
   // Auswahl mit dem Stift um (dx, dy) Bildschirmpixel verschieben (von der Mitte aus)
-  const moveSel = async (dx, dy) => { const [x, y] = await p.evaluate(() => { const b = S.sel.bb; return toScreen((b[0] + b[2]) / 2, (b[1] + b[3]) / 2); }); const r = await scr(0, 0), o = await p.evaluate(() => toScreen(0, 0)); await drag(x + r[0] - o[0], y + r[1] - o[1], x + r[0] - o[0] + dx, y + r[1] - o[1] + dy); };
+  const moveSel = async (dx, dy) => { const [x, y] = await p.evaluate(() => { const b = S.sel.bb; return toScreen(b[0] + (b[2] - b[0]) * 0.3, (b[1] + b[3]) / 2); /* nicht genau in der Mitte: dort biegt ein Pfeil */ }); const r = await scr(0, 0), o = await p.evaluate(() => toScreen(0, 0)); await drag(x + r[0] - o[0], y + r[1] - o[1], x + r[0] - o[0] + dx, y + r[1] - o[1] + dy); };
   const snapOn = on => p.evaluate(on => { if (S.snap !== on) toggleSnap(); }, on);
   const graph = g => p.evaluate(g => { const d = graphData(g); return d && { o: d.o, b: d.b, f: d.f, G: d.G, step: d.step }; }, g);
   // senkrechte Teilstriche eines Graphen (2 Punkte, gleiche x): ihre x-Werte

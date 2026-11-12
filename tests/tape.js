@@ -23,7 +23,7 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   };
   const line = (x0, x1, y, wob = 0) => Array.from({ length: Math.round((x1 - x0) / 3) + 1 }, (_, i) => [x0 + i * 3, y + wob * Math.sin(i / 2.5)]);
   const tap = async (x, y) => { await send('mouseMoved', x, y, { buttons: 0 }); await send('mousePressed', x, y); await send('mouseReleased', x, y); await p.waitForTimeout(150); };
-  const last = () => p.evaluate(() => { const s = S.items.at(-1); return { id: s.id, tp: s.tp, hid: s.hid, on: s.on, hl: s.hl, n: s.pts.length / 3, w: s.w, y: [s.pts[1], s.pts.at(-2)] }; });
+  const last = () => p.evaluate(() => { const s = S.items.at(-1); return { id: s.id, tp: s.tp, hid: s.hid, on: s.on, hl: s.hl, n: s.pts.length / 3, w: s.w, c: s.c, y: [s.pts[1], s.pts.at(-2)] }; });
   const st = () => p.evaluate(() => ({ n: S.items.length, tapes: S.items.filter(i => i.tp).map(i => i.hid), shown: paintOrder().length }));
   // etwas Schrift, dann ein Tape darüber (Taste T)
   for (const y of [180, 205]) await draw(line(300, 640, y, 6));
@@ -54,10 +54,10 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   res.afterFinger = await st(); check(res.afterFinger.tapes[0] === true, 'Finger antippen deckt wieder ab');
   // Blase am Tape: nach dem Antippen über dem Tape, Schalter für genau dieses Tape, Mülleimer
   res.bubble = await p.evaluate(id => {
-    const m = $('#tapeMenu'), r = m.getBoundingClientRect(), t = S.items.find(i => i.id === id), [, ty] = toScreen(t.bb[0], t.bb[1]);
-    return { open: isOpen(m), above: r.bottom <= cvLive.getBoundingClientRect().top + ty + 1, checked: $('#tmCover').getAttribute('aria-checked'), pic: !!$('#tmPic canvas') };
+    const m = $('#tapeMenu'), r = m.getBoundingClientRect(), t = S.items.find(i => i.id === id), top = cvLive.getBoundingClientRect().top, [, ty0] = toScreen(t.bb[0], t.bb[1]), [, ty1] = toScreen(t.bb[2], t.bb[3]);
+    return { open: isOpen(m), clear: r.bottom <= top + ty0 + 1 || r.top >= top + ty1 - 1, checked: $('#tmCover').getAttribute('aria-checked'), pic: !!$('#tmPic canvas') };   // über oder unter dem Tape
   }, tape.id);
-  check(res.bubble.open && res.bubble.above && res.bubble.checked === 'true' && res.bubble.pic, 'Blase am Tape nach dem Antippen (abgedeckt) ' + JSON.stringify(res.bubble));
+  check(res.bubble.open && res.bubble.clear && res.bubble.checked === 'true' && res.bubble.pic, 'Blase am Tape nach dem Antippen (abgedeckt), verdeckt es nicht ' + JSON.stringify(res.bubble));
   if (process.env.NOTES_SHOTS) { const r = await p.evaluate(() => { const a = $('#tapeMenu').getBoundingClientRect(); return { x: a.left - 40, y: a.top - 20, width: a.width + 80, height: 150 }; }); await p.waitForTimeout(300); await p.screenshot({ path: path.join(process.env.NOTES_SHOTS, 'tape_bubble.png'), clip: r }); }
   await p.click('#tmCover'); await p.waitForTimeout(150);
   res.bubbleSwitch = { tapes: (await st()).tapes, checked: await p.evaluate(() => $('#tmCover').getAttribute('aria-checked')), open: await p.evaluate(() => isOpen($('#tapeMenu'))) };
@@ -70,6 +70,25 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await p.waitForTimeout(250);
   res.bubbleNext = { tapes: (await st()).tapes, open: await p.evaluate(() => isOpen($('#tapeMenu'))) };
   check(res.bubbleNext.tapes[0] === false && res.bubbleNext.open, 'Tipp bei offener Blase wirkt sofort (deckt auf)');
+  // Farbe genau dieses Tapes in der Blase
+  res.tmColors = await p.evaluate(() => ({ n: $$('#tmColors .tmc').length, on: $$('#tmColors .tmc.on').length }));
+  await p.click('#tmColors .tmc:nth-child(3)'); await p.waitForTimeout(150);
+  res.recolor = await p.evaluate(id => ({ c: S.items.find(i => i.id === id).c, want: TAPE_PALETTE[2], on: $$('#tmColors .tmc').findIndex(b => b.classList.contains('on')), open: isOpen($('#tapeMenu')), pen: S.color.tape }), tape.id);
+  check(res.tmColors.n === (await p.evaluate(() => TAPE_PALETTE.length)) && res.recolor.c === res.recolor.want && res.recolor.on === 2 && res.recolor.open, 'Blase: Farbe nur dieses Tapes ändern ' + JSON.stringify([res.tmColors, res.recolor]));
+  // Muster genau dieses Tapes (Figuren bringen ihre Farbe mit); die Blase ist noch offen
+  res.tmPats = await p.evaluate(() => ({ names: $$('#tmPats .tmp').map(b => b.title).join(), on: $$('#tmPats .tmp.on').map(b => b.title).join() }));
+  await p.click('#tmPats .tmp[title="Kätzchen"]'); await p.waitForTimeout(150);
+  res.repat = await p.evaluate(id => { const s = S.items.find(i => i.id === id); return { tp: s.tp, c: s.c, want: TAPE_MOTIFS.kitty.c, on: $$('#tmPats .tmp.on').map(b => b.title).join(), open: isOpen($('#tapeMenu')) }; }, tape.id);
+  check(res.tmPats.names === 'Uni,Streifen,Punkte,Karo,Kätzchen,Hündchen,Teufelchen' && res.tmPats.on === 'Streifen' && res.repat.tp === 'kitty' && res.repat.c === res.repat.want && res.repat.on === 'Kätzchen' && res.repat.open,
+    'Blase: Muster (auch Figuren) nur dieses Tapes ändern ' + JSON.stringify([res.tmPats, res.repat]));
+  // Rückgängig (zweimal: Muster, Farbe) schließt die Blase wie jeder Tipp daneben; Farbe und Muster wie vorher
+  await p.click('#bUndo'); await p.click('#bUndo'); await p.waitForTimeout(150);
+  res.undoLook = await p.evaluate(id => { const s = S.items.find(i => i.id === id); return { tp: s.tp, c: s.c, open: isOpen($('#tapeMenu')) }; }, tape.id);
+  check(res.undoLook.tp === 'streifen' && res.undoLook.c === tape.c && !res.undoLook.open, 'Rückgängig: Farbe und Muster wie vorher ' + JSON.stringify(res.undoLook));
+  // Blase wieder öffnen (Fingertipp deckt dabei ab), dann der Mülleimer
+  await p.waitForTimeout(800);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 600, y: 192 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await p.waitForTimeout(250);
   await p.click('#tmDel'); await p.waitForTimeout(150);
   check(!(await has(tape.id)) && !(await has(onTape.id)) && !(await p.evaluate(() => isOpen($('#tapeMenu')))), 'Mülleimer entfernt genau dieses Tape mit seiner Schrift');
   await p.click('#bUndo'); await p.waitForTimeout(100);
