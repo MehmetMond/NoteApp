@@ -59,8 +59,8 @@ const onG = (v, o = 0, G = 28) => near((v - o) / G, Math.round((v - o) / G), 1e-
     return { open: isOpen(m), below: r.top >= bt.bottom, inView: r.left >= 0 && r.right <= innerWidth, w: Math.round(r.width), h: Math.round(r.height),
       items: [...m.querySelectorAll('button')].map(x => x.textContent.trim()), hint: h.textContent, hintH: Math.round(h.getBoundingClientRect().height), title: $('#bImg').title };
   });
-  check('Bild-Knopf öffnet ein Menü: Zwischenablage, Datei, Hinweis', res.menu.open && res.menu.below && res.menu.inView && res.menu.items.length === 2 && res.menu.items[0] === 'Aus der Zwischenablage'
-    && res.menu.items[1] === 'Bild aus einer Datei …' && /Win \+ Umschalt \+ S/.test(res.menu.hint) && /Strg \+ V/.test(res.menu.hint) && res.menu.w <= 300, res.menu);
+  check('Bild-Knopf öffnet ein Menü: Zwischenablage, Datei, PDF, Hinweis', res.menu.open && res.menu.below && res.menu.inView && res.menu.items.length === 3 && res.menu.items[0] === 'Aus der Zwischenablage'
+    && res.menu.items[1] === 'Bild aus einer Datei …' && res.menu.items[2] === 'PDF einfügen …' && /Win \+ Umschalt \+ S/.test(res.menu.hint) && /Strg \+ V/.test(res.menu.hint) && res.menu.w <= 300, res.menu);
   await p.click('#bImg'); await p.waitForTimeout(350);
   check('Nochmal antippen schließt das Menü', await p.evaluate(() => !isOpen($('#imgMenu'))));
   // Zwischenablage nachgebildet: read() liefert, was der Test vorgibt (die echte bleibt unberührt)

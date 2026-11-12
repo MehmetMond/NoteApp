@@ -55,9 +55,11 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   // DIN A4 bei 1440 px mit üblichem Titel: Titel ganz, nichts springt beim Werkzeugwechsel
   await p.fill('#title', 'Notiz vom 20.10.2026'); await p.keyboard.press('Enter'); await p.waitForTimeout(100);
   const pos = () => p.evaluate(() => [Math.round($('#title').getBoundingClientRect().width), Math.round($('#title').scrollWidth), Math.round($('[data-tool=pen]').getBoundingClientRect().x), Math.round($('#bTune').getBoundingClientRect().x)]);
-  res.layout = {}; for (const k of ['p', 'm', 't', 'e']) { await p.keyboard.press(k); res.layout[k] = await pos(); }
-  const L = Object.values(res.layout);
-  check(L.every(v => v.join() === L[0].join()) && L[0][0] >= L[0][1], 'Gleiche Lage für alle Werkzeuge, Titel nicht gekürzt (' + JSON.stringify(res.layout) + ')');
+  res.layout = {}; for (const k of ['p', 'm', 't', 'e', 'f']) { await p.keyboard.press(k); res.layout[k] = await pos(); }
+  const L = Object.values(res.layout); res.titleTip = await p.evaluate(() => $('#title').title);
+  // der Name darf schmaler werden (… am Ende); gekürzt steht er ganz im Hinweis beim Draufzeigen
+  check(L.every(v => v.join() === L[0].join()) && L[0][0] >= 120 && (L[0][0] >= L[0][1] || res.titleTip === 'Notiz vom 20.10.2026'),
+    'Gleiche Lage für alle Werkzeuge (auch Formen), Name höchstens etwas gekürzt und dann ganz beim Draufzeigen (' + JSON.stringify(res.layout) + ' ' + res.titleTip + ')');
   // schmal (halbes Fenster) und Hochformat: Knopf bleibt neben den Dicken, Menü unter der ganzen Leiste
   res.narrow = {};
   for (const [w, h] of [[720, 900], [850, 900], [960, 1440]]) {

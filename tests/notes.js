@@ -31,7 +31,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
       return new Promise(r => c.toBlob(r, 'image/png'));
     };
     window.__clipA = await mk(320, 220, '#2f6fd6'); window.__clipB = await mk(240, 240, '#d5543a'); window.__clip = window.__clipA;
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { read: async () => [{ types: ['image/png'], getType: async () => window.__clip }] } });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { read: async () => window.__clipText ? [{ types: ['text/plain'], getType: async () => new Blob([window.__clipText], { type: 'text/plain' }) }] : [{ types: ['image/png'], getType: async () => window.__clip }] } });
     window.__write = (str, sx, sy, h) => {
       const [x, y] = toWorld(sx, sy), out = []; placeText(out, str, x, y, h, 0, 0);
       const list = out.map(l => { const q = []; for (let i = 0; i < l.length; i += 2) q.push(l[i], l[i + 1], 0.5); return makeStroke(q, 'ink', 2.2, false); });
@@ -76,6 +76,11 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   check('Karte offen, noch ohne Markierung', k.open && k.id === null && k.sel === text.length && k.text === '' && !k.img && k.ink === 0 && !k.inked, k);
   check('Karte unter der Auswahl, ganz zu sehen', k.r.t >= tb[3] + 10 && near(k.r.l, tb[0], 2) && k.r.r <= 1280 && k.r.b <= 860, { card: k.r, box: tb });
   check('Öffnen ändert noch nichts', JSON.stringify(await count()) === JSON.stringify(c0));
+  // Schreibfläche: Papier und Punkte wie auf der Seite
+  { const bgc = await p.evaluate(() => { const g = $('#ncInk').getContext('2d'), px = (x, y) => [...g.getImageData(Math.round(x * DPR), Math.round(y * DPR), 1, 1).data].slice(0, 3);
+      return { paper: px(5, 5), dot: px(14, 14), want: paperColor(), bg: S.note.bg }; });
+    const hex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+    check('Schreibfläche: Papier und Punkte wie auf der Seite', hex(bgc.paper) === bgc.want && bgc.dot[0] < bgc.paper[0] - 20, bgc); }
   // Text tippen: Buchstaben sind keine Kürzel (e = Radierer, h = Textmarker …)
   const typed = 'a² + b² = c² (rechtwinkliges Dreieck, c ist die Hypotenuse)';
   await p.click('#ncText'); await p.keyboard.type(typed); await wait(100);
@@ -84,11 +89,12 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   check('Tippen in der Karte: kein Werkzeugwechsel, nichts gelöscht', await p.evaluate(() => S.tool) === 'lasso' && (await count()).n === c0.n && (await card()).text === typed);
   // Schreibfläche: Stift schreibt; Handballen (Finger gleich nach dem Stift) drückt nicht „Leeren“
   const ir = await p.evaluate(() => { const r = $('#ncInk').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; });
-  await draw(poly([ir.l + 30, ir.t + 30], [ir.l + 120, ir.t + 100]), 0);
+  await draw(poly([ir.l + 50, ir.t + 45], [ir.l + 120, ir.t + 100]), 0);   // oben links liegt der Werkzeugknopf
   await send('mouseMoved', ir.l + 130, ir.t + 105, { buttons: 0 });   // Stift schwebt noch über der Fläche
   const clr = await p.evaluate(() => { const r = $('#ncClear').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
   await fingerTap(...clr, 0);
   k = await card(); check('Stift schreibt in die Karte, Handballen leert nicht', k.ink === 1 && k.inked, k);
+  { const st = await p.evaluate(() => ({ w: ncCur.nt.ink[0].w, pen: S.size.pen, c: ncCur.nt.ink[0].c, color: S.color.pen })); check('Strich in der Karte mit Stiftbreite und -farbe der Seite', st.w === st.pen && st.c === st.color, st); }
   await fingerTap(...clr);
   k = await card(); check('Finger auf „Leeren“: Schrift der Karte weg', k.open && k.ink === 0 && !k.inked, k);
   // kleines Dreieck mit c
@@ -98,6 +104,26 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   await draw(poly([L + 225, T + 50], [L + 260, T + 50]));
   await draw(poly([L + 230, T + 75], [L + 255, T + 75]));
   k = await card(); check('Skizze in der Karte (4 Striche)', k.ink === 4 && k.inked, k);
+  // Glättung wie auf der Seite: eine zittrige Linie (±2 px) wird ruhiger gespeichert
+  await draw(Array.from({ length: 45 }, (_, i) => [L + 20 + i * 3, T + 128 + (i % 2 ? 2 : -2)]));
+  { const z = await p.evaluate(() => { const q = ncCur.nt.ink.at(-1).pts, ys = []; for (let i = 3; i < q.length - 3; i += 3) ys.push(q[i + 1]); const m = ys.reduce((a, b) => a + b, 0) / ys.length;
+      return { smooth: S.smooth, n: ys.length, dev: Math.max(...ys.map(y => Math.abs(y - m))) }; });
+    check('Glättung wie auf der Seite: Zittern gedämpft', z.smooth > 0 ? z.dev < 1.3 : z.dev <= 2.1, z); }
+  // Radierer-Ende (button 5, buttons 32): nimmt den Strich darunter weg, sonst nichts
+  { const r = await p.evaluate(async () => {
+      const c = $('#ncLive'), b = c.getBoundingClientRect(), n0 = ncCur.nt.ink.length;
+      const ev = (type, x, y, buttons) => c.dispatchEvent(new PointerEvent(type, { pointerId: 78, pointerType: 'pen', isPrimary: true, button: type === 'pointermove' ? -1 : 5, buttons, clientX: b.left + x, clientY: b.top + y, pressure: 0.5, bubbles: true, cancelable: true }));
+      ev('pointerdown', 40, 128, 32); for (let x = 40; x <= 140; x += 8) ev('pointermove', x, 128, 32); ev('pointerup', 140, 128, 0);
+      await new Promise(ok => setTimeout(ok, 100));
+      return { n0, n: ncCur.nt.ink.length };
+    });
+    check('Radierer-Ende radiert in der Karte (ganzer Strich)', r.n0 === 5 && r.n === 4, r); }
+  // Schweben: Punkt in Farbe und Dicke des Stifts, kein Mauszeiger; weg, wenn der Stift die Fläche verlässt
+  await send('mouseMoved', L + 150, T + 60, { buttons: 0 }); await wait(50);
+  { const h = await p.evaluate(() => { const d = $('#ncDot'), r = d.getBoundingClientRect(), c = $('#ncLive').getBoundingClientRect(); return { show: getComputedStyle(d).display, w: r.width, cx: r.left + r.width / 2 - c.left, cy: r.top + r.height / 2 - c.top, want: Math.max(3, S.size.pen * ncInkS), cur: $('#ncLive').style.cursor }; });
+    await send('mouseMoved', 1200, 700, { buttons: 0 }); await wait(50);
+    const gone = await p.evaluate(() => getComputedStyle($('#ncDot')).display);
+    check('Schweben: Punkt wie auf der Seite, verschwindet beim Verlassen', h.show === 'block' && near(h.w, h.want, 0.6) && near(h.cx, 150, 1) && near(h.cy, 60, 1) && h.cur === 'none' && gone === 'none', { ...h, gone }); }
   // Bild aus der Zwischenablage
   await p.click('#ncPaste'); await p.waitForFunction(() => ncCur && ncCur.nt.img && $('#ncImg').naturalWidth > 0, null, { timeout: 8000 }); await wait(200);
   k = await card(); check('„Einfügen“: Bild in der Karte', k.img && k.imgShown && k.r.b <= 860, k);
@@ -238,7 +264,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   };
   const glanceInfo = () => p.evaluate(() => {
     const m = $('#noteCard'), c = $('#ncInk'), d = $('#ncDim');
-    return { glance: m.classList.contains('glance'), l: m.offsetLeft, t: m.offsetTop, w: m.offsetWidth, h: m.offsetHeight, inkW: c.clientWidth, inkH: c.clientHeight,
+    return { glance: m.classList.contains('glance'), l: m.offsetLeft, t: m.offsetTop, w: m.offsetWidth, h: m.offsetHeight, inkW: c.clientWidth, inkH: c.clientHeight, boxH: c.parentNode.offsetHeight,
       dim: !d.classList.contains('hidden'), dimZ: +getComputedStyle(d).zIndex, z: +getComputedStyle(m).zIndex, icon: $('#ncGrow use').getAttribute('href'), title: $('#ncGrow').title, s: ncInkS,
       inkX: c.getBoundingClientRect().left - m.getBoundingClientRect().left };
   });
@@ -247,9 +273,14 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   const g0 = await glanceInfo();
   await p.click('#ncGrow'); await wait(800);
   const g1 = await glanceInfo();
-  check('Pfeil: großes Fenster in der Mitte (85 % des Bildschirms), dahinter abgedunkelt', !g0.glance && !g0.dim && g0.inkW < 300 && g0.inkH === 140 && g0.icon === '#ic-grow' && g0.title === 'Schreibfläche vergrößern'
+  check('Pfeil: großes Fenster in der Mitte (85 % des Bildschirms), dahinter abgedunkelt', !g0.glance && !g0.dim && g0.inkW < 300 && g0.boxH === 140 && g0.icon === '#ic-grow' && g0.title === 'Schreibfläche vergrößern'
     && g1.glance && near(g1.w, 1280 * 0.85, 1) && near(g1.h, 860 * 0.85, 1) && near(g1.l, 1280 * 0.075, 1) && near(g1.t, 860 * 0.075, 1) && g1.dim && g1.z > g1.dimZ
-    && g1.inkW > 500 && g1.inkH > 450 && g1.inkX > 200 && g1.icon === '#ic-shrink' && g1.title === 'Schreibfläche verkleinern', { g0, g1 });
+    && g1.inkW > 1000 && g1.inkH > 450 && g1.inkX < 30 && g1.icon === '#ic-shrink' && g1.title === 'Schreibfläche verkleinern', { g0, g1 });
+  { const lay = await p.evaluate(() => { const r = s => $(s).getBoundingClientRect(); return { img: r('#ncImgBox'), text: r('#ncText'), btn: r('.ncrow'), ink: r('.ncink'), card: r('#noteCard') }; });
+    const top = Math.max(lay.img.bottom, lay.text.bottom, lay.btn.bottom);
+    check('Großes Fenster: oben eine Leiste (Bild, Text, Knöpfe nebeneinander), darunter die Schreibfläche über die ganze Breite',
+      near(lay.img.top, lay.text.top, 2) && near(lay.text.top, lay.btn.top, 2) && lay.img.right < lay.text.left && lay.text.right < lay.btn.left && lay.ink.top >= top && near(lay.ink.left, lay.img.left, 1) && near(lay.ink.right, lay.btn.right, 1) && top - lay.card.top < 200,
+      { img: [lay.img.left, lay.img.top, lay.img.right, lay.img.bottom], text: [lay.text.left, lay.text.top, lay.text.right], btn: [lay.btn.left, lay.btn.top, lay.btn.right], ink: [lay.ink.left, lay.ink.top, lay.ink.right] }); }
   // Handballen auf dem dunklen Rand, während der Stift schwebt: bleibt offen
   await send('mouseMoved', 700, 400, { buttons: 0 });
   await fingerTap(60, 820, 0);
@@ -261,7 +292,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   await p.screenshot({ path: path.join(SHOTS, 'notes_glance_xp.png') });
   await p.click('#ncGrow'); await wait(800);
   const g2 = await glanceInfo(); k = await card();
-  check('Pfeil im großen Fenster: zurück zur kleinen Karte bei der Markierung, Hintergrund wieder hell', !g2.glance && !g2.dim && g2.inkW < 300 && g2.inkH === 140 && g2.icon === '#ic-grow' && k.r.t > tb[1] && near(g2.l, tb[0] - 6, 3), { g2, card: k.r });
+  check('Pfeil im großen Fenster: zurück zur kleinen Karte bei der Markierung, Hintergrund wieder hell', !g2.glance && !g2.dim && g2.inkW < 300 && g2.boxH === 140 && g2.icon === '#ic-grow' && k.r.t > tb[1] && near(g2.l, tb[0] - 6, 3), { g2, card: k.r });
   check('Kleine Karte: große Skizze verkleinert, ganz zu sehen', nInk === 5 && g2.s > 0.15 && g2.s < 0.6, { s: g2.s, nInk });
   // in der verkleinerten Fläche weiterschreiben: landet im Maßstab der großen
   { const r = await p.evaluate(() => { const r = $('#ncInk').getBoundingClientRect(); return { l: r.left, t: r.top }; });
@@ -279,6 +310,58 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   // Esc im großen Fenster schließt ebenso
   await fingerTap(...mid); await wait(300); await p.click('#ncGrow'); await wait(800); await p.keyboard.press('Escape'); await wait(500);
   check('Esc im großen Fenster: zu, Hintergrund hell', !(await card()).open && !(await glanceInfo()).dim);
+  await p.click('#bBack'); await wait(600);
+
+  // ---------- Notiz: Text einfügen, Werkzeuge (Knopf oben links in der Schreibfläche) ----------
+  await p.evaluate(async id => openNote(await dbIndexGet(id)), noteId); await wait(600);
+  const ww = await p.evaluate(() => __write('Werkzeuge', 700, 430, 22));
+  const wb2 = await p.evaluate(ids => { const b = geoBox(S.items.filter(i => ids.includes(i.id))); return [...toScreen(b[0], b[1]), ...toScreen(b[2], b[3])]; }, ww);
+  await lassoAround(wb2); await p.click('#sNote'); await wait(500);
+  await p.evaluate(() => { window.__clipText = 'Text aus der Zwischenablage'; });
+  await p.click('#ncPaste'); await wait(300);
+  { const k2 = await card(); check('Einfügen in der Notiz: Text aus der Zwischenablage kommt ins Textfeld', k2.text === 'Text aus der Zwischenablage' && !k2.img, k2); }
+  await p.evaluate(() => { window.__clipText = null; });
+  const pal = () => p.evaluate(() => ({ open: !$('#ncPal').classList.contains('hidden') && !$('#ncPal').dataset.closing, tools: $$('#ncPal .nct').length, colors: $$('#ncPal .ncc').length,
+    pats: $$('#ncPal .ncp').length, sizes: $$('#ncPal .ncs').length, custom: !!$('#ncPal .ncc.on[title="Eigene Farbe"]'), tool: ncTool, icon: $('#ncTools use').getAttribute('href'), dot: $('#ncTools i').style.background }));
+  const lastInk = () => p.evaluate(() => { const s = ncCur.nt.ink.at(-1); return s && { c: s.c, w: s.w, hl: !!s.hl, tp: s.tp, hid: s.hid, id: s.id, on: s.on, n: ncCur.nt.ink.length }; });
+  const R = await p.evaluate(() => { const r = $('#ncLive').getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; });
+  const tool = async name => { await p.click('#ncTools'); await wait(400); await p.click(`#ncPal .nct[title="${name}"]`); await wait(150); const q = await pal(); await p.click('#ncTools'); await wait(400); return q; };
+  const q0 = await pal();
+  await p.click('#ncTools'); await wait(450);
+  const q1 = await pal(), inside = await p.evaluate(() => { const a = $('#ncPal').getBoundingClientRect(), b = $('.ncink').getBoundingClientRect(); return a.left >= b.left && a.right <= b.right && a.top >= b.top && a.bottom <= b.bottom; });
+  check('Werkzeugknopf: ein Tipp klappt Werkzeuge, Farben und Dicken auf (in der Schreibfläche, eigene Farbe vorne)', !q0.open && q1.open && q1.tools === 4 && q1.colors === 8 && q1.custom && q1.sizes === 5 && q1.pats === 0 && q1.icon === '#ic-pen' && inside, { q0, q1, inside });
+  await shotAround('notes_tools_xp.png', (await card()).r);
+  await p.click('#ncPal .ncc[title="#e53935"]'); await wait(400);
+  const q2 = await pal();
+  await draw(seg([R.l + 50, R.t + 45], [R.l + 150, R.t + 45]));
+  { const s = await lastInk(); check('Farbe gewählt: Auswahl geht zu, der Knopf zeigt sie, der Strich ist rot', !q2.open && /229, 57, 53/.test(q2.dot) && s.c === '#e53935' && !s.hl, { q2, s }); }
+  const q3 = await tool('Textmarker');
+  await draw(seg([R.l + 50, R.t + 72], [R.l + 180, R.t + 72]));
+  { const s = await lastInk(), want = await p.evaluate(() => ({ w: S.size.hl, c: S.color.hl }));
+    check('Textmarker in der Notiz: Farben und 4 Dicken der Leiste, Strich in Textmarker-Dicke', q3.tool === 'hl' && q3.icon === '#ic-hl' && q3.colors === 7 && q3.sizes === 4 && s.hl && s.w === want.w && s.c === want.c, { q3, s, want }); }
+  // Tape mit Muster „Punkte“: deckt ab; darauf Geschriebenes gehört dazu; mit dem Tape antippen deckt auf (das Geschriebene ist weg)
+  await p.click('#ncTools'); await wait(400); await p.click('#ncPal .nct[title="Tape"]'); await wait(150);
+  const q4 = await pal(); await p.click('#ncPal .ncp[title="Punkte"]'); await wait(400);
+  await draw(seg([R.l + 30, R.t + 108], [R.l + 220, R.t + 108], 20));
+  const tape = await lastInk();
+  await tool('Stift'); await draw(seg([R.l + 60, R.t + 108], [R.l + 100, R.t + 110]));
+  const onTape = await lastInk();
+  await tool('Tape'); await penTap(R.l + 180, R.t + 108);
+  const tp2 = await p.evaluate(id => { const t = ncCur.nt.ink.find(s => s.id === id), on = ncCur.nt.ink.filter(s => s.on === id); return { hid: t.hid, onShown: on.map(s => inkShown(ncCur.nt.ink)(s)) }; }, tape.id);
+  check('Tape in der Notiz: Muster und Farben der Leiste, abgedeckt; Geschriebenes darauf gehört dazu; antippen deckt auf',
+    q4.pats === 7 && q4.colors === 6 && q4.sizes === 4 && tape.tp === 'punkte' && tape.hid === true && !!tape.id && onTape.on === tape.id && tp2.hid === false && tp2.onShown.length === 1 && tp2.onShown[0] === false, { q4, tape, onTape, tp2 });
+  // Radierer der Notiz: nimmt das Tape samt dem, was darauf steht, sonst nichts
+  const q5 = await tool('Radierer'), n0 = (await lastInk()).n;
+  await draw(seg([R.l + 40, R.t + 108], [R.l + 210, R.t + 108]));
+  { const r = await p.evaluate(id => ({ n: ncCur.nt.ink.length, tape: ncCur.nt.ink.some(s => s.id === id || s.on === id) }), tape.id);
+    check('Radierer der Notiz: Tape und Geschriebenes darauf weg, sonst nichts', q5.tool === 'eraser' && q5.icon === '#ic-eraser' && q5.colors === 0 && q5.sizes === 0 && r.n === n0 - 2 && !r.tape, { q5, n0, r }); }
+  await tool('Stift');
+  await p.evaluate(() => { S.color.pen = 'ink'; store.set('color', S.color); renderColors(); });
+  await p.click('#ncGrow'); await wait(800); await p.click('#ncTools'); await wait(450);
+  { const g = await p.evaluate(() => { const a = $('#ncPal').getBoundingClientRect(), b = $('.ncink').getBoundingClientRect(); return { w: a.width, h: a.height, left: a.left - b.left, top: a.top - b.top }; });
+    check('Großes Fenster: Auswahl als schmale Spalte am linken Rand', g.w < 90 && g.h > g.w * 3 && g.left < 10, g); }
+  await p.screenshot({ path: path.join(SHOTS, 'notes_tools_glance_xp.png') });
+  await p.keyboard.press('Escape'); await wait(400);
   await p.click('#bBack'); await wait(600);
 
   // ---------- Bilder im modernen Aussehen (klein, dann groß) ----------

@@ -4,6 +4,9 @@ const $$ = s => [...document.querySelectorAll(s)];
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+// Aussehen Windows XP: vorerst ausgeschaltet (das Aussehen wird am Ende neu gemacht); der Code bleibt. Wieder an: true,
+// dazu im <head> von app.src.html die Zeile, die die Klasse xp setzt
+const XP_ON = false;
 
 /* ---------- Zustand ---------- */
 const PALETTE = ['ink', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'];
@@ -49,7 +52,7 @@ const store = {
   set(k, v) { try { localStorage.setItem('notizen.' + k, JSON.stringify(v)); } catch (e) {} },
 };
 S.dark = store.get('dark', matchMedia('(prefers-color-scheme: dark)').matches);
-S.theme = store.get('theme', 'xp') === 'modern' ? 'modern' : 'xp';   // Aussehen: Windows XP (Vorgabe) oder modern
+S.theme = XP_ON && store.get('theme', 'xp') !== 'modern' ? 'xp' : 'modern';   // Aussehen: Windows XP (Vorgabe, wenn XP_ON) oder modern
 S.fingerDraw = store.get('fingerDraw', false);
 S.snap = store.get('snap', false) === true;
 { const a = store.get('alpha', {}); for (const k of ['pen', 'hl']) if (typeof a[k] === 'number' && a[k] >= 0.1 && a[k] <= 1) S.alpha[k] = a[k]; }
@@ -106,7 +109,7 @@ const sheetCount = (n = S.note) => Math.max(1, (n && n.paper && n.paper.n) | 0);
 function sheetRect(k, n = S.note) { const [w, h] = paperSize(n), y = k * (h + GAP); return [0, y, w, y + h]; }
 // Blatt bei der Höhe y (zwischen zwei Blättern gilt die Mitte des Abstands)
 function sheetAt(y, n = S.note) { const h = paperSize(n)[1]; return clamp(Math.floor((y + GAP / 2) / (h + GAP)), 0, sheetCount(n) - 1); }
-const paperName = p => p && PAPER[p.f] ? 'DIN ' + p.f.toUpperCase() + (p.o === 'l' ? ' quer' : ' hoch') : 'Unendlich';
+const paperName = p => p && PAPER[p.f] ? (p.t === 'cornell' ? 'Cornell (DIN A4)' : 'DIN ' + p.f.toUpperCase() + (p.o === 'l' ? ' quer' : ' hoch')) : 'Unendlich';
 const sheetsWord = k => k === 1 ? '1 Blatt' : k + ' Blätter';
 
 /* ---------- Hinweis ---------- */
@@ -391,8 +394,9 @@ function tri(P, cx, cy, ax, ay, bx, by) {
 const validFl = (fl, n) => Array.isArray(fl) && fl.length > 0 && fl.every(r => Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[0] >= 0 && r[1] > r[0] + 1 && r[1] < n);
 // fl: Flächen im Strich (gefüllte Pfeilspitzen), je [erster, letzter] Punkt eines geschlossenen Umrisses. Ihre Kanten
 // bekommen keinen Strich (sonst würde die Spitze rund), die Fläche wird gefüllt; die Linie dazwischen wie gewohnt.
-function buildPath(pts, w, hl, fl) {
+function buildPath(pts, w, hl, fl, ds) {
   const n = pts.length / 3, rs = Array.isArray(fl) ? fl.filter(r => Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[0] >= 0 && r[1] > r[0] + 1 && r[1] < n) : [];
+  const linePath = ds === 'dash' || ds === 'dot' ? (P, q, w, hl) => dashPath(P, q, w, hl, ds) : solidPath;   // Kontur der Form (Flächen bleiben voll)
   if (!rs.length) return linePath(new Path2D(), pts, w, hl);
   const P = new Path2D(), only = new Uint8Array(n + 1);   // only[i]: Abschnitt i − 1 → i liegt in einer Fläche
   for (const [a, b] of rs) for (let i = a + 1; i <= b; i++) only[i] = 1;
@@ -408,7 +412,57 @@ function buildPath(pts, w, hl, fl) {
   }
   return P;
 }
-function linePath(P, pts, w, hl) {
+// gestrichelt oder gepunktet entlang des Linienzugs. Längen wachsen mit der Strichbreite und werden leicht gestreckt,
+// damit das Muster aufgeht. Genaue Vielecke (Knicke über 35°, nur lange Kanten dazwischen): jede Kante für sich, Punkte
+// genau in den Ecken, an den Ecken ein Winkel aus zwei halben Strichen. Sonst gleichmäßig über den ganzen Zug: offene
+// Linien beginnen und enden mit Strich bzw. Punkt, geschlossene gehen ohne Stoß herum.
+const COS35 = Math.cos(35 * Math.PI / 180);
+function dashPath(P, pts, w, hl, ds) {
+  const n = pts.length / 3, cum = new Float64Array(Math.max(n, 1));
+  for (let i = 1; i < n; i++) cum[i] = cum[i - 1] + Math.hypot(pts[i * 3] - pts[i * 3 - 3], pts[i * 3 + 1] - pts[i * 3 - 2]);
+  const L = n > 1 ? cum[n - 1] : 0, dot = ds === 'dot', closed = n > 2 && Math.hypot(pts[0] - pts[n * 3 - 3], pts[1] - pts[n * 3 - 2]) < 0.01;
+  const on = Math.max(6, w * 3.4), gap = dot ? Math.max(4.5, w * 2.9) : Math.max(4.5, w * 2.3), r = Math.max(0.9, w * 0.62);
+  if (L < (dot ? 0.5 : on * 1.6)) return solidPath(P, pts, w, hl);   // zu kurz für ein Muster
+  let j = 1;
+  const at = d => {   // Punkt (x, y, Druck) bei Bogenlänge d; d wächst von Aufruf zu Aufruf
+    while (j < n - 1 && cum[j] < d) j++;
+    const s = cum[j] - cum[j - 1], t = s > 0 ? clamp((d - cum[j - 1]) / s, 0, 1) : 0, a = j * 3 - 3;
+    return [pts[a] + (pts[a + 3] - pts[a]) * t, pts[a + 1] + (pts[a + 4] - pts[a + 1]) * t, pts[a + 2] + (pts[a + 5] - pts[a + 2]) * t];
+  };
+  const dash = (s, e) => {   // Strich von Bogenlänge s bis e, mit den Ecken dazwischen
+    const run = at(s);
+    for (let q = j; q < n - 1 && cum[q] < e; q++) if (cum[q] > s) run.push(pts[q * 3], pts[q * 3 + 1], pts[q * 3 + 2]);
+    run.push(...at(e)); solidPath(P, Float32Array.from(run), w, hl);
+  };
+  const circle = d => { const [x, y] = at(d); P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); };
+  const cuts = [0];
+  for (let i = 1; i < n - 1; i++) {
+    const ax = pts[i * 3] - pts[i * 3 - 3], ay = pts[i * 3 + 1] - pts[i * 3 - 2], bx = pts[i * 3 + 3] - pts[i * 3], by = pts[i * 3 + 4] - pts[i * 3 + 1], la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    if (la > 1e-6 && lb > 1e-6 && (ax * bx + ay * by) / (la * lb) < COS35) cuts.push(i);
+  }
+  cuts.push(n - 1);
+  const edges = []; for (let k = 1; k < cuts.length; k++) edges.push([cum[cuts[k - 1]], cum[cuts[k]]]);
+  if (edges.length < 2 || edges.some(([a, b]) => b - a < on + gap)) {   // ein Zug für sich
+    if (dot) { const k = Math.max(1, Math.round(L / gap)); for (let i = 0; i < (closed ? k : k + 1); i++) circle(L * i / k); return P; }
+    const per = on + gap, k = closed ? Math.max(2, Math.round(L / per)) : Math.max(1, Math.round((L - on) / per)), f = L / (closed ? k * per : k * per + on);
+    for (let i = 0; i < (closed ? k : k + 1); i++) { const s = i * per * f; dash(s, Math.min(L, s + on * f)); }
+    return P;
+  }
+  edges.forEach(([a, b], k) => {
+    const len = b - a, last = k === edges.length - 1;
+    if (dot) {   // Punkte an beiden Enden der Kante (die Ecke nur einmal)
+      const m = Math.max(1, Math.round(len / gap));
+      for (let i = k ? 1 : 0; i <= m; i++) if (!(closed && last && i === m)) circle(a + len * i / m);
+      return;
+    }
+    const d0 = k || closed ? on / 2 : on, d1 = !last || closed ? on / 2 : on;   // an einer Ecke ein halber Strich
+    const m = Math.max(1, Math.round((len - d0 - d1 + on) / (on + gap))), f = len / (d0 + d1 - on + m * (on + gap)), o = on * f, g = gap * f;
+    dash(a, a + d0 * f);
+    for (let i = 1; i <= m; i++) { const s = a + d0 * f + i * g + (i - 1) * o; dash(s, i < m ? s + o : b); }
+  });
+  return P;
+}
+function solidPath(P, pts, w, hl) {
   const n = pts.length / 3;
   let px = 0, py = 0, has = false;   // Richtung des vorherigen Abschnitts
   for (let i = 0; i < n; i++) {
@@ -433,7 +487,7 @@ function linePath(P, pts, w, hl) {
   return P;
 }
 function circleAt(P, pts, i, w, hl) { const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl); P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); }
-function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl, s.fl); pathCache.set(s, p); } return p; }
+function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl, s.fl, s.ds); pathCache.set(s, p); } return p; }
 function prunePaths() {
   if (pathCache.size < S.items.length * 1.5 + 300) return;
   const cur = new Set(S.items); for (const k of pathCache.keys()) if (!cur.has(k)) pathCache.delete(k);
@@ -443,7 +497,8 @@ function bboxOf(pts, m) {
   for (let i = 0; i < pts.length; i += 3) { const x = pts[i], y = pts[i + 1]; if (x < a) a = x; if (y < b) b = y; if (x > c) c = x; if (y > d) d = y; }
   return [a - m, b - m, c + m, d + m];
 }
-const itemBox = it => it.t === 's' ? it.bb : [it.x, it.y, it.x + it.w, it.y + it.h];
+const isBox = it => it.t === 'i' || it.t === 'x';   // Bild oder Text: ein Kasten x, y, w, h (alles andere sind Striche, auch ohne t)
+const itemBox = it => it.t === 's' ? it.bb : it.t === 'x' ? [it.x - 2, it.y - 2, it.x + it.w + it.fs * 0.3, it.y + it.h + 2] : [it.x, it.y, it.x + it.w, it.y + it.h];
 const boxHit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
 // more: weitere Angaben (Tape: tp, hid; Strich auf einem Tape: on)
 function makeStroke(pts, c, w, hl, more) { const p = Float32Array.from(pts); return { t: 's', id: uid(), c, w, hl: !!hl, pts: p, bb: bboxOf(p, w), ...more }; }
@@ -464,6 +519,63 @@ function fillStroke(ctx, s, P) {
 function drawItem(ctx, it, devScale) {
   if (it.t === 's') { if (it.tp) drawTape(ctx, it, devScale); else if (it.nt) drawNoteBadge(ctx, it, devScale); else fillStroke(ctx, it, strokePath(it)); }   // Erklärung: nur das „i“
   else if (it.t === 'i') drawImageItem(ctx, it, devScale);
+  else if (it.t === 'x') drawText(ctx, it);
+}
+/* ---------- Text: Satz und Zeichnen ----------
+   Ein Text ist { t: 'x', x, y, w (Breite der Zeilen), h (Höhe, aus dem Satz), ff (Schrift), fs (Größe), c (Farbe),
+   al ('c' | 'r', sonst links), runs: [{ s, b, i, u, k (durchgestrichen), c }] }; \n trennt Zeilen. Gesetzt wird wie
+   im Textfeld beim Schreiben (CSS white-space: pre-wrap, Zeilenhöhe 1,35): Umbruch an Leerzeichen, die am Zeilenende
+   überhängen, zu lange Wörter zeichenweise; die Grundlinie mit dem halben Zeilenabstand über der Schrift. */
+const TEXT_FONTS = {
+  sans: ['Standard', '"Segoe UI", system-ui, -apple-system, Roboto, sans-serif'],
+  calibri: ['Calibri', 'Calibri, Carlito, "Segoe UI", sans-serif'],
+  serif: ['Times', '"Times New Roman", Times, "Liberation Serif", serif'],
+  mono: ['Schreibmaschine', 'Consolas, "Cascadia Mono", "Courier New", monospace'],
+  hand: ['Handschrift', '"Ink Free", "Segoe Print", "Bradley Hand", cursive'],
+  comic: ['Comic', '"Comic Sans MS", "Comic Neue", "Chalkboard SE", cursive'],
+};
+const fontStack = ff => (TEXT_FONTS[ff] || TEXT_FONTS.sans)[1];
+const textFontStr = (it, r) => `${r.i ? 'italic ' : ''}${r.b ? 700 : 400} ${it.fs}px ${fontStack(it.ff)}`;
+const txMeasure = document.createElement('canvas').getContext('2d'), txLayouts = new WeakMap();
+function textLayout(it) {
+  let L = txLayouts.get(it); if (L) return L;
+  const g = txMeasure, W = it.w, lh = it.fs * 1.35, lines = [], sp = f => /^ +$/.test(f.t);
+  let line = { frags: [], w: 0 };
+  const flush = () => { let w = line.w; for (let k = line.frags.length - 1; k >= 0 && sp(line.frags[k]); k--) w -= line.frags[k].w; line.tw = w; lines.push(line); line = { frags: [], w: 0 }; };
+  const put = (s, r, w) => { line.frags.push({ t: s, r, x: line.w, w }); line.w += w; };
+  for (const r of it.runs || []) {
+    g.font = textFontStr(it, r);
+    for (const tok of r.s.split(/(\n| +)/)) {
+      if (!tok) continue;
+      if (tok === '\n') { flush(); continue; }
+      let s = tok, w = g.measureText(s).width;
+      if (tok[0] === ' ') { put(s, r, w); continue; }   // Leerzeichen hängen am Zeilenende über
+      if (line.w + w > W && line.frags.some(f => !sp(f))) flush();
+      while (line.w + w > W && s.length > 1) {   // länger als die Zeile: so viele Zeichen wie passen
+        let n = s.length - 1; while (n > 1 && line.w + g.measureText(s.slice(0, n)).width > W) n--;
+        put(s.slice(0, n), r, g.measureText(s.slice(0, n)).width); flush();
+        s = s.slice(n); w = g.measureText(s).width;
+      }
+      put(s, r, w);
+    }
+  }
+  flush();
+  g.font = textFontStr(it, {}); const m = g.measureText('Hg');
+  const asc = m.fontBoundingBoxAscent || it.fs * 0.92, desc = m.fontBoundingBoxDescent || it.fs * 0.24, base = (lh - asc - desc) / 2 + asc;
+  lines.forEach((ln, k) => { ln.base = k * lh + base; ln.dx = it.al === 'c' ? (W - ln.tw) / 2 : it.al === 'r' ? W - ln.tw : 0; });
+  L = { lines, h: lines.length * lh }; txLayouts.set(it, L); return L;
+}
+function drawText(ctx, it) {
+  const L = textLayout(it), th = Math.max(it.fs / 15, 0.6);
+  ctx.save(); ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  for (const ln of L.lines) for (const f of ln.frags) {
+    const x = it.x + ln.dx + f.x, y = it.y + ln.base;
+    ctx.fillStyle = colorOf(f.r.c || it.c);
+    if (!/^ +$/.test(f.t)) { ctx.font = textFontStr(it, f.r); ctx.fillText(f.t, x, y); }
+    if (f.r.u) ctx.fillRect(x, y + it.fs * 0.12, f.w, th);
+    if (f.r.k) ctx.fillRect(x, y - it.fs * 0.28, f.w, th);
+  }
+  ctx.restore();
 }
 
 /* ---------- Tape ----------
@@ -790,11 +902,11 @@ function drawMotifs(ctx, s, g, ds) {
   else for (let d = sp / 2; d - lm / 2 < total; d += sp) { put(bm, d, h, lm, true); if (d + sp / 2 - la / 2 < total) put(ba, d + sp / 2, ha, la, false); }
   if (ends.length) { ctx.save(); ctx.clip(g.edge); for (const e of ends) stamp(...e); ctx.restore(); }
 }
-function drawTape(ctx, s, ds = 1) {
+function drawTape(ctx, s, ds = 1, flat = false) {   // flat: ohne Schatten (gewähltes Muster im Menü, dort mit Umriss)
   const g = tapeGeo(s), on = covered(s);
   ctx.save(); ctx.lineCap = 'butt'; ctx.lineJoin = 'round'; ctx.lineWidth = s.w;
   if (!on) ctx.globalAlpha = 0.16;
-  else {
+  else if (!flat) {
     // abgedeckt liegt es mit einem Schatten nach unten auf dem Papier, mit der Dicke wachsend. Nur der Schatten wird
     // hier gemalt (die Form liegt weit daneben, der Versatz in Gerätepixeln holt den Schatten zurück)
     const far = 30000 / ds;
@@ -841,7 +953,46 @@ function setTapes(ids, hid) {
   for (const it of S.items) if (it.on && ids.has(it.on)) invalidateBox(it.bb);   // Schrift auf dem Tape kommt/geht mit
   setItems(next); markDirty(); requestDraw(); return true;
 }
-function toggleTapeAt(x, y) { const t = tapeAt(x, y); if (t) setTapes(new Set([t.id]), !covered(t)); return !!t; }
+function toggleTapeAt(x, y) {
+  const t = tapeAt(x, y); if (!t) return false;
+  setTapes(new Set([t.id]), !covered(t));
+  const n = S.items.find(it => it.id === t.id); if (n) showTapeMenu(n);   // Blase am Tape: einzeln an/aus, entfernen
+  return true;
+}
+/* Blase an einem angetippten Tape: Schalter „Abgedeckt“ für genau dieses Tape und ein Mülleimer. Sie sitzt über dem Tape
+   (sonst darunter) und geht beim nächsten Tipp, Werkzeugwechsel oder Verschieben der Ansicht zu. */
+let tmTape = null;
+function showTapeMenu(t) {
+  const m = $('#tapeMenu'); tmTape = t.id;
+  for (const x of $$('.menu')) if (x !== m) popOut(x);
+  syncTapeMenu(t);
+  m.classList.remove('hidden');
+  const r = cvLive.getBoundingClientRect(), [x0, y0] = toScreen(t.bb[0], t.bb[1]), [x1, y1] = toScreen(t.bb[2], t.bb[3]);
+  const w = m.offsetWidth, h = m.offsetHeight, cx = r.left + clamp((x0 + x1) / 2, 0, r.width), top0 = barBottom() + 8;
+  let top = r.top + y0 - h - 10;   // über dem Tape
+  if (top < top0) top = r.top + y1 + 10;   // sonst darunter
+  m.style.left = clamp(cx - w / 2, 8, innerWidth - w - 8) + 'px';
+  m.style.top = clamp(top, top0, innerHeight - h - 8) + 'px';
+  popIn(m, { getBoundingClientRect: () => ({ left: cx, top: r.top + (y0 + y1) / 2, width: 0, height: 0 }) });
+}
+function syncTapeMenu(t) {
+  const on = covered(t), b = $('#tmCover');
+  b.setAttribute('aria-checked', on ? 'true' : 'false');
+  b.title = on ? 'Dieses Tape aufdecken' : 'Dieses Tape wieder abdecken';
+  $('#tmPic').replaceChildren(tapeSwatch(t.tp || 'uni', 30, 14, false, t.c));
+}
+const hideTapeMenu = () => { const m = $('#tapeMenu'); if (!m.classList.contains('hidden')) popOut(m); };
+$('#tmCover').onclick = () => {
+  const t = S.items.find(it => it.id === tmTape && it.tp); if (!t) { hideTapeMenu(); return; }
+  setTapes(new Set([t.id]), !covered(t));
+  syncTapeMenu(S.items.find(it => it.id === t.id) || t);
+};
+$('#tmDel').onclick = () => {
+  const id = tmTape, t = S.items.find(it => it.id === id && it.tp); hideTapeMenu(); if (!t) return;
+  for (const it of S.items) if (it.id === id || it.on === id) invalidateBox(it.bb);
+  commit(S.items.filter(it => it.id !== id && it.on !== id));   // mit allem, was darauf steht (wie der Radierer)
+  toast('Tape entfernt · Rückgängig holt es zurück', 1800);
+};
 
 /* ---------- Canvas & Kacheln ----------
    cvMain zeigt Hintergrund + zwischengespeicherte Kacheln (512 px), cvLive den Strich,
@@ -883,6 +1034,7 @@ function newTile() {
 function hiddenIds() {
   if (action && action.kind === 'erase') return action.removed;
   if (action && (action.kind === 'move' || action.kind === 'scale')) return S.sel.ids;
+  if (txEd && txEd.id) return new Set([txEd.id]);   // wird gerade bearbeitet: das Textfeld zeigt ihn
   return null;
 }
 function renderTile(L, i, j) {
@@ -894,6 +1046,15 @@ function renderTile(L, i, j) {
   for (const it of paintOrder()) {
     if (hid && hid.has(it.id)) continue;
     if (boxHit(itemBox(it), t.wb)) drawItem(ctx, it, s);
+  }
+  // Cornell, Notizen verdeckt: die Spalte noch einmal, Papier frisch und alles darauf unscharf (die Stichworte bleiben)
+  if (S.cornellHide && isCornell()) for (let k = sheetAt(t.wb[1]); k <= sheetAt(t.wb[3]); k++) {
+    const f = cornellNotes(k); if (!boxHit(f, t.wb)) continue;
+    ctx.save(); ctx.beginPath(); ctx.rect(f[0], f[1], f[2] - f[0], f[3] - f[1]); ctx.clip();
+    fillBg(ctx, L, -i * T, -j * T, T, T);
+    ctx.setTransform(s, 0, 0, s, -i * T, -j * T); ctx.filter = `blur(${(7 * s).toFixed(1)}px)`;
+    for (const it of paintOrder()) if (!(hid && hid.has(it.id)) && boxHit(itemBox(it), f) && boxHit(itemBox(it), t.wb)) drawItem(ctx, it, s);
+    ctx.restore();
   }
   const key = tkey(L, i, j), old = stale.get(key);
   if (old) { stale.delete(key); tilePool.push(old); }   // Platzhalter hat ausgedient
@@ -961,12 +1122,15 @@ function fillBg(ctx, z, offX, offY, W, H) {
     ctx.shadowColor = S.dark ? 'rgba(0,0,0,.55)' : 'rgba(0,0,0,.16)'; ctx.shadowBlur = 16 * DPR; ctx.shadowOffsetY = 3 * DPR;
     ctx.fillStyle = paperColor(); ctx.fillRect(x, y, w, h);
     ctx.restore();
-    const pad = 3 * DPR;   // Punkte und Linien am Rand des Felds ganz zeigen
+    const pad = 3 * DPR, cor = isCornell() ? cornellOf(k) : null;   // Punkte und Linien am Rand des Felds ganz zeigen
+    if (cor) cornellTint(ctx, cor, s, offX, offY);
     for (const f of fieldsOf(k)) {
-      ctx.save(); ctx.beginPath(); ctx.rect(offX + f[0] * s - pad, offY + f[1] * s - pad, (f[2] - f[0]) * s + 2 * pad, (f[3] - f[1]) * s + 2 * pad); ctx.clip();
+      const top = cor ? offY + cor.head * s + pad : offY + f[1] * s - pad;   // Cornell: der Kopf bleibt ohne Muster
+      ctx.save(); ctx.beginPath(); ctx.rect(offX + f[0] * s - pad, top, (f[2] - f[0]) * s + 2 * pad, offY + f[3] * s + pad - top); ctx.clip();
       fillPattern(ctx, z, offX + f[0] * s, offY + f[1] * s, W, H);
       ctx.restore();
     }
+    if (cor) drawCornell(ctx, cor, s, offX, offY);
   }
 }
 function fillPattern(ctx, z, offX, offY, W, H) {
@@ -1269,7 +1433,8 @@ function resize() {
   if (cvMain.width !== w + 2 * PADD || cvMain.height !== h + 2 * PADD) { cvMain.width = w + 2 * PADD; cvMain.height = h + 2 * PADD; shownSig = ''; }
   const ms = cvMain.style; ms.left = ms.top = -PADC + 'px'; ms.width = VW + 2 * PADC + 'px'; ms.height = VH + 2 * PADC + 'px';
   if (oldDPR !== DPR) { clearTiles(); patCache.clear(); }
-  if (ncCur) { drawNoteInk(); placeNoteCard(); } else closeMenus();   // offene Erklärung: bleibt (Bildschirmtastatur), Schreibfläche passt sich an
+  if (ncCur) { drawNoteInk(); placeNoteCard(); } else closeMenus();
+  if (txEd) styleTextEd();   // Text bleibt offen (Bildschirmtastatur)   // offene Erklärung: bleibt (Bildschirmtastatur), Schreibfläche passt sich an
   fitBar();
   if (S.note) { S.view.tx = snap(S.view.tx); S.view.ty = snap(S.view.ty); draw(); drawLive(); }
   liveVis();
@@ -1310,6 +1475,8 @@ function drawBg(ctx, bg, view, W, H, scale) {
 let wheelT = null;
 function setView(tx, ty, z, settle) {
   S.view.tx = snap(tx); S.view.ty = snap(ty); S.view.z = z;
+  if (txEd) styleTextEd();   // Textfeld wandert mit (Zoom mit Rad oder Tasten)
+  placeCornellBtn(); hideTapeMenu();
   if (action && action.kind === 'draw') {   // Ansicht ändert sich während des Schreibens: Strich neu zeichnen
     action.noComposite = true; liveClear(); liveWorld(); ctxLive.fillStyle = colorOf(action.c); action.drawn = 0; livePiece(action);
   }
@@ -1332,7 +1499,9 @@ function contentBox(items = S.items) {
   for (const it of items) { const q = itemBox(it); if (q[0] < b[0]) b[0] = q[0]; if (q[1] < b[1]) b[1] = q[1]; if (q[2] > b[2]) b[2] = q[2]; if (q[3] > b[3]) b[3] = q[3]; }
   return b;
 }
-function barBottom() { return $('#bar').getBoundingClientRect().bottom; }
+// Unterkante der Leiste; mit Formen darunter die der Formenleiste (Menüs, Blasen und „Alles anzeigen“ beginnen darunter)
+// (aus dem Layout, nicht aus der Lage während des Aufploppens: #editor liegt fest bei 0, 0)
+function barBottom() { const sb = $('#shapeBar'); return sb.classList.contains('hidden') || sb.dataset.closing ? $('#bar').getBoundingClientRect().bottom : (parseFloat(sb.style.top) || 0) + sb.offsetHeight; }
 // Blatt in der Mitte des Bildschirms
 function currentSheet() { return sheetAt(viewCenterWorld()[1]); }
 // mit Seitenformat: das ganze Blatt in der Mitte (oder Blatt k), sonst alles Beschriebene
@@ -1365,6 +1534,7 @@ function commit(next, inval = true, sheets) {
 function setSheets(n) { if (!S.note || !S.note.paper || !n || sheetCount() === n) return; S.note.paper.n = n; clearTiles(); }
 function stepHistory(from, to) {
   if (ncCur) closeMenus();   // offene Erklärung erst speichern
+  if (txEd) commitText();   // offener Text ebenso
   cancelAction(); if (!from.length) return;
   if (S.items.sheets === undefined) S.items.sheets = sheetCount();
   to.push(S.items); const it = from.pop(); setItems(it); setSheets(it.sheets);
@@ -1406,7 +1576,7 @@ function withGroups(ids) {
 function geoBox(items) {
   const b = [Infinity, Infinity, -Infinity, -Infinity];
   for (const it of items) {
-    if (it.t === 'i') { b[0] = Math.min(b[0], it.x); b[1] = Math.min(b[1], it.y); b[2] = Math.max(b[2], it.x + it.w); b[3] = Math.max(b[3], it.y + it.h); continue; }
+    if (isBox(it)) { b[0] = Math.min(b[0], it.x); b[1] = Math.min(b[1], it.y); b[2] = Math.max(b[2], it.x + it.w); b[3] = Math.max(b[3], it.y + it.h); continue; }
     const p = it.pts;
     for (let i = 0; i < p.length; i += 3) { const x = p[i], y = p[i + 1]; if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; }
   }
@@ -1439,7 +1609,7 @@ function gridBox(items) {
   const b = [Infinity, Infinity, -Infinity, -Infinity];
   const add = (x, y) => { if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; };
   for (const it of items) {
-    if (it.t === 'i') { add(it.x, it.y); add(it.x + it.w, it.y + it.h); continue; }
+    if (isBox(it)) { add(it.x, it.y); add(it.x + it.w, it.y + it.h); continue; }
     if (it.gr) { const q = it.gr.b; add(q[0], q[1]); add(q[2], q[3]); continue; }
     const p = it.pts, sh = shaftOf(it);
     if (sh) { add(p[sh[0]], p[sh[0] + 1]); add(p[sh[1]], p[sh[1] + 1]); continue; }
@@ -1494,7 +1664,7 @@ function transformItem(it, s, ox, oy, dx, dy) {
     if (it.gr) { const g = it.gr; n.gr = { ...g, b: [f(g.b[0], ox) + dx, f(g.b[1], oy) + dy, f(g.b[2], ox) + dx, f(g.b[3], oy) + dy], o: [f(g.o[0], ox) + dx, f(g.o[1], oy) + dy], f: (g.f || 1) * s }; }
     return n;
   }
-  return { ...it, x: f(it.x, ox) + dx, y: f(it.y, oy) + dy, w: it.w * s, h: it.h * s };
+  return { ...it, x: f(it.x, ox) + dx, y: f(it.y, oy) + dy, w: it.w * s, h: it.h * s, ...(it.t === 'x' ? { fs: it.fs * s } : {}) };
 }
 function pointInPoly(x, y, P) {
   let inside = false;
@@ -1516,7 +1686,7 @@ function lassoSelect(P) {
     const x = P[0], y = P[1];
     for (let k = S.items.length - 1; k >= 0; k--) {
       const it = S.items[k]; if (!shown(it)) continue;
-      if (it.t === 'i' ? (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) : hitStroke(it, x, y, 8 / S.view.z)) { ids.add(it.id); break; }
+      if (isBox(it) ? (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) : hitStroke(it, x, y, 8 / S.view.z)) { ids.add(it.id); break; }
     }
     return withGroups(ids);
   }
@@ -1524,7 +1694,7 @@ function lassoSelect(P) {
   for (let i = 0; i < P.length; i += 2) { lb[0] = Math.min(lb[0], P[i]); lb[1] = Math.min(lb[1], P[i + 1]); lb[2] = Math.max(lb[2], P[i]); lb[3] = Math.max(lb[3], P[i + 1]); }
   for (const it of S.items) {
     const b = itemBox(it); if (!boxHit(b, lb) || !shown(it)) continue;
-    if (it.t === 'i') { if (pointInPoly(it.x + it.w / 2, it.y + it.h / 2, P)) ids.add(it.id); continue; }
+    if (isBox(it)) { if (pointInPoly(it.x + it.w / 2, it.y + it.h / 2, P)) ids.add(it.id); continue; }
     const n = it.pts.length / 3, step = Math.max(1, Math.floor(n / 40));
     let inside = 0, tested = 0;
     for (let i = 0; i < n; i += step) { tested++; if (pointInPoly(it.pts[i * 3], it.pts[i * 3 + 1], P)) inside++; }
@@ -1572,6 +1742,117 @@ function eraseAt(x, y) {
 const SHAPE_KINDS = ['line', 'arrow', 'arrow2', 'rect', 'ellipse', 'tri', 'rtri', 'diamond', 'axes2', 'axes2p', 'axes3'];
 const LINE_SHAPES = new Set(['line', 'arrow', 'arrow2']), GRAPHS = new Set(['axes2', 'axes2p', 'axes3']);
 const SQUARE_MAGNET = new Set(['rect', 'ellipse', 'diamond']);
+/* Stil der Grundformen (wie bei Excalidraw): Kontur durchgezogen, gestrichelt oder gepunktet (am Strich als ds, beim
+   Zeichnen umgesetzt, Flächen wie Pfeilspitzen bleiben voll); Kanten spitz oder rund (Rechteck, Dreiecke, Raute);
+   Sauberkeit exakt, leicht von Hand oder skizzenhaft (zwei Durchgänge). Rund und von Hand werden in die Punkte
+   gerechnet, mit einem Startwert je Form (gleiche Form, gleiches Wackeln; die Vorschau beim Ziehen bleibt ruhig).
+   Koordinatensysteme und eigene Formen bleiben, wie sie sind. */
+const SHAPE_BASIC = new Set(['line', 'arrow', 'arrow2', 'rect', 'ellipse', 'tri', 'rtri', 'diamond']), SHAPE_CLOSED = new Set(['rect', 'tri', 'rtri', 'diamond']);
+S.shapeStyle = { ds: 'solid', rnd: 0, sl: 0 };
+{ const v = store.get('shapeStyle'); if (v) { if (['solid', 'dash', 'dot'].includes(v.ds)) S.shapeStyle.ds = v.ds; if (v.rnd === 0 || v.rnd === 1) S.shapeStyle.rnd = v.rnd; if ([0, 1, 2].includes(v.sl)) S.shapeStyle.sl = v.sl; } }
+// kleiner Zufallsgenerator mit Startwert (xorshift32)
+function seeded(seed) { let x = (seed | 0) || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967296; }; }
+// Ecken eines geschlossenen Linienzugs (erster = letzter Punkt) runden: Bogen mit Radius r, höchstens 45 % der Kanten
+function roundCorners(xy, r) {
+  const P = []; for (let i = 0; i + 3 < xy.length; i += 2) P.push([xy[i], xy[i + 1]]);
+  const n = P.length, out = [];
+  for (let i = 0; i < n; i++) {
+    const a = P[(i - 1 + n) % n], b = P[i], c = P[(i + 1) % n], l1 = Math.hypot(b[0] - a[0], b[1] - a[1]), l2 = Math.hypot(c[0] - b[0], c[1] - b[1]);
+    if (l1 < 1e-6 || l2 < 1e-6) continue;
+    const rr = Math.min(r, l1 * 0.45, l2 * 0.45), p1 = [b[0] + (a[0] - b[0]) / l1 * rr, b[1] + (a[1] - b[1]) / l1 * rr], p2 = [b[0] + (c[0] - b[0]) / l2 * rr, b[1] + (c[1] - b[1]) / l2 * rr];
+    for (let k = 0; k <= 8; k++) { const t = k / 8, s = 1 - t; out.push(s * s * p1[0] + 2 * s * t * b[0] + t * t * p2[0], s * s * p1[1] + 2 * s * t * b[1] + t * t * p2[1]); }
+  }
+  out.push(out[0], out[1]);
+  return out;
+}
+// von Hand, eckige Formen und Linien: jede Kante leicht gebogen, Ecken etwas versetzt, kleine Überstände an den Enden.
+// Skizzenhaft stärker und zweimal: der zweite Strich liegt etwa eine Strichbreite daneben und biegt sich anders, wie
+// zweimal nachgezogen (offene Linien gehen beim zweiten Mal zurück).
+const roughOff = (rnd, w, len) => (rnd() < 0.5 ? -1 : 1) * Math.min(2 + w * 1.25, len * 0.07) * (0.75 + 0.25 * rnd());
+function roughEdges(xy, sl, rnd, w) {
+  const m = xy.length / 2, closed = m > 2 && xy[0] === xy[m * 2 - 2] && xy[1] === xy[m * 2 - 1];
+  const J = (sl === 1 ? 0.8 : 1.2) + w * 0.12, B = sl === 1 ? 0.012 : 0.016, out = [];
+  const jit = () => (rnd() * 2 - 1) * J;
+  const curve = (e, pass) => {   // Kante e (Punkt e → e + 1): Anfang, Kontrollpunkt, Ende, Schritte
+    const x0 = xy[e * 2], y0 = xy[e * 2 + 1], x1 = xy[e * 2 + 2], y1 = xy[e * 2 + 3], len = Math.hypot(x1 - x0, y1 - y0);
+    if (len < 0.5) return null;
+    const ux = (x1 - x0) / len, uy = (y1 - y0) / len, ov = Math.min(len * 0.05, sl === 1 ? 2.5 : 5) * rnd();
+    const bow = len * B * (0.35 + 0.65 * rnd()) * (rnd() < 0.5 ? -1 : 1), off = pass ? roughOff(rnd, w, len) : 0;
+    const sx = x0 - uy * off + jit(), sy = y0 + ux * off + jit(), ex = x1 - uy * off + jit() + ux * ov, ey = y1 + ux * off + jit() + uy * ov;
+    return [sx, sy, (sx + ex) / 2 - uy * bow * 2, (sy + ey) / 2 + ux * bow * 2, ex, ey, clamp(Math.round(len / 10), 3, 40)];
+  };
+  for (let pass = 0; pass < (sl === 2 ? 2 : 1); pass++) {
+    const back = pass && !closed, cs = [];
+    for (let e = 0; e + 1 < m; e++) cs.push(curve(e, pass));
+    for (let k = 0; k < cs.length; k++) {
+      const c = cs[back ? cs.length - 1 - k : k]; if (!c) continue;
+      const [sx, sy, cx, cy, ex, ey, steps] = c;
+      for (let s = 0; s <= steps; s++) { const t = back ? 1 - s / steps : s / steps, q = 1 - t; out.push(q * q * sx + 2 * q * t * cx + t * t * ex, q * q * sy + 2 * q * t * cy + t * t * ey); }
+    }
+  }
+  return out;
+}
+// von Hand, runde Formen (Ellipse, gerundete Ecken): sanftes Wackeln quer zur Linie, Anfang an zufälliger Stelle, das Ende
+// läuft etwas über den Anfang. Skizzenhaft eine zweite Runde ohne Absatz; das Wackeln wiederholt sich nicht genau (keine
+// ganzzahligen Frequenzen), so liegen die Runden mal nebeneinander, mal übereinander.
+function roughSmooth(xy, sl, rnd, w) {
+  const m = xy.length / 2, L = [0];
+  for (let i = 1; i < m; i++) L.push(L[i - 1] + Math.hypot(xy[i * 2] - xy[i * 2 - 2], xy[i * 2 + 1] - xy[i * 2 - 1]));
+  const tot = L[m - 1]; if (!(tot > 1)) return xy;
+  const closed = Math.hypot(xy[0] - xy[m * 2 - 2], xy[1] - xy[m * 2 - 1]) < 1e-6, amp = clamp(tot * (sl === 1 ? 0.004 : 0.008), 0.7, sl === 1 ? 2.6 : 5) + w * 0.1;
+  const at = d => {   // Punkt und Normale bei Bogenlänge d
+    let lo = 0, hi = m - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (L[mid] <= d) lo = mid; else hi = mid; }
+    const sg = L[hi] - L[lo] || 1, t = (d - L[lo]) / sg, x0 = xy[lo * 2], y0 = xy[lo * 2 + 1], x1 = xy[hi * 2], y1 = xy[hi * 2 + 1];
+    return [x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, -(y1 - y0) / sg, (x1 - x0) / sg];
+  };
+  const f1 = 1.3 + rnd() * 0.4, f2 = 3.3 + rnd() * 0.4, p1 = rnd() * 6.283, p2 = rnd() * 6.283, d0 = closed ? rnd() * tot : 0;
+  const laps = closed ? (sl === 2 ? 2 : 1) + (sl === 1 ? 0.04 : 0.08) * (0.6 + rnd() * 0.8) : 1, total = tot * laps, N = Math.ceil(total / 5), out = [];
+  for (let s = 0; s <= N; s++) {
+    const d = total * s / N, [x, y, nx, ny] = at(closed ? (d0 + d) % tot : Math.min(d, tot)), off = amp * (0.62 * Math.sin(6.283 * f1 * d / tot + p1) + 0.38 * Math.sin(6.283 * f2 * d / tot + p2));
+    out.push(x + nx * off, y + ny * off);
+  }
+  return out;
+}
+// von Hand, Pfeile: nur der Schaft leicht gebogen und sein freies Ende versetzt, die Spitzen (Flächen) bleiben genau
+function roughArrow(xy, sl, rnd, w) {
+  const m = xy.length / 2, rid = new Int32Array(m), out = [], map = new Int32Array(m), B = sl === 1 ? 0.014 : 0.026, J = (sl === 1 ? 0.8 : 1.6) + w * 0.12;
+  xy.fl.forEach(([a, b], k) => { for (let i = a; i <= b; i++) rid[i] = k + 1; });
+  for (let i = 0; i < m; i++) {
+    let x = xy[i * 2], y = xy[i * 2 + 1];
+    if (i === 0 && !rid[0]) { x += (rnd() * 2 - 1) * J; y += (rnd() * 2 - 1) * J; }
+    if (i > 0 && !(rid[i] && rid[i] === rid[i - 1])) {   // Schaft: Bogen bis hierher
+      const x0 = out[out.length - 2], y0 = out[out.length - 1], len = Math.hypot(x - x0, y - y0);
+      if (len > 1) {
+        const bow = len * B * (rnd() * 2 - 1), cx = (x0 + x) / 2 - (y - y0) / len * bow * 2, cy = (y0 + y) / 2 + (x - x0) / len * bow * 2, steps = clamp(Math.round(len / 10), 3, 40);
+        for (let s = 1; s < steps; s++) { const t = s / steps, q = 1 - t; out.push(q * q * x0 + 2 * q * t * cx + t * t * x, q * q * y0 + 2 * q * t * cy + t * t * y); }
+      }
+    }
+    map[i] = out.length / 2; out.push(x, y);
+  }
+  if (sl === 2) {   // skizzenhaft: den Schaft ein zweites Mal zurück, etwas daneben (nach der letzten Spitze)
+    let i = 1; while (i < m && rid[i] && rid[i] === rid[i - 1]) i++;   // Schaft: Abschnitt i − 1 → i
+    const x0 = out[map[i - 1] * 2], y0 = out[map[i - 1] * 2 + 1], x1 = out[map[i] * 2], y1 = out[map[i] * 2 + 1], len = Math.hypot(x1 - x0, y1 - y0);
+    if (i < m && len > 1) {
+      const ux = (x1 - x0) / len, uy = (y1 - y0) / len, off = roughOff(rnd, w, len), bow = len * B * (rnd() * 2 - 1), steps = clamp(Math.round(len / 10), 3, 40);
+      const sx = x1 - uy * off, sy = y1 + ux * off, ex = x0 - uy * off + (rnd() * 2 - 1) * J, ey = y0 + ux * off + (rnd() * 2 - 1) * J;
+      const cx = (sx + ex) / 2 - uy * bow * 2, cy = (sy + ey) / 2 + ux * bow * 2;
+      for (let s = 0; s <= steps; s++) { const t = s / steps, q = 1 - t; out.push(q * q * sx + 2 * q * t * cx + t * t * ex, q * q * sy + 2 * q * t * cy + t * t * ey); }
+    }
+  }
+  out.fl = xy.fl.map(([a, b]) => [map[a], map[b]]);
+  return out;
+}
+// Stil einer Grundform anwenden: erst Kanten runden, dann von Hand; box = umschließendes Rechteck der Form
+function styledLines(k, lines, a, box) {
+  if (!SHAPE_BASIC.has(k) || (!a.rnd && !a.sl)) return lines;
+  const rnd = seeded(a.seed);
+  return lines.map(xy => {
+    let out = xy, smooth = k === 'ellipse';
+    if (a.rnd && SHAPE_CLOSED.has(k)) { out = roundCorners(out, clamp(Math.min(box[2] - box[0], box[3] - box[1]) * 0.16, 3, 26)); smooth = true; }
+    if (a.sl) out = out.fl && out.fl.length ? roughArrow(out, a.sl, rnd, a.w) : smooth ? roughSmooth(out, a.sl, rnd, a.w) : roughEdges(out, a.sl, rnd, a.w);
+    return out;
+  });
+}
 const isCustom = k => typeof k === 'string' && k.startsWith('custom:');   // eigene Form: 'custom:<id>'
 let CUSTOM = [], customReady = false;   // Bibliothek der eigenen Formen (nach Erstellung sortiert), geladen?
 const customOf = k => (isCustom(k) && CUSTOM.find(r => 'custom:' + r.id === k)) || null;
@@ -1589,6 +1870,49 @@ function fieldsOf(k, n = S.note) {
   const edge = len => (len - Math.max(1, Math.floor((len - 1.2 * G) / G)) * G) / 2;   // Rand zwischen 0,6 und 1,1 Kästchen
   const my = edge(h), xs = n.paper.f === 'a3' && n.paper.o === 'l' ? [[0, w / 2], [w / 2, w]] : [[0, w]];
   return xs.map(([a, b]) => { const mx = edge(b - a); return [a + mx, y + my, b - mx, y + h - my]; });
+}
+/* Cornell-Vorlage (paper.t 'cornell', DIN A4 hoch), wie bei Walter Pauk: oben ein Kopf (Thema, Datum), links eine Spalte
+   für Stichworte und Fragen (2,5″ ≈ 6,35 cm), rechts die Notizen, unten die Zusammenfassung (2″ ≈ 5 cm); Stichworte und
+   Zusammenfassung zart getönt, der Kopf (Thema) ohne Muster, feine Linien bis zum Blattrand. Die Linien liegen
+   auf dem Raster des Blatts (Punkte, Linien und „Am Raster ausrichten“ passen). Zum Lernen lässt sich die Notizen-Spalte
+   unscharf machen (S.cornellHide): die Stichworte stehen frei, die Antworten sind verdeckt. */
+const isCornell = (n = S.note) => !!(n && n.paper && n.paper.t === 'cornell' && paperSize(n));
+function cornellOf(k, n = S.note) {
+  const f = fieldsOf(k, n)[0], r = sheetRect(k, n), G = gridSize(n), on = (v, o) => o + Math.round((v - o) / G) * G;
+  return { f, r, head: on(r[1] + 24 * MM, f[1]), sum: on(r[1] + (297 - 50) * MM, f[1]), cue: on(63.5 * MM, f[0]) };
+}
+// Notizen-Spalte eines Blatts (bis zum Rand des Blatts)
+function cornellNotes(k, n = S.note) { const c = cornellOf(k, n), r = sheetRect(k, n); return [c.cue, c.head, r[2], c.sum]; }
+function cornellNotesAt(x, y) { if (!isCornell()) return -1; const k = sheetAt(y), b = cornellNotes(k); return x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3] ? k : -1; }
+// Zarte Tönung unter dem Muster: Stichworte-Spalte und Zusammenfassung (bis zum Blattrand); c aus cornellOf,
+// s Gerätepixel je Welteinheit, offX/offY Lage von (0, 0)
+function cornellTint(ctx, c, s, offX, offY) {
+  const X = v => offX + v * s, Y = v => offY + v * s;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = isDark() ? 'rgba(150,175,225,.055)' : 'rgba(70,110,175,.05)';
+  ctx.fillRect(X(c.r[0]), Y(c.head), (c.cue - c.r[0]) * s, (c.sum - c.head) * s);
+  ctx.fillRect(X(c.r[0]), Y(c.sum), (c.r[2] - c.r[0]) * s, (c.r[3] - c.sum) * s);
+  ctx.restore();
+}
+// Haarlinien bis zum Blattrand und Beschriftung in dezenten Kapitälchen (über dem Muster); lw Linienbreite in Gerätepixeln
+function drawCornell(ctx, c, s, offX, offY, lw = Math.max(1, DPR)) {
+  const X = v => offX + v * s, Y = v => offY + v * s, dark = isDark();
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = dark ? 'rgba(150,175,225,.36)' : 'rgba(50,95,165,.42)';
+  ctx.fillRect(X(c.r[0]), Y(c.head) - lw / 2, (c.r[2] - c.r[0]) * s, lw);   // unter dem Kopf
+  ctx.fillRect(X(c.r[0]), Y(c.sum) - lw / 2, (c.r[2] - c.r[0]) * s, lw);    // über der Zusammenfassung
+  ctx.fillRect(X(c.cue) - lw / 2, Y(c.head), lw, (c.sum - c.head) * s);      // Stichworte | Notizen
+  const fs = 9 * s;
+  if (fs >= 4.5) {   // weit herausgezoomt: ohne Beschriftung
+    ctx.font = `600 ${fs}px "Segoe UI", system-ui, sans-serif`; ctx.textBaseline = 'top'; ctx.fillStyle = dark ? 'rgba(170,190,230,.55)' : 'rgba(55,85,135,.55)';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = (1.3 * s).toFixed(2) + 'px';
+    const p = 7 * s;
+    ctx.fillText('THEMA', X(c.f[0]) + p, Y(c.f[1]) + p * 0.6);
+    ctx.fillText('STICHWORTE & FRAGEN', X(c.f[0]) + p, Y(c.head) + p);
+    ctx.fillText('NOTIZEN', X(c.cue) + p, Y(c.head) + p);
+    ctx.fillText('ZUSAMMENFASSUNG', X(c.f[0]) + p, Y(c.sum) + p);
+  }
+  ctx.restore();
 }
 // Ursprung des Rasters in Achse ax (0 = x, 1 = y) beim Wert v: unendliche Fläche 0, sonst Feld bzw. Blatt bei v
 function gridOrigin(ax, v) {
@@ -1855,9 +2179,14 @@ function shapeGeo(a) {
     const [ax, ay, bx, by] = shapeEnds(a);
     // Koordinatensystem: alle Striche tragen dieselben Daten, damit es sich später neu zeichnen lässt
     const gr = GRAPHS.has(a.shape) && Math.hypot(bx - ax, by - ay) >= 1e-6 ? graphParams(a.shape, Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)) : null;
-    for (const xy of gr ? graphLines(gr, a.w) : shapeLines(a.shape, ax, ay, bx, by, a.w)) strokes.push(shapeStroke(xy, a.c, a.w, a.shape, a.g, gr));
+    const box = [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
+    for (const xy of gr ? graphLines(gr, a.w) : styledLines(a.shape, shapeLines(a.shape, ax, ay, bx, by, a.w), a, box)) {
+      const st = shapeStroke(xy, a.c, a.w, a.shape, a.g, gr);
+      if (!gr && a.ds !== 'solid' && SHAPE_BASIC.has(a.shape)) st.ds = a.ds;   // gestrichelt oder gepunktet
+      strokes.push(st);
+    }
   }
-  return a.geo = { key, strokes, paths: strokes.map(s => buildPath(s.pts, s.w, false, s.fl)) };
+  return a.geo = { key, strokes, paths: strokes.map(s => buildPath(s.pts, s.w, false, s.fl, s.ds)) };
 }
 /* Eigene Formen platzieren: Antippen = gespeicherte Größe, mittig auf dem Punkt; Ziehen = gleichmäßig in das
    aufgezogene Rechteck eingepasst, an seiner oberen linken Ecke (nie gespiegelt). Mit Raster liegt die geometrische
@@ -1897,6 +2226,7 @@ function stampStrokes(r, s, x, y, g) {
     const k = { t: 's', id: uid(), c: st.c, w, hl: st.hl, pts: p, bb: bboxOf(p, w), k: 'custom', g };
     if (st.al) k.al = st.al;
     if (st.fl) k.fl = st.fl.map(r => [r[0], r[1]]);
+    if (st.ds) k.ds = st.ds;
     return k;
   });
 }
@@ -1907,12 +2237,12 @@ function stampGeo(a) {
   const [s, x, y] = stampPlace(a, tap);
   if (!tap && stampData(r).n > STAMP_BIG) {   // große Form: ihre fertigen Pfade nur verschieben und skalieren
     const d = stampData(r);
-    if (!d.paths) { d.paths = r.strokes.map(st => buildPath(st.pts, st.w, st.hl, st.fl)); d.bbs = r.strokes.map(st => bboxOf(st.pts, st.w)); }
+    if (!d.paths) { d.paths = r.strokes.map(st => buildPath(st.pts, st.w, st.hl, st.fl, st.ds)); d.bbs = r.strokes.map(st => bboxOf(st.pts, st.w)); }
     const strokes = r.strokes.map((st, i) => { const b = d.bbs[i]; return { t: 's', c: st.c, hl: st.hl, bb: [x + b[0] * s, y + b[1] * s, x + b[2] * s, y + b[3] * s] }; });
     return a.geo = { key, strokes, paths: d.paths, xf: [s, x, y], box: true };
   }
   const strokes = stampStrokes(r, s, x, y, a.g);
-  return a.geo = { key, strokes, paths: strokes.map(k => buildPath(k.pts, k.w, k.hl, k.fl)), box: true };
+  return a.geo = { key, strokes, paths: strokes.map(k => buildPath(k.pts, k.w, k.hl, k.fl, k.ds)), box: true };
 }
 // Vorschau kachelweise, wie renderTile: unter der Form die Kachelpixel (deckend), darauf die Striche mit der Kachel
 // als Clip. Skia glättet Kanten abhängig vom Clip; so entstehen genau die Pixel, die später in der Kachel stehen,
@@ -1970,7 +2300,7 @@ function stampRest(a) {
   if (t >= 180) { a.rest = true; requestLive(); } else a.restT = setTimeout(() => stampRest(a), 190 - t);
 }
 function exactStamp(a, g) {
-  if (!a.exact || a.exact.key !== g.key) { const st = stampStrokes(a.custom, ...g.xf, a.g); a.exact = { key: g.key, strokes: st, paths: st.map(k => buildPath(k.pts, k.w, k.hl, k.fl)), box: true }; }
+  if (!a.exact || a.exact.key !== g.key) { const st = stampStrokes(a.custom, ...g.xf, a.g); a.exact = { key: g.key, strokes: st, paths: st.map(k => buildPath(k.pts, k.w, k.hl, k.fl, k.ds)), box: true }; }
   return a.exact;
 }
 function liveShape(a) {
@@ -2139,6 +2469,7 @@ function startAction(e) {
   if (penErase(e)) tool = 'eraser';
   else if (penButton(e) || (e.pointerType === 'pen' && tool !== 'hand' && selHit(sx, sy, wx, wy))) tool = 'lasso';
   if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || spaceDown)) tool = 'hand';
+  if (tool === 'text') { clearSel(); action = { kind: 'text', id: e.pointerId, sx, sy, wx, wy, ex: sx, cx: e.clientX, cy: e.clientY, t0: e.timeStamp, touch: e.pointerType === 'touch' }; return; }
   if (tool === 'hand') { action = { kind: 'pan', id: e.pointerId, sx, sy, tx: S.view.tx, ty: S.view.ty, touch: e.pointerType === 'touch', right: e.pointerType === 'mouse' && e.button === 2 }; return; }
   if (tool !== 'lasso' && S.sel) clearSel();
   if (tool === 'pen' || tool === 'hl' || tool === 'tape') {
@@ -2154,7 +2485,8 @@ function startAction(e) {
     let cs = null;
     if (isCustom(S.shape)) { cs = customOf(S.shape); if (!cs) { if (!customReady) return; setShape('rect'); } }   // Bibliothek lädt noch / Form fehlt
     // eigene Form und Graph: alle Striche bekommen eine gemeinsame Gruppe (Antippen mit dem Lasso wählt alles)
-    action = { kind: 'shape', id: e.pointerId, shape: S.shape, custom: cs, c: S.color.pen, w: S.size.pen, a0: [wx, wy], b: [wx, wy], shift: e.shiftKey, g: GRAPHS.has(S.shape) || cs ? uid() : null, geo: null };
+    action = { kind: 'shape', id: e.pointerId, shape: S.shape, custom: cs, c: S.color.pen, w: S.size.pen, a0: [wx, wy], b: [wx, wy], shift: e.shiftKey, g: GRAPHS.has(S.shape) || cs ? uid() : null, geo: null,
+      ds: S.shapeStyle.ds, rnd: S.shapeStyle.rnd, sl: S.shapeStyle.sl, seed: (Math.random() * 4294967296) >>> 0 };   // Stil und Startwert für diese Form
     liveClear(); liveStyle(null); requestLive();
   } else if (tool === 'eraser') {
     action = { kind: 'erase', id: e.pointerId, removed: new Set(), at: [wx, wy] }; eraseAt(wx, wy); requestLive();
@@ -2187,6 +2519,7 @@ function moveAction(e) {
     if (a.kind === 'pan') setView(a.tx + sx - a.sx, a.ty + sy - a.sy, S.view.z);
     else if (a.kind === 'erase') { a.at = [wx, wy]; eraseAt(wx, wy); }
     else if (a.kind === 'lasso') { if (Math.hypot(sx - a.last[0], sy - a.last[1]) >= 3) { a.pts.push(wx, wy); a.last = [sx, sy]; } }
+    else if (a.kind === 'text') a.ex = sx;
     else if (a.kind === 'shape') { a.b[0] = wx; a.b[1] = wy; a.shift = ev.shiftKey; a.mt = performance.now(); a.rest = false; }
     else if (a.kind === 'move') {
       a.dx = wx - a.wx; a.dy = wy - a.wy;
@@ -2273,6 +2606,7 @@ function endAction(cancel) {
     if (cancel) { liveClear(); requestLive(); return; }
     finishShape(a); return;
   }
+  if (a.kind === 'text') { if (!cancel) textTap(a); return; }
   if (a.kind === 'pan') { lastPan = { right: a.right, moved: S.view.tx !== a.tx || S.view.ty !== a.ty, t: performance.now() }; viewChanged(); requestLive(); return; }
   if (cancel) {
     if (a.kind === 'erase') for (const id of a.removed) { const it = S.items.find(i => i.id === id); if (it) invalidateBox(it.bb); }
@@ -2334,7 +2668,7 @@ function penArrived() {
 // und Abheben des Stifts auch Mausbewegungen, und beim Verlassen der Fläche ist der Cursor ohnehin nicht zu sehen.
 let penLast = false;   // zuletzt war der Stift auf oder über der Fläche, nicht die Maus
 const inkTool = t => t === 'pen' || t === 'hl' || t === 'tape';   // Werkzeuge mit Farbe, Dicke und Punkt beim Schweben
-function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : penLast && inkTool(t) ? 'none' : 'crosshair'; }
+function toolCursor(t) { return t === 'hand' ? 'grab' : t === 'lasso' ? 'default' : t === 'text' ? 'text' : penLast && inkTool(t) ? 'none' : 'crosshair'; }
 function hoverDot(e) {
   if (e.pointerType === 'mouse' && performance.now() < penActiveUntil) return;   // vom Stift ausgelöste Mausbewegung
   penLast = e.pointerType === 'pen';
@@ -2365,6 +2699,7 @@ cvLive.addEventListener('pointerdown', e => {
   penDot.style.display = '';
   if (e.pointerType === 'pen') { penLast = true; if (!spaceDown) cvLive.style.cursor = toolCursor(S.tool); }
   const ae = document.activeElement; if (ae && ae !== document.body && ae.blur) ae.blur();
+  hideTapeMenu();   // die Blase am Tape geht zu, der Tipp wirkt trotzdem
   if ($$('.menu').some(isOpen)) { closeMenus(); return; }
   if (e.pointerType === 'touch') {
     if (performance.now() < penActiveUntil) return;           // Handballen ignorieren
@@ -2375,7 +2710,7 @@ cvLive.addEventListener('pointerdown', e => {
     if (S.fingerDraw && touches.size === 1 && S.tool !== 'hand' && !gesture) { startAction(e); return; }
     if (action && action.touch) endAction(action.kind !== 'pan');  // zweiter Finger: Strich verwerfen, Geste starten
     gestureStart();
-    if (touches.size === 1) armPasteHold(gesture);   // gedrückt halten: „Einfügen“
+    if (touches.size === 1) { armPasteHold(gesture); gesture.ev0 = e.timeStamp; }   // gedrückt halten: „Einfügen“
     return;
   }
   if (e.pointerType === 'pen') { penActiveUntil = performance.now() + 600; penArrived(); }
@@ -2420,7 +2755,10 @@ function pointerEnd(e) {
       if (g && !g.cancelled && g.maxN === 2 && !g.moved && performance.now() - g.t0 < 350) { undo(); toast('Rückgängig', 900); }
       else if (g && !g.cancelled && g.maxN === 1 && !g.moved && performance.now() - g.t0 < 350) {   // Erklärung öffnen oder Tape antippen
         const [x, y] = toWorld(...g.c0), n = noteAt(x, y);
-        if (n) openNoteCard(n.id, null, noteBox(n)); else toggleTapeAt(x, y);
+        if (S.tool === 'text') { const r = cvLive.getBoundingClientRect(); textTap({ sx: g.c0[0], sy: g.c0[1], ex: g.c0[0], wx: x, wy: y, cx: r.left + g.c0[0], cy: r.top + g.c0[1], t0: g.ev0 }); }   // Text schreiben oder bearbeiten
+        else if (n) openNoteCard(n.id, null, noteBox(n));
+        else if (S.cornellHide && cornellNotesAt(x, y) >= 0) setCornellHide(false);   // verdeckte Notizen antippen: aufdecken
+        else toggleTapeAt(x, y);
       }
       settleZoom(); viewChanged();
     } else gestureStart();
@@ -2458,18 +2796,19 @@ document.addEventListener('gesturestart', e => e.preventDefault());   // Safari 
 
 /* ---------- Werkzeugleiste ---------- */
 function setTool(t) {
+  if (txEd && t !== 'text') commitText();
   if (action && t !== S.tool) cancelAction();
   S.tool = t;
   if (GROUP[t]) setGroupTool(t);
   $$('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   if (t !== 'lasso') clearSel();
-  $('#sizeMenu').classList.add('hidden'); $('#colorMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
+  $('#sizeMenu').classList.add('hidden'); $('#colorMenu').classList.add('hidden'); $('#tapeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
   renderColors(); renderSizes(); fitBar();
 }
 // Lasso, Tape und Formen teilen sich einen Knopf, damit die Leiste einzeilig bleibt. Er zeigt das zuletzt gewählte der
 // drei: Antippen wählt es (Formen: mit der Auswahl der Form), ist es schon gewählt, öffnet sich die Auswahl der drei
-const GROUP = { lasso: ['ic-lasso', 'Auswählen / Verschieben (L)'], tape: ['ic-tape', 'Tape: abdecken, antippen deckt auf (T)'], shape: ['ic-shape', 'Formen (F)'] };
+const GROUP = { lasso: ['ic-lasso', 'Auswählen / Verschieben (L)'], tape: ['ic-tape', 'Tape: abdecken, antippen deckt auf (T)'] };   // Formen haben einen eigenen Knopf
 function setGroupTool(t) {
   const b = $('#bGroup'); if (b.dataset.tool === t) return;
   b.dataset.tool = t; b.querySelector('use').setAttribute('href', '#' + GROUP[t][0]); store.set('groupTool', t);
@@ -2480,6 +2819,20 @@ function fitBar() {
   const bar = $('#bar'); if (!bar.offsetParent) return;
   bar.classList.remove('wrap');
   if (bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('wrap');
+  const ti = $('#title'); ti.title = ti.scrollWidth > ti.clientWidth + 1 ? ti.value : '';   // gekürzt: ganzer Name beim Draufzeigen
+  placeShapeBar();
+}
+// Formenleiste: solange Formen gewählt ist, unter der Leiste, links bündig mit den Farben (dort, wo die Einstellungen
+// des Stifts stehen); passt sie dort nicht, rückt sie nach links
+function placeShapeBar() {
+  const sb = $('#shapeBar'), show = S.tool === 'shape' && !!S.note && !!$('#bar').offsetParent;
+  if (!show) { if (!sb.classList.contains('hidden')) popOut(sb); return; }
+  const was = sb.classList.contains('hidden') || !!sb.dataset.closing;
+  sb.classList.remove('hidden');
+  const c = $('#colors').getBoundingClientRect(), w = sb.offsetWidth;
+  sb.style.top = $('#bar').getBoundingClientRect().bottom + 8 + 'px';
+  sb.style.left = clamp(c.left - 8, 8, innerWidth - w - 8) + 'px';
+  if (was) { markShapeMenu(); popIn(sb, $('#bShape')); }
 }
 // Farbe und Dicke gelten für Stift, Textmarker, Lasso (übernehmen) und Formen – nicht für eigene Formen,
 // die behalten ihre gespeicherten Farben (Antippen wechselt dann zum Stift, wie beim Radierer)
@@ -2671,7 +3024,7 @@ function showSize() {
   if (k !== 'tape') $('#opVal').textContent = Math.round(S.alpha[k] * 100) + ' %';
   $('#smVal').textContent = fmtSmooth(S.smooth);
   $('#stBtn').classList.toggle('on', !!S.straight[k]);
-  $('#szHint').textContent = k === 'tape' ? 'Tape antippen deckt auf oder wieder ab, auch mit dem Finger. Was auf dem Tape geschrieben steht, verschwindet beim Aufdecken mit. Am Ende kurz halten macht es gerade.'
+  $('#szHint').textContent = k === 'tape' ? 'Ein Tape antippen (auch mit dem Finger) deckt es auf oder wieder ab; die kleine Blase daran schaltet genau dieses Tape um oder entfernt es. Was auf dem Tape geschrieben steht, verschwindet beim Aufdecken mit. Am Ende kurz halten macht es gerade.'
     : k === 'hl' ? 'Der Textmarker liegt unter der Schrift. Am Ende kurz halten macht die Linie gerade.' : '';
   drawSizePreview(k, v);
 }
@@ -2708,6 +3061,7 @@ function openSizeMenu(k, btn) {
   sizeKind = k; $('#szRange').value = sizeToT(k, S.size[k]); renderSmooth(); renderTapePats();
   // Stift: Deckkraft, Glättung; Textmarker: dazu „Immer gerade“; Tape: Muster, „Immer gerade“, alle auf- und abdecken
   $('#tpBox').hidden = $('#tpAll').hidden = k !== 'tape'; $('#smBox').hidden = $('#opBox').hidden = k === 'tape'; $('#stBox').hidden = k === 'pen';
+  m.classList.toggle('tape', k === 'tape');   // fürs Tape etwas breiter: die Muster passen in eine Reihe
   if (k !== 'tape') $('#opRange').value = Math.round(S.alpha[k] * 100);
   m.classList.remove('hidden'); showSize(); $('#bTune').classList.add('on');
   // unter der ganzen Leiste: bricht sie um, verdeckte das Menü sonst Knöpfe der nächsten Zeile; in niedrigen Fenstern scrollbar
@@ -2728,18 +3082,22 @@ $('#opRange').oninput = () => {
   store.set('alpha', S.alpha); showSize(); renderSizes();
 };
 // Tape: Muster neuer Tapes, gerade oder frei, alle Tapes der Seite auf- oder abdecken
+// Muster als kleine Tape-Stücke, leicht schräg auf Papier geklebt (wie Washi-Tape), alle in einer Reihe; der Name steht
+// unsichtbar dabei (Vorlesen, Tooltip), der des gewählten oben neben „Muster“
+const TAPE_TILT = [-4, 3, -2, 4, -3, 2, -4];
 function renderTapePats() {
   const box = $('#tpPats'); box.innerHTML = '';
-  for (const [k, name] of TAPE_PATTERNS) {
-    if (k === 'kitty') { const br = document.createElement('i'); br.className = 'br'; box.appendChild(br); }   // Figuren in eine eigene Reihe
-    const b = document.createElement('button'); b.className = S.tapePat === k ? 'on' : ''; b.textContent = name;
+  $('#tpName').textContent = (TAPE_PATTERNS.find(([k]) => k === S.tapePat) || ['', ''])[1];
+  TAPE_PATTERNS.forEach(([k, name], i) => {
+    const b = document.createElement('button'); b.className = S.tapePat === k ? 'on' : ''; b.title = name;
+    const c = tapeSwatch(k, 36, 18, S.tapePat === k); c.style.setProperty('--r', TAPE_TILT[i % TAPE_TILT.length] + 'deg'); b.append(c, name);   // Name: Schriftgröße 0
     b.onclick = () => {
       S.tapePat = k; store.set('tapePat', k);
       if (TAPE_MOTIFS[k]) { S.color.tape = TAPE_MOTIFS[k].c; store.set('color', S.color); renderColors(); }   // Figuren: ihre Farbe gleich mit
       renderTapePats(); showSize();
     };
     box.appendChild(b);
-  }
+  });
 }
 $('#stBtn').onclick = () => { S.straight[sizeKind] = !S.straight[sizeKind]; store.set('straight', S.straight); showSize(); };
 function allTapes(hid) {
@@ -2768,7 +3126,7 @@ $('#smRange').oninput = () => {
   const b = $('#smPresets').children[S.smoothIdx]; b.textContent = fmtSmooth(v); b.title = 'Glättung ' + fmtSmooth(v); showSize();
 };
 $$('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
-// Auswahl der drei unter dem Knopf (unter der ganzen Leiste, auch wenn sie umbricht); bei Formen darunter die Formen
+// Auswahl Lasso oder Tape unter dem Knopf (unter der ganzen Leiste, auch wenn sie umbricht)
 function openGroupMenu() {
   const g = $('#grpMenu'), r = $('#bGroup').getBoundingClientRect();
   closeMenus();
@@ -2777,35 +3135,61 @@ function openGroupMenu() {
   g.style.top = Math.max(r.bottom, barBottom()) + 8 + 'px';
   g.style.left = clamp(r.left + r.width / 2 - g.offsetWidth / 2, 8, innerWidth - g.offsetWidth - 8) + 'px';
   popIn(g, $('#bGroup'));
-  if (S.tool === 'shape') openShapeMenu(g.getBoundingClientRect().bottom + 6);
 }
-function openShapeMenu(top) {
-  const m = $('#shapeMenu'), r = $('#bGroup').getBoundingClientRect();
-  renderCustomGrid(); markShapeMenu();
+// Eigene Formen: klappt unter ihrem Knopf in der Formenleiste auf
+function openShapeMenu() {
+  if (S.tool !== 'shape') setTool('shape');
+  for (const a of $('#shapeBar').getAnimations()) a.finish();   // gerade erschienen: erst an ihrem Platz messen
+  const m = $('#shapeMenu'), btn = $('#sbCustom'), r = btn.getBoundingClientRect(), top = r.bottom + 10;
+  closeMenus(); renderCustomGrid(); markShapeMenu();
   m.classList.remove('hidden');
   m.style.top = top + 'px'; m.style.maxHeight = Math.max(220, innerHeight - top - 12) + 'px';
   m.style.left = clamp(r.left + r.width / 2 - m.offsetWidth / 2, 8, innerWidth - m.offsetWidth - 8) + 'px';
-  popIn(m, $('#bGroup'), '', 40);   // kurz nach der Auswahl darüber
+  popIn(m, btn);
 }
+$('#sbCustom').onclick = () => { if (isOpen($('#shapeMenu'))) closeMenus(); else openShapeMenu(); };
+// Stil in der Formenleiste: Kontur, Kanten, Sauberkeit (gilt für neue Grundformen, bleibt gespeichert)
+function markShapeStyle() {
+  const st = S.shapeStyle;
+  $$('#shStyle [data-ds]').forEach(b => b.classList.toggle('on', b.dataset.ds === st.ds));
+  $$('#shStyle [data-rnd]').forEach(b => b.classList.toggle('on', +b.dataset.rnd === st.rnd));
+  $$('#shStyle [data-sl]').forEach(b => b.classList.toggle('on', +b.dataset.sl === st.sl));
+}
+$$('#shStyle button').forEach(b => b.onclick = () => {
+  const st = S.shapeStyle;
+  if (b.dataset.ds) st.ds = b.dataset.ds; if (b.dataset.rnd) st.rnd = +b.dataset.rnd; if (b.dataset.sl) st.sl = +b.dataset.sl;
+  store.set('shapeStyle', st);
+  if (isCustom(S.shape) || GRAPHS.has(S.shape)) setShape('rect');   // der Stil gilt für Grundformen: sonst weiter mit dem Rechteck
+  if (S.tool !== 'shape') setTool('shape');
+  markShapeMenu();
+});
+// gewählte Form überall zeigen: Formenleiste, eigene Formen (Knopf mit ihrem Bild), Knopf „Formen“ in der Leiste
 function markShapeMenu() {
-  $$('#shapeMenu [data-shape]').forEach(b => b.classList.toggle('on', b.dataset.shape === S.shape));
+  markShapeStyle(); $('#shStyle').classList.toggle('dim', isCustom(S.shape) || GRAPHS.has(S.shape));   // Stil gilt nur für Grundformen
+  $$('#shapeBar [data-shape], #shapeMenu [data-shape]').forEach(b => b.classList.toggle('on', b.dataset.shape === S.shape));
+  const cs = customOf(S.shape), cb = $('#sbCustom'), pic = $('#sbCustom .sbct');
+  cb.classList.toggle('on', !!cs); cb.title = cs ? 'Eigene Form: ' + cs.name + ' · antippen: andere wählen' : 'Eigene Formen';
+  if (cs) { const src = customThumb(cs), c = document.createElement('canvas'); c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0); pic.replaceChildren(c); }
+  else if (!pic.querySelector('svg')) pic.innerHTML = '<svg class="i"><use href="#ic-shape"/></svg>';
   $('#shapeMenu .mhint').textContent = isCustom(S.shape) ? 'Tippen: in Originalgröße platzieren · Ziehen: Größe wählen' : 'Ziehen zum Zeichnen · Umschalt: gerade/quadratisch';
+  $('#bShape use').setAttribute('href', '#' + (isCustom(S.shape) ? 'ic-shape' : 'sh-' + S.shape));
 }
 function shapeTitle() {
-  const g = $('#bGroup'), t = g.dataset.tool, cs = customOf(S.shape), b = !isCustom(S.shape) && $(`#shapeMenu [data-shape="${S.shape}"]`);
-  g.title = (t === 'shape' ? 'Formen (F)' + (cs ? ' – ' + cs.name : b ? ' – ' + b.textContent.trim() : '') : GROUP[t][1]) + ' · nochmal antippen: Lasso, Tape oder Formen';
+  const g = $('#bGroup'), cs = customOf(S.shape), b = !isCustom(S.shape) && $(`#shapeBar [data-shape="${S.shape}"]`);
+  g.title = (GROUP[g.dataset.tool] || GROUP.lasso)[1] + ' · nochmal antippen: Lasso oder Tape';
+  $('#bShape').title = 'Formen (F)' + (cs ? ' – ' + cs.name : b ? ' – ' + b.title : '');
 }
-function setShape(k) { S.shape = k; store.set('shape', k); shapeTitle(); renderColors(); renderSizes(); }
+function setShape(k) { S.shape = k; store.set('shape', k); shapeTitle(); markShapeMenu(); renderColors(); renderSizes(); }
 function pickShape(k) { setShape(k); closeMenus(); if (S.tool !== 'shape') setTool('shape'); }
 $('#bGroup').onclick = () => {
   const t = $('#bGroup').dataset.tool, open = isOpen($('#grpMenu'));
-  if (S.tool !== t) { setTool(t); if (t === 'shape') openGroupMenu(); return; }
+  if (S.tool !== t) { setTool(t); return; }
   if (open) closeMenus(); else openGroupMenu();
 };
-$$('#grpMenu [data-gtool]').forEach(b => b.onclick = () => { const t = b.dataset.gtool; setTool(t); if (t === 'shape') openGroupMenu(); else closeMenus(); });
-$$('#shapeMenu [data-shape]').forEach(b => b.onclick = () => pickShape(b.dataset.shape));
+$$('#grpMenu [data-gtool]').forEach(b => b.onclick = () => { setTool(b.dataset.gtool); closeMenus(); });
+$$('#shapeBar [data-shape]').forEach(b => b.onclick = () => pickShape(b.dataset.shape));
 { const t = store.get('groupTool'); if (GROUP[t]) setGroupTool(t); }
-shapeTitle();
+shapeTitle(); markShapeMenu();
 
 /* ---------- Koordinatensysteme: Einstellungen ----------
    Abstand der Teilstriche (in Kästchen) und Beschriftung der Achsen, mit Vorschau. Ohne Auswahl gelten sie für neue
@@ -2952,11 +3336,11 @@ for (const [id, key] of [['#grLx', 'lx'], ['#grLy', 'ly'], ['#grLz', 'lz']]) {
 }
 $('#sGraph').onclick = () => openGraphMenu($('#sGraph'), true);
 $('#grOpen').onclick = () => openGraphMenu($('#bTune'), false);
-// Namen der Koordinatensysteme im Formen-Menü mit ihrer Beschriftung
+// Namen der Koordinatensysteme in der Formenleiste mit ihrer Beschriftung
 function graphShapeLabels() {
   const L = s => String(s).trim() || '–', { lx, ly, lx3, ly3, lz } = S.graph;
   const t = { axes2: `Koordinatensystem (${L(lx)}, ${L(ly)})`, axes2p: `Nur positiv (${L(lx)}, ${L(ly)})`, axes3: `3D (${L(lx3)}, ${L(ly3)}, ${L(lz)})` };
-  for (const k of GRAPHS) { const s = $(`#shapeMenu [data-shape="${k}"] span`); if (s) s.textContent = t[k]; }
+  for (const k of GRAPHS) { const b = $(`#shapeBar [data-shape="${k}"]`); if (b) { b.title = t[k]; b.setAttribute('aria-label', t[k]); } }
   shapeTitle();
 }
 graphShapeLabels();
@@ -2970,8 +3354,8 @@ async function loadCustomShapes() {
   try { CUSTOM = (await dbShapesAll()).sort(byCreated); } catch (e) { CUSTOM = []; }
   customReady = true;
   if (isCustom(S.shape) && !customOf(S.shape)) setShape('rect');   // Form gibt es nicht mehr
-  shapeTitle(); renderColors(); renderSizes();
-  if (!$('#shapeMenu').classList.contains('hidden')) { renderCustomGrid(); markShapeMenu(); }
+  shapeTitle(); markShapeMenu(); renderColors(); renderSizes();
+  if (!$('#shapeMenu').classList.contains('hidden')) renderCustomGrid();
 }
 async function saveCustomShape() {
   if (!S.sel) return;
@@ -2989,6 +3373,7 @@ async function saveCustomShape() {
     const st = { c: s.c, w: s.w, hl: !!s.hl, pts: p };
     if (s.al) st.al = s.al;
     if (s.fl) st.fl = s.fl.map(r => [r[0], r[1]]);
+    if (s.ds) st.ds = s.ds;
     return st;
   });
   const b = geoBox(list), rec = { id: uid(), name: name.trim() || 'Form ' + k, created: Date.now(), w: b[2], h: b[3], strokes: list };
@@ -3014,7 +3399,7 @@ function customThumb(r) {
   c = document.createElement('canvas'); c.width = c.height = Math.round(SZ * DPR);
   const g = c.getContext('2d'), f = c.width / SZ;
   g.setTransform(f * k, 0, 0, f * k, f * (SZ / 2 - r.w / 2 * k), f * (SZ / 2 - r.h / 2 * k));
-  for (const st of r.strokes) fillStroke(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl, st.fl));
+  for (const st of r.strokes) fillStroke(g, st, buildPath(st.pts, Math.max(st.w, (st.hl ? 3 : 1.3) / k), st.hl, st.fl, st.ds));
   thumbCache.set(key, c);
   return c;
 }
@@ -3053,12 +3438,13 @@ $('#bDark').onclick = toggleDark; $('#hDark').onclick = toggleDark;
    schließt das Fenster (im Editor: zurück zum Buch). Der Schreibbereich folgt weiter Hell/Dunkel. */
 const isXP = () => document.documentElement.classList.contains('xp');
 function applyTheme() {
-  const xp = S.theme === 'xp';
+  const xp = XP_ON && S.theme === 'xp';
   document.documentElement.classList.toggle('xp', xp);
   $('#hTheme').classList.toggle('on', xp);
+  $('#hTheme').classList.toggle('hidden', !XP_ON); $('#mTheme').classList.toggle('hidden', !XP_ON);   // XP aus: keine Umschalter
   xpTitle(); fitBar(); if (S.sel) placeSelbar();
 }
-function toggleTheme() { S.theme = S.theme === 'xp' ? 'modern' : 'xp'; store.set('theme', S.theme); applyTheme(); toast('Aussehen: ' + (S.theme === 'xp' ? 'Windows XP' : 'modern'), 1400); }
+function toggleTheme() { if (!XP_ON) return; S.theme = S.theme === 'xp' ? 'modern' : 'xp'; store.set('theme', S.theme); applyTheme(); toast('Aussehen: ' + (S.theme === 'xp' ? 'Windows XP' : 'modern'), 1400); }
 $('#hTheme').onclick = toggleTheme;
 $('#mTheme').onclick = () => { closeMenus(); toggleTheme(); };
 // Titelleiste des Editors: „Name – Notizen“ wie ein Fenster damals
@@ -3112,7 +3498,8 @@ function openMenu(menu, btn) {
   popIn(menu, btn);
 }
 // Der Dialog schließt kein Menü (eine eigene Form im offenen Formen-Menü löschen)
-document.addEventListener('pointerdown', e => { if (ncCur && e.pointerType === 'touch' && performance.now() < penActiveUntil) return; if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph') && e.target !== cvLive) closeMenus(); }, true);
+document.addEventListener('pointerdown', e => { if (txEd && !e.target.closest('#txEd,#txBar,#txGrip,#txMove')) { commitText(); txClosedAt = e.timeStamp; }   // daneben: Text fertig (dieser Tipp legt keinen neuen an)
+  if (ncCur && e.pointerType === 'touch' && performance.now() < penActiveUntil) return; if (!e.target.closest('.menu') && !e.target.closest('#bBg,#bImg,#bMore,#sizes,#bTune,#bGroup,.mbtn,#dlg,.sw.custom,#sGraph,#sbCustom,#grOpen') && e.target !== cvLive) closeMenus(); }, true);
 $('#bBg').onclick = () => { $$('#bgMenu [data-bg]').forEach(b => b.classList.toggle('on', b.dataset.bg === (S.note.bg || 'dots'))); openMenu($('#bgMenu'), $('#bBg')); };
 $$('#bgMenu [data-bg]').forEach(b => b.onclick = () => { S.note.bg = b.dataset.bg; markDirty(); clearTiles(); closeMenus(); });
 $('#bSheet').onclick = addSheet;
@@ -3151,7 +3538,7 @@ $('#sDup').onclick = () => {
     if (c.g) { if (!groups.has(c.g)) groups.set(c.g, uid()); c.g = groups.get(c.g); }   // Kopie = eigene Gruppe
     return c;
   });
-  commit(appendItems(withImages(S.items, copies.filter(c => c.t === 'i')), copies.filter(c => c.t === 's')));
+  commit(appendItems(withImages(S.items, copies.filter(c => c.t === 'i')), copies.filter(c => c.t !== 'i')));
   setSel(ids);
 };
 $('#sSave').onclick = saveCustomShape;
@@ -3189,7 +3576,7 @@ document.addEventListener('keydown', e => {
   }
   // Esc schließt offene Menüs auch, wenn ein Regler darin noch den Fokus hat
   if (k === 'escape' && $$('.menu').some(isOpen)) { closeMenus(); if (e.target.blur) e.target.blur(); return; }
-  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
   if (k === ' ') { e.preventDefault(); if (!spaceDown && !action) { spaceDown = true; cvLive.style.cursor = 'grab'; } return; }
   if (action) {
     if (k === 'escape') cancelAction();
@@ -3204,7 +3591,7 @@ document.addEventListener('keydown', e => {
   else if ((k === 'delete' || k === 'backspace') && S.sel) { e.preventDefault(); $('#sDel').click(); }
   else if (k === 'escape') { if (!escFullscreen()) { clearSel(); closeMenus(); } }
   else if (!mod && !e.altKey && k === 'g') toggleSnap();
-  else if (!mod && !e.altKey) { const t = { p: 'pen', m: 'hl', t: 'tape', f: 'shape', e: 'eraser', l: 'lasso', h: 'hand' }[k]; if (t) setTool(t); }
+  else if (!mod && !e.altKey) { const t = { p: 'pen', m: 'hl', t: 'tape', f: 'shape', e: 'eraser', l: 'lasso', h: 'hand', x: 'text' }[k]; if (t) setTool(t); }
 });
 document.addEventListener('keyup', e => {
   if (e.key === ' ' && spaceDown) { e.preventDefault(); spaceDown = false; setTool(S.tool); }
@@ -3388,21 +3775,27 @@ async function insertPdfPages(pdf, file, note) {
 // Bild aus der Zwischenablage, ohne es erst als Datei zu speichern (etwa ein Bildschirmfoto mit Win + Umschalt + S).
 // Der Browser fragt dabei evtl. nach Erlaubnis; Strg + V geht auch so (paste-Ereignis unten)
 const CLIP_EMPTY = 'In der Zwischenablage ist kein Bild. Bildschirmfoto: Win + Umschalt + S';
-// Bilder aus der Zwischenablage als Dateien; null (mit Hinweis), wenn keins da ist oder der Zugriff fehlt
-async function clipImages() {
+// Inhalt der Zwischenablage: Bilder (als Dateien) und Text; null (mit Hinweis), wenn der Zugriff fehlt
+async function clipRead() {
   const cb = navigator.clipboard;
   if (!cb || !cb.read) { toast('Hier geht das Einfügen aus der Zwischenablage nur mit Strg + V', 4000); return null; }
-  const files = [];
+  const files = []; let text = '';
   try {
     for (const it of await cb.read()) {
       const type = it.types.find(t => t.startsWith('image/'));
       if (type) files.push(new File([await it.getType(type)], 'Bild aus der Zwischenablage', { type }));
+      else if (!text && it.types.includes('text/plain')) text = await (await it.getType('text/plain')).text();
     }
   } catch (e) {
     toast(e && e.name === 'NotAllowedError' ? 'Kein Zugriff auf die Zwischenablage. Mit Strg + V geht es auch.' : CLIP_EMPTY, 4500); return null;
   }
-  if (!files.length) { toast(CLIP_EMPTY, 4500); return null; }
-  return files;
+  return { files, text };
+}
+// nur Bilder (Einfügen auf der Seite); null mit Hinweis, wenn keins da ist
+async function clipImages() {
+  const r = await clipRead(); if (!r) return null;
+  if (!r.files.length) { toast(CLIP_EMPTY, 4500); return null; }
+  return r.files;
 }
 async function pasteImage(at) {
   if (!S.note) return;
@@ -3434,14 +3827,14 @@ function showPasteMenu(sx, sy) {
   popIn(m, { getBoundingClientRect: () => ({ left: x, top: y, width: 0, height: 0 }) });
 }
 $('#pmPaste').onclick = () => { const at = pasteAt; closeMenus(); pasteImage(at); };
-/* ---------- Erklärungen ----------
+/* ---------- Erklärungen (in der App heißen sie „Notiz“) ----------
    Mit dem Lasso etwas auswählen, dann „Erklärung“: eine Karte mit kurzem Text, einem Bild (Zwischenablage oder Datei)
    und einer kleinen Fläche zum Schreiben. Sie hängt an einer Markierung: einem unsichtbaren Strich (k 'note', Inhalt
    in nt), einem Rechteck 6 px um das Markierte; zu sehen ist nur ein blaues „i“ in seiner oberen rechten Ecke. Das
    Markierte hängt an ihr (on): beides wandert zusammen. Ein Fingertipp auf die Stelle oder ein Stifttipp auf das „i“
    öffnet die Karte. Gespeichert wird beim Schließen, als ein Schritt fürs Rückgängigmachen; ganz leer heißt: keine
    Erklärung. (Markierungen mit fl und hl stammen aus der ersten Testversion mit blauer Fläche; sie gelten weiter.) */
-const NOTE_C = '#7fb0ff', NOTE_PAD = 6, NOTE_INK_W = 2.2;
+const NOTE_C = '#7fb0ff', NOTE_PAD = 6;
 let ncCur = null;   // offene Karte: { id (Markierung) oder ids (neu zu markieren), box, nt (Arbeitskopie), orig, url }
 const noteOf = id => S.items.find(it => it.id === id && it.nt) || null;
 const noteBox = it => geoBox([it]);   // der Kasten selbst (bb ist um die Strichbreite größer)
@@ -3484,7 +3877,8 @@ function openNoteCard(id, ids, box) {
   const it = id ? noteOf(id) : null; if (id && !it) return;
   const nt = it ? it.nt : { text: '', img: null, ink: [] };
   ncCur = { id: it ? it.id : null, ids: it ? null : ids, box, nt: { text: nt.text || '', img: nt.img || null, ink: (nt.ink || []).map(s => ({ ...s })) }, orig: it ? JSON.stringify(nt) : null, url: null };
-  const m = $('#noteCard'); m.classList.remove('big', 'glance'); ncDraw = null;
+  const m = $('#noteCard'); m.classList.remove('big', 'glance'); ncDraw = null; liveInkClear();
+  ncPal.getAnimations().forEach(a => a.cancel()); delete ncPal.dataset.closing; ncPal.classList.add('hidden'); ncToolBtn();
   $('#ncText').value = ncCur.nt.text;
   m.classList.remove('hidden');
   growBtn(); fitNoteText(); drawNoteInk(); placeNoteCard(); showNoteImg();
@@ -3502,7 +3896,7 @@ function setGlance(on) {
   const m = $('#noteCard'); if (!ncCur || m.classList.contains('glance') === on) return;
   const r0 = m.getBoundingClientRect();
   m.getAnimations().forEach(a => a.cancel());
-  m.classList.remove('big'); m.classList.toggle('glance', on);
+  m.classList.toggle('glance', on);
   if (!on) placeNoteCard();   // zurück an ihren Platz bei der Markierung
   growBtn(); fitNoteText(); drawNoteInk();
   if (on) showDim(); else hideDim();
@@ -3574,8 +3968,18 @@ async function showNoteImg(blob) {
   const img = $('#ncImg'); img.onload = () => { if (ncCur === c) placeNoteCard(); }; img.src = c.url;
   box.classList.remove('hidden');
 }
-// kleine Schreibfläche: Stift, Maus oder Finger (nicht der Handballen, solange der Stift da ist)
-const ncInk = $('#ncInk'), inkPaths = new WeakMap(); let ncDraw = null;
+// Schreibfläche der Karte, wie auf der Seite: Papier und Muster der Seite; Stift, Textmarker und Tape mit Farbe, Dicke,
+// Deckkraft und Muster der Leiste (gemeinsam mit der Seite) und demselben Filter (Glättung, Druck); Textmarker und Tape
+// auf Wunsch gerade (oder kurz still halten). Stift, Maus oder Finger (nicht der Handballen, solange der Stift da ist).
+// Der laufende Strich kommt auf eine eigene schnelle Ebene (wie cvLive), fertige Striche liegen unten: Textmarker unter
+// der Schrift, sonst wie gelegt; was auf einem Tape steht, verschwindet mit ihm, wenn es aufgedeckt wird (Tape mit dem
+// Tape oder dem Finger antippen). Beim Schweben zeigt ein Punkt, wo der Stift schreibt; Radierer-Ende oder Radierer
+// radieren ganze Striche. Werkzeug, Farbe und Dicke: Knopf oben links, ein Tipp klappt die Auswahl auf.
+const ncInk = $('#ncInk'), ncLive = $('#ncLive'), ncDot = $('#ncDot'), ncPal = $('#ncPal'), inkPaths = new WeakMap(); let ncDraw = null;
+const ncBase = ncInk.getContext('2d', { alpha: false });
+const ncLiveCtx = ncLive.getContext('2d', { desynchronized: /Windows/.test(navigator.userAgent) });
+let ncTool = 'pen';   // Werkzeug der Schreibfläche: pen, hl, tape, eraser
+const NC_TOOLS = [['pen', 'ic-pen', 'Stift'], ['hl', 'ic-hl', 'Textmarker'], ['tape', 'ic-tape', 'Tape'], ['eraser', 'ic-eraser', 'Radierer']];
 // Maßstab der Schreibfläche: 1, außer das Geschriebene ist größer als die Fläche (im großen Fenster geschrieben) –
 // dann verkleinert, damit alles zu sehen ist. Neu Geschriebenes kommt im selben Maßstab dazu.
 let ncInkS = 1;
@@ -3584,55 +3988,212 @@ function inkScale(W, H) {
   for (const s of ncCur ? ncCur.nt.ink : []) for (let i = 0; i < s.pts.length; i += 3) { mx = Math.max(mx, s.pts[i] + s.w + 8); my = Math.max(my, s.pts[i + 1] + s.w + 8); }   // mit etwas Rand
   return Math.min(1, W / Math.max(1, mx), H / Math.max(1, my));
 }
-function drawNoteInk(extra) {
-  const W = ncInk.clientWidth || 296, H = ncInk.clientHeight || 140;
-  if (ncInk.width !== Math.round(W * DPR) || ncInk.height !== Math.round(H * DPR)) { ncInk.width = Math.round(W * DPR); ncInk.height = Math.round(H * DPR); }
-  if (!ncDraw) ncInkS = inkScale(W, H);   // während eines Strichs bleibt der Maßstab
-  const g = ncInk.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, W, H);
-  g.setTransform(DPR * ncInkS, 0, 0, DPR * ncInkS, 0, 0);
+// zu sehen: nicht auf einem aufgedeckten Tape geschrieben
+function inkShown(list) { const open = new Set(list.filter(x => x.tp && !covered(x)).map(x => x.id)); return st => !st.on || !open.has(st.on); }
+function paintInk(g, st, s) {
+  if (st.tp) { drawTape(g, st, DPR * s); return; }
+  let P = inkPaths.get(st); if (!P) inkPaths.set(st, P = buildPath(Float32Array.from(st.pts), st.w, !!st.hl));
+  fillStroke(g, st, P);
+}
+function drawNoteInk() {
+  const W = ncInk.clientWidth || 296, H = ncInk.clientHeight || 140, w = Math.round(W * DPR), h = Math.round(H * DPR);
+  for (const c of [ncInk, ncLive]) if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  if (!ncDraw) ncInkS = inkScale(W, H);   // während eines Strichs (oder beim Radieren) bleibt der Maßstab
+  const g = ncBase, s = ncInkS, list = ncCur ? ncCur.nt.ink : [];
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
+  g.fillStyle = paperColor(); g.fillRect(0, 0, w, h);
+  if (S.note) { let sp = (S.note.bg === 'lines' ? 34 : 28) * s; while (sp < 14) sp *= 2; fillPattern(g, s, sp * DPR / 2, sp * DPR / 2, w, h); }   // Muster wie auf der Seite, nicht am Rand angeschnitten
+  g.setTransform(DPR * s, 0, 0, DPR * s, 0, 0);
+  const vis = inkShown(list);
+  for (const st of list) if (st.pts.length && st.hl && !st.on) paintInk(g, st, s);   // Textmarker unter der Schrift
+  for (const st of list) if (st.pts.length && !(st.hl && !st.on) && vis(st)) paintInk(g, st, s);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  $('#noteCard').classList.toggle('inked', list.length > 0 || !!(ncDraw && !ncDraw.erase));
+}
+function liveInkClear() { ncLiveCtx.setTransform(1, 0, 0, 1, 0, 0); ncLiveCtx.clearRect(0, 0, ncLive.width, ncLive.height); ncLive.style.opacity = ''; ncLive.style.mixBlendMode = ''; }
+// neue Stücke des laufenden Strichs auf die schnelle Ebene (wie livePiece auf der Seite)
+function inkPiece(d) {
+  const n = d.pts.length / 3; if (d.drawn >= n) return;
+  const P = new Path2D(); for (let i = d.drawn; i < n; i++) addPiece(P, d.pts, i, d.w, d.hl);
+  d.drawn = n; ncLiveCtx.fill(P);
+}
+// gerade vom Anfang bis zum Stift (fast waagerecht oder senkrecht: genau), in Koordinaten der Schreibfläche
+function inkStraight(d) {
+  const s = d.s, r = d.raw || d.start, x0 = d.start[0] / s, y0 = d.start[1] / s, x1 = r[0] / s, y1 = r[1] / s;
+  const ang = Math.abs(Math.atan2(y1 - y0, x1 - x0)) * 180 / Math.PI; let ex = x1, ey = y1;
+  if (ang < 4 || ang > 176) ey = y0; else if (Math.abs(ang - 90) < 4) ex = x0;
+  return [x0, y0, d.g.p, ex, ey, d.g.p];
+}
+// Tape und gerade Striche: die schnelle Ebene jedes Mal ganz neu (Muster, Gerade)
+function inkRedraw(d) {
+  const g = ncLiveCtx, s = d.s; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ncLive.width, ncLive.height); g.setTransform(DPR * s, 0, 0, DPR * s, 0, 0);
+  const pts = d.straight ? inkStraight(d) : d.pts;
+  if (d.tape) { if (pts.length < 6) return; const o = d.live || (d.live = { c: d.c, w: d.w, tp: d.tp, hid: true }); o.pts = pts; pathCache.delete(o); drawTape(g, o, DPR * s); }
+  else { g.fillStyle = colorOf(d.c); g.fill(buildPath(Float32Array.from(pts), d.w, d.hl)); }
+}
+// Textmarker und Tape: knapp eine halbe Sekunde still halten macht den Strich gerade (wie auf der Seite)
+function armInkHold(d) { clearTimeout(d.holdT); d.holdT = setTimeout(() => { if (ncDraw === d && !d.straight && d.pts.length > 9) { d.straight = d.redraw = true; inkRedraw(d); } }, 450); }
+// Abstand eines Punkts (Koordinaten der Schreibfläche) zu einem Strich kleiner als lim?
+function inkNear(st, x, y, lim) {
+  const q = st.pts; if (q.length === 3) return Math.hypot(x - q[0], y - q[1]) < lim;
+  for (let i = 3; i < q.length; i += 3) if (distSeg(x, y, q[i - 3], q[i - 2], q[i], q[i + 1]) < lim) return true;
+  return false;
+}
+// oberstes Tape unter (x, y)
+function inkTapeAt(x, y) {
   const list = ncCur ? ncCur.nt.ink : [];
-  for (const s of extra ? [...list, extra] : list) {
-    if (!s.pts.length) continue;
-    let P = s === extra ? null : inkPaths.get(s);
-    if (!P) { P = buildPath(Float32Array.from(s.pts), s.w, false); if (s !== extra) inkPaths.set(s, P); }
-    g.fillStyle = s.c === 'ink' && isXP() ? '#1b1b1d' : colorOf(s.c); g.fill(P);   // XP: die Karte bleibt auch im Darkmode hell
+  for (let k = list.length - 1; k >= 0; k--) if (list[k].tp && inkNear(list[k], x, y, list[k].w / 2 + 4 / ncInkS)) return list[k];
+  return null;
+}
+// Radierer: ganze Striche unter dem Stift weg (wie auf der Seite, 12 px); mit einem Tape geht auch, was darauf steht
+function inkErase(d, ev) {
+  const s = ncInkS, x = (ev.clientX - d.r.left) / s, y = (ev.clientY - d.r.top) / s, R = ERASE_R / s, ink = ncCur ? ncCur.nt.ink : [], vis = inkShown(ink);
+  const gone = new Set(ink.filter(st => vis(st) && inkNear(st, x, y, R + st.w / 2)));
+  if (!gone.size) return;
+  for (const g of [...gone]) if (g.tp) for (const st of ink) if (st.on === g.id) gone.add(st);
+  ncCur.nt.ink = ink.filter(st => !gone.has(st)); drawNoteInk();
+}
+// beim Schweben: Punkt in Farbe und Dicke des Werkzeugs, wo es schreiben wird (wie auf der Seite)
+function inkHover(e) {
+  const k = ncTool, on = e.pointerType === 'pen' && !(e.buttons & 34) && k !== 'eraser';
+  if (on) {
+    const r = ncLive.getBoundingClientRect(), d = Math.max(3, S.size[k] * ncInkS), st = ncDot.style, px = d + 'px', c = colorOf(S.color[k]);
+    if (st.width !== px) st.width = st.height = px;
+    if (ncDot.dataset.c !== c) { ncDot.dataset.c = c; st.background = c; }
+    st.transform = `translate(${e.clientX - r.left - d / 2}px,${e.clientY - r.top - d / 2}px)`;
   }
-  $('#noteCard').classList.toggle('inked', list.length > 0 || !!extra);
+  const disp = on ? 'block' : '', cur = on ? 'none' : 'crosshair';
+  if (ncDot.style.display !== disp) ncDot.style.display = disp;
+  if (ncLive.style.cursor !== cur) ncLive.style.cursor = cur;
 }
-function addInkPt(e) {
-  const r = ncDraw.r, p = e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : 0.5;
-  ncDraw.s.pts.push((e.clientX - r.left) / ncInkS, (e.clientY - r.top) / ncInkS, p);
-}
-ncInk.addEventListener('pointerdown', e => {
+ncLive.addEventListener('pointerdown', e => {
   if (!ncCur || (e.pointerType === 'touch' && performance.now() < penActiveUntil) || (e.pointerType === 'mouse' && e.button !== 0)) return;
-  e.preventDefault(); try { ncInk.setPointerCapture(e.pointerId); } catch (err) {}
-  ncDraw = { id: e.pointerId, r: ncInk.getBoundingClientRect(), s: { c: S.color.pen, w: NOTE_INK_W, pts: [] } };
-  addInkPt(e); drawNoteInk(ncDraw.s);
+  e.preventDefault(); try { ncLive.setPointerCapture(e.pointerId); } catch (err) {}
+  ncDot.style.display = ''; if (!ncPal.classList.contains('hidden')) popOut(ncPal);
+  const r = ncLive.getBoundingClientRect(), k = penErase(e) ? 'eraser' : ncTool;
+  if (k === 'eraser') { ncDraw = { id: e.pointerId, r, erase: true }; inkErase(ncDraw, e); return; }
+  const s = ncInkS, x = e.clientX - r.left, y = e.clientY - r.top, hl = k === 'hl', tape = k === 'tape';
+  const d = ncDraw = { id: e.pointerId, r, s, hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[k], w: S.size[k], al: tape ? undefined : S.alpha[k], drawn: 0,
+    touch: e.pointerType === 'touch', start: [x, y], still: [x, y], straight: !!S.straight[k], ...smoothStart(x, y, pressureOf(e), e.timeStamp, (u, v) => [u / s, v / s]) };
+  if (!tape) { const tp = inkTapeAt(x / s, y / s); if (tp && covered(tp)) d.on = tp.id; }   // auf ein abgedecktes Tape geschrieben: gehört dazu
+  liveInkClear();
+  if (!tape) { const al = strokeAlpha(d); if (al < 1) ncLive.style.opacity = String(al); if (hl && !isDark()) ncLive.style.mixBlendMode = 'multiply'; }   // wie auf der Seite
+  if (tape || d.straight) { d.redraw = true; inkRedraw(d); }
+  else { ncLiveCtx.setTransform(DPR * s, 0, 0, DPR * s, 0, 0); ncLiveCtx.fillStyle = colorOf(d.c); inkPiece(d); }
+  if (hl || tape) armInkHold(d);
+  $('#noteCard').classList.add('inked');
 });
-ncInk.addEventListener('pointermove', e => {
-  if (!ncDraw || e.pointerId !== ncDraw.id) return;
+ncLive.addEventListener('pointermove', e => {
+  const d = ncDraw;
+  if (!d) { inkHover(e); return; }
+  if (e.pointerId !== d.id) return;
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
-  for (const ev of evs.length ? evs : [e]) addInkPt(ev);
-  drawNoteInk(ncDraw.s);
+  for (const ev of evs.length ? evs : [e]) {
+    if (d.erase) { inkErase(d, ev); continue; }
+    const x = ev.clientX - d.r.left, y = ev.clientY - d.r.top, pr = pressureOf(ev);
+    d.raw = [x, y, pr, ev.timeStamp]; filterStep(d, x, y, pr, ev.timeStamp); pushFiltered(d);
+    if (d.holdT !== undefined && Math.hypot(x - d.still[0], y - d.still[1]) > 4) { d.still = [x, y]; armInkHold(d); }
+  }
+  if (d.erase) return;
+  if (d.redraw) inkRedraw(d); else inkPiece(d);
 });
+ncLive.addEventListener('pointerleave', () => { if (ncDot.style.display) ncDot.style.display = ''; });
 const endInk = e => {
-  if (!ncDraw || e.pointerId !== ncDraw.id) return;
-  const s = ncDraw.s; ncDraw = null;
-  if (ncCur && s.pts.length) ncCur.nt.ink.push({ c: s.c, w: s.w, pts: s.pts.map(v => Math.round(v * 10) / 10) });
-  drawNoteInk();
+  const d = ncDraw; if (!d || e.pointerId !== d.id) return;
+  ncDraw = null; clearTimeout(d.holdT);
+  if (!d.erase && ncCur) {
+    if (d.straight) d.pts = inkStraight(d); else if (d.raw) { catchUp(d); if (!d.redraw) inkPiece(d); }   // bis dorthin, wo der Stift abgehoben hat
+    const r = d.raw || d.start, tap = !d.straight && Math.hypot(r[0] - d.start[0], r[1] - d.start[1]) < 6 && pathLen(d.pts) * d.s < 12;
+    const tp = tap && (d.tape || d.touch) ? inkTapeAt(d.start[0] / d.s, d.start[1] / d.s) : null;
+    if (tp) ncCur.nt.ink = ncCur.nt.ink.map(x => x === tp ? { ...x, hid: !covered(x) } : x);   // Tape antippen: auf- bzw. abdecken
+    else if (d.pts.length && !(tap && d.tape)) {
+      const st = { c: d.c, w: d.w, pts: d.pts.map(v => Math.round(v * 10) / 10) };
+      if (d.hl) st.hl = true;
+      if (d.tape) Object.assign(st, { tp: d.tp, hid: true, id: uid() });
+      else if (d.al !== undefined && d.al !== ALPHA_DEFAULT[d.hl ? 'hl' : 'pen']) st.al = d.al;
+      if (d.on) st.on = d.on;
+      ncCur.nt.ink.push(st);
+    }
+  }
+  drawNoteInk(); liveInkClear();
 };
-ncInk.addEventListener('pointerup', endInk); ncInk.addEventListener('pointercancel', endInk);
+ncLive.addEventListener('pointerup', endInk); ncLive.addEventListener('pointercancel', endInk);
+// Knopf oben links: zeigt Werkzeug und Farbe; ein Tipp klappt Werkzeuge, Farben, Tape-Muster und Dicken auf. Farbe,
+// Muster oder Dicke gewählt: die Auswahl geht wieder zu (Werkzeug gewählt: bleibt offen für die Farbe)
+function ncToolBtn() {
+  const b = $('#ncTools'), t = NC_TOOLS.find(x => x[0] === ncTool), dot = b.querySelector('i'), txt = t[2] + ': Werkzeug, Farbe und Dicke';
+  b.querySelector('use').setAttribute('href', '#' + t[1]); b.title = txt; b.setAttribute('aria-label', txt);
+  dot.style.display = ncTool === 'eraser' ? 'none' : ''; if (ncTool !== 'eraser') dot.style.background = colorOf(S.color[ncTool]);
+}
+// kleines Bild eines Tape-Musters (W × H Pixel): Figuren in ihrer Farbe, sonst in der Farbe des Tapes
+// Tape-Stück als kleines Bild für die Menüs (W × H: das Stück selbst); ringsum etwas Luft, damit Kanten, Schatten und
+// Umriss nicht abgeschnitten werden (auch schräg gestellt). sel: gewählt, mit einem Umriss in der Akzentfarbe, der der
+// Form folgt (auch den gerissenen Enden), dafür ohne Schatten.
+function tapeSwatch(p, W = 20, H = 12, sel = false, col = null) {   // col: Farbe eines vorhandenen Tapes
+  const pad = Math.max(2, Math.round(H * 0.18)), cw = W + 2 * pad, ch = H + 2 * pad;
+  const c = document.createElement('canvas'); c.width = Math.round(cw * DPR); c.height = Math.round(ch * DPR); c.style.width = cw + 'px'; c.style.height = ch + 'px';
+  const g = c.getContext('2d'), s = { c: col || (TAPE_MOTIFS[p] ? TAPE_MOTIFS[p].c : S.color.tape), w: H - 2, tp: p, hid: true, pts: [pad + 1, pad + H / 2, .5, pad + W - 1, pad + H / 2, .5] };
+  if (sel) {   // Umriss: die Form in alle Richtungen etwas versetzt, eingefärbt; das Tape kommt darüber
+    const o = document.createElement('canvas'); o.width = c.width; o.height = c.height;
+    const og = o.getContext('2d'), tg = tapeGeo(s); og.setTransform(DPR, 0, 0, DPR, 0, 0); og.lineCap = 'butt'; og.lineWidth = s.w; og.stroke(tg.line); og.fill(tg.teeth);
+    const r = Math.max(1.5, H * 0.09) * DPR;
+    for (let k = 0; k < 16; k++) g.drawImage(o, Math.cos(k * Math.PI / 8) * r, Math.sin(k * Math.PI / 8) * r);
+    g.globalCompositeOperation = 'source-in'; g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2f6fed';
+    g.fillRect(0, 0, c.width, c.height); g.globalCompositeOperation = 'source-over';
+  }
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawTape(g, s, DPR, sel);
+  return c;
+}
+function renderNcPal() {
+  const box = ncPal; box.innerHTML = '';
+  const add = (cls, title, on, fn, fill) => {
+    const b = document.createElement('button'); b.className = cls + (on ? ' on' : ''); b.title = title; b.setAttribute('aria-label', title);
+    if (fill) fill(b); b.onclick = fn; box.appendChild(b);
+  };
+  const sep = () => { const s = document.createElement('i'); s.className = 'sep'; box.appendChild(s); };
+  const done = () => { ncToolBtn(); popOut(ncPal); };
+  for (const [k, ic, name] of NC_TOOLS) add('nct', name, ncTool === k, () => { ncTool = k; ncToolBtn(); renderNcPal(); }, b => { b.innerHTML = `<svg class="i"><use href="#${ic}"/></svg>`; });
+  const k = ncTool; if (k === 'eraser') return;
+  sep();
+  const pal = k === 'tape' ? TAPE_PALETTE : PALETTE;
+  if (!pal.includes(S.color[k])) add('ncc', 'Eigene Farbe', true, done, b => { b.style.background = colorOf(S.color[k]); });
+  for (const c of pal) add('ncc', c === 'ink' ? 'Schwarz / Weiß' : c, S.color[k] === c, () => { S.color[k] = c; store.set('color', S.color); renderColors(); done(); }, b => { b.style.background = colorOf(c); });
+  if (k === 'tape') {
+    sep();
+    for (const [pk, name] of TAPE_PATTERNS) add('ncp', name, S.tapePat === pk, () => {
+      S.tapePat = pk; store.set('tapePat', pk);
+      if (TAPE_MOTIFS[pk]) { S.color.tape = TAPE_MOTIFS[pk].c; store.set('color', S.color); renderColors(); }   // Figuren: ihre Farbe gleich mit
+      done();
+    }, b => b.appendChild(tapeSwatch(pk, 20, 12, S.tapePat === pk)));
+  }
+  sep();
+  S.presets[k].forEach((v, i) => add('ncs', 'Dicke ' + fmtSize(v), S.sizeIdx[k] === i, () => { setSize(k, i); renderSizes(); done(); },
+    b => { const d = document.createElement('span'); d.style.width = d.style.height = Math.min(18, dotPx(k, v)) + 'px'; b.appendChild(d); }));
+}
+$('#ncTools').onclick = () => {
+  if (ncPal.classList.contains('hidden') || ncPal.dataset.closing) { renderNcPal(); ncPal.classList.remove('hidden'); popIn(ncPal, $('#ncTools')); }
+  else popOut(ncPal);
+};
+ncToolBtn();
 let ncPalm = false;
 $('#noteCard').addEventListener('pointerdown', e => { ncPalm = e.pointerType === 'touch' && performance.now() < penActiveUntil; }, true);
 $('#noteCard').addEventListener('click', e => { if (ncPalm && e.target.closest('button,img')) { e.preventDefault(); e.stopPropagation(); } }, true);
 $('#ncText').addEventListener('input', fitNoteText);
 $('#ncGrow').onclick = () => setGlance(!$('#noteCard').classList.contains('glance'));
 $('#ncClear').onclick = () => { if (ncCur) { ncCur.nt.ink = []; drawNoteInk(); } };
-$('#ncPaste').onclick = async () => { const files = await clipImages(); if (files) setNoteImage(files[0]); };
+// Einfügen in der Notiz: ein Bild wird ihr Bild, Text kommt ins Textfeld (dorthin, wo der Cursor steht)
+$('#ncPaste').onclick = async () => {
+  const r = await clipRead(); if (!r || !ncCur) return;
+  if (r.files.length) setNoteImage(r.files[0]);
+  else if (r.text.trim()) insertNoteText(r.text);
+  else toast('In der Zwischenablage ist weder Text noch ein Bild', 3500);
+};
+function insertNoteText(text) { const ta = $('#ncText'); ta.setRangeText(text, ta.selectionStart, ta.selectionEnd, 'end'); fitNoteText(); }
 $('#ncFile').onclick = () => $('#fNoteImg').click();
 $('#fNoteImg').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) setNoteImage(f); };
 $('#ncImgDel').onclick = () => { if (ncCur) { ncCur.nt.img = null; showNoteImg(); } };
-$('#ncImg').onclick = () => { const m = $('#noteCard'); if (m.classList.contains('glance')) return; m.classList.toggle('big'); drawNoteInk(); placeNoteCard(); };   // groß ansehen und wieder klein
+$('#ncImg').onclick = () => { const m = $('#noteCard'); m.classList.toggle('big'); drawNoteInk(); if (!m.classList.contains('glance')) placeNoteCard(); };   // groß ansehen und wieder klein
 $('#ncDel').onclick = () => { const c = ncCur; if (!c) return; ncCur = null; if (c.url) URL.revokeObjectURL(c.url); if (c.id) commit(dropNote(c.id)); closeMenus(); };
 $('#sNote').onclick = () => {
   if (!S.sel) return;
@@ -3641,18 +4202,209 @@ $('#sNote').onclick = () => {
   const ids = new Set(sel.filter(it => !it.tp).map(it => it.id)); if (!ids.size) return;
   openNoteCard(null, ids, geoBox(sel.filter(it => !it.tp)));
 };
+/* ---------- Text: schreiben und bearbeiten ----------
+   Mit dem Werkzeug „Text“ (eigener Knopf in der Leiste, Taste X) antippen: ein neues Textfeld, wo getippt wurde (Ziehen: so breit wie gezogen);
+   einen Text antippen: bearbeiten, der Cursor steht, wo getippt wurde. Das Textfeld ist contenteditable und liegt genau
+   über der Seite (gleiche Schrift, Größe, Zeilenhöhe); die Leiste darüber formatiert: Schrift, Größe und Ausrichtung
+   für den ganzen Text, Fett, Kursiv, Unterstrichen, Durchgestrichen und Farbe für den markierten Text (wie in Word).
+   Der Griff rechts ändert die Breite, das Dreieck unten rechts verschiebt das Feld. Daneben tippen, Esc oder ✓: fertig (ein Schritt fürs Rückgängigmachen);
+   ein leerer Text verschwindet. Enter und Einfügen setzen nur Text (keine Blöcke, keine fremden Formate). */
+const TEXT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64, 80];
+S.text = { ff: 'sans', fs: 20, al: 'l' };
+{ const v = store.get('text'); if (v && TEXT_FONTS[v.ff]) S.text.ff = v.ff; if (v && v.fs > 4 && v.fs < 400) S.text.fs = v.fs; if (v && /^[lcr]$/.test(v.al)) S.text.al = v.al; }
+const storeText = () => store.set('text', S.text);
+let txEd = null, txClosedAt = -1;   // offener Text: { id (vorhanden) oder null, x, y, w, ff, fs, c, al, orig }
+const txEdEl = $('#txEd'), txBar = $('#txBar'), txGrip = $('#txGrip'), txMove = $('#txMove');
+const textKey = it => JSON.stringify([it.x, it.y, it.w, it.ff, it.fs, it.c, it.al || 'l', it.runs]);
+function textAt(x, y) {
+  for (let k = S.items.length - 1; k >= 0; k--) { const it = S.items[k]; if (it.t === 'x' && x >= it.x - 4 && x <= it.x + it.w + 4 && y >= it.y - 4 && y <= it.y + it.h + 4) return it; }
+  return null;
+}
+// Antippen (oder Ziehen) mit dem Text-Werkzeug; a: { sx, sy, ex (Bildschirm), wx, wy (Welt), cx, cy (Fenster) }
+function textTap(a) {
+  if (a.t0 !== undefined && a.t0 === txClosedAt) return;   // dieser Tipp hat nur den offenen Text beendet
+  const moved = Math.abs(a.ex - a.sx) > 8, hit = !moved && textAt(a.wx, a.wy);
+  if (hit) { openTextEd(hit, a.cx, a.cy); return; }
+  const z = S.view.z, x0 = moved ? Math.min(a.sx, a.ex) : a.sx, w = moved ? Math.max(60, Math.abs(a.ex - a.sx)) : clamp(VW - a.sx - 16, 160, 420);
+  const [wx] = toWorld(x0, a.sy);
+  openTextEd(null, null, null, { x: wx, y: a.wy - S.text.fs * 0.675, w: w / z });
+}
+function runsToDom(root, runs) {
+  root.textContent = '';
+  for (const r of runs || []) {
+    let n = document.createTextNode(r.s);
+    const wrap = tag => { const e = document.createElement(tag); e.appendChild(n); n = e; };
+    if (r.c) { const f = document.createElement('font'); f.setAttribute('color', colorOf(r.c)); f.appendChild(n); n = f; }   // wie execCommand('foreColor')
+    if (r.k) wrap('strike'); if (r.u) wrap('u'); if (r.i) wrap('i'); if (r.b) wrap('b');
+    root.appendChild(n);
+  }
+}
+const hexOf = c => { const m = String(c).match(/\d+(\.\d+)?/g); if (/^#/.test(c)) return c.toLowerCase(); return m ? '#' + m.slice(0, 3).map(v => (+v).toString(16).padStart(2, '0')).join('') : ''; };
+// Läufe aus dem Textfeld: Format aus den berechneten Stilen (egal mit welchen Tags), Farbe der Schwarz/Weiß-Taste als 'ink'
+function textRunsFrom(root, t) {
+  const runs = [], inkHex = hexOf(colorOf('ink')), baseHex = hexOf(colorOf(t.c));
+  const push = (s, el) => {
+    if (!s) return;
+    const cs = getComputedStyle(el), r = {};
+    if (parseInt(cs.fontWeight, 10) >= 600) r.b = 1;
+    if (cs.fontStyle !== 'normal') r.i = 1;
+    for (let e = el; e; e = e.parentElement) { const d = getComputedStyle(e).textDecorationLine; if (d.includes('underline')) r.u = 1; if (d.includes('line-through')) r.k = 1; if (e === root) break; }
+    const hx = hexOf(cs.color); if (hx && hx !== baseHex) r.c = hx === inkHex ? 'ink' : hx;
+    const l = runs[runs.length - 1];
+    if (l && l.b === r.b && l.i === r.i && l.u === r.u && l.k === r.k && l.c === r.c) l.s += s; else runs.push({ s, ...r });
+  };
+  const walk = el => {
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3) push(n.data, el);
+      else if (n.nodeName === 'BR') push('\n', el);
+      else if (n.nodeType === 1) { if (/^(DIV|P)$/.test(n.nodeName) && runs.length && !runs[runs.length - 1].s.endsWith('\n')) push('\n', el); walk(n); }
+    }
+  };
+  walk(root);
+  while (runs.length) { const l = runs[runs.length - 1]; l.s = l.s.replace(/\n+$/, ''); if (l.s) break; runs.pop(); }   // keine leeren Zeilen am Ende
+  return runs;
+}
+function openTextEd(it, cx, cy, at) {
+  if (txEd) commitText();
+  closeMenus(); clearSel();
+  txEd = it ? { id: it.id, x: it.x, y: it.y, w: it.w, ff: it.ff, fs: it.fs, c: it.c, al: it.al || 'l', orig: textKey(it) }
+    : { id: null, x: at.x, y: at.y, w: at.w, ff: S.text.ff, fs: S.text.fs, c: S.color.pen, al: S.text.al };
+  runsToDom(txEdEl, it ? it.runs : []);
+  for (const e of [txEdEl, txBar, txGrip, txMove]) e.classList.remove('hidden');
+  renderTextBar(); styleTextEd();
+  txEdEl.focus({ preventScroll: true });
+  const sel = getSelection(); let r = it && cx != null && document.caretRangeFromPoint ? document.caretRangeFromPoint(cx, cy) : null;
+  if (!r || !txEdEl.contains(r.startContainer)) { r = document.createRange(); r.selectNodeContents(txEdEl); r.collapse(false); }   // sonst ans Ende
+  sel.removeAllRanges(); sel.addRange(r);
+  if (it) { invalidateBox(itemBox(it)); requestDraw(); }
+  popIn(txBar, null);
+}
+// Textfeld genau über die Seite legen (Lage, Breite, Schrift in Bildschirm-Pixeln), Griff und Leiste daneben
+function styleTextEd() {
+  const t = txEd; if (!t) return;
+  const z = S.view.z, [sx, sy] = toScreen(t.x, t.y), s = txEdEl.style;
+  s.left = sx + 'px'; s.top = sy + 'px'; s.width = t.w * z + 'px'; s.fontSize = t.fs * z + 'px'; s.fontFamily = fontStack(t.ff);
+  s.textAlign = { l: 'left', c: 'center', r: 'right' }[t.al]; s.color = colorOf(t.c);
+  placeTextBar();
+}
+function placeTextBar() {
+  if (!txEd) return;
+  const r = txEdEl.getBoundingClientRect(), bw = txBar.offsetWidth, bh = txBar.offsetHeight, top = barBottom() + 6;
+  txGrip.style.left = r.right + 4 + 'px'; txGrip.style.top = r.top + 'px'; txGrip.style.height = Math.max(16, r.height - 12) + 'px';
+  txMove.style.left = r.right - 4 + 'px'; txMove.style.top = r.bottom - 8 + 'px';   // Dreieck unten rechts, unter dem Griff
+  let y = r.top - bh - 14; if (y < top) y = r.bottom + 14;
+  if (y + bh > innerHeight - 6) y = Math.max(top, innerHeight - 6 - bh);
+  txBar.style.left = clamp(r.left, 8, Math.max(8, innerWidth - bw - 8)) + 'px'; txBar.style.top = y + 'px';
+}
+function hideTextEd() {
+  for (const e of [txEdEl, txBar, txGrip, txMove]) e.classList.add('hidden');
+  if (document.activeElement === txEdEl) txEdEl.blur();   // Bildschirmtastatur zu
+  txEdEl.textContent = '';
+}
+function commitText() {
+  const t = txEd; if (!t) return;
+  const runs = textRunsFrom(txEdEl, t); txEd = null; hideTextEd();
+  if (!S.note) return;
+  const old = t.id ? S.items.find(i => i.id === t.id) : null;
+  if (!runs.some(r => r.s.trim())) { if (old) commit(S.items.filter(i => i !== old)); return; }   // leer: kein Text
+  const it = { ...(old || {}), t: 'x', id: t.id || uid(), x: t.x, y: t.y, w: t.w, ff: t.ff, fs: t.fs, c: t.c, runs };
+  if (t.al !== 'l') it.al = t.al; else delete it.al;
+  it.h = textLayout(it).h;
+  if (old && textKey(it) === t.orig) { invalidateBox(itemBox(old)); requestDraw(); return; }   // unverändert: wieder zeigen
+  if (old) commit(S.items.map(i => i === old ? it : i)); else commit(appendItems(S.items, [it]));
+}
+function deleteText() {
+  const t = txEd; if (!t) return; txEd = null; hideTextEd();
+  if (t.id && S.items.some(i => i.id === t.id)) commit(S.items.filter(i => i.id !== t.id));
+}
+function setTextSize(dir) {
+  const t = txEd; if (!t) return;
+  const next = dir > 0 ? TEXT_SIZES.find(v => v > t.fs + 0.01) : [...TEXT_SIZES].reverse().find(v => v < t.fs - 0.01);
+  if (!next) return;
+  t.fs = next; S.text.fs = next; storeText(); $('#txSize').textContent = fmtSize(next); styleTextEd();
+}
+function renderTextBar() {
+  const box = $('#txColors'); box.innerHTML = '';
+  for (const c of PALETTE) {
+    const b = document.createElement('button'); b.className = 'txc'; b.title = c === 'ink' ? 'Schwarz / Weiß' : c; b.setAttribute('aria-label', b.title);
+    b.style.background = colorOf(c); b.onclick = () => { document.execCommand('foreColor', false, colorOf(c)); syncTextBar(); };
+    box.appendChild(b);
+  }
+  $('#txFont').value = txEd.ff; $('#txSize').textContent = fmtSize(Math.round(txEd.fs * 10) / 10);
+  syncTextBar();
+}
+function syncTextBar() {
+  if (!txEd) return;
+  for (const b of $$('#txBar .txf')) b.classList.toggle('on', document.queryCommandState(b.dataset.cmd));
+  for (const b of $$('#txBar .txa')) b.classList.toggle('on', b.dataset.al === txEd.al);
+}
+$('#txFont').innerHTML = Object.entries(TEXT_FONTS).map(([k, [name, st]]) => `<option value="${k}" style="font-family:${st.replace(/"/g, '&quot;')}">${name}</option>`).join('');
+txBar.addEventListener('pointerdown', e => { if (e.target.tagName !== 'SELECT') e.preventDefault(); });   // Fokus und Markierung bleiben im Text
+for (const b of $$('#txBar .txf')) b.onclick = () => { document.execCommand(b.dataset.cmd); syncTextBar(); };
+for (const b of $$('#txBar .txa')) b.onclick = () => { if (!txEd) return; txEd.al = S.text.al = b.dataset.al; storeText(); styleTextEd(); syncTextBar(); };
+$('#txFont').onchange = e => { if (!txEd) return; txEd.ff = S.text.ff = e.target.value; storeText(); styleTextEd(); txEdEl.focus({ preventScroll: true }); };
+$('#txMinus').onclick = () => setTextSize(-1);
+$('#txPlus').onclick = () => setTextSize(1);
+$('#txDel').onclick = deleteText;
+$('#txOk').onclick = commitText;
+document.addEventListener('selectionchange', () => { if (txEd) syncTextBar(); });
+txEdEl.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); commitText(); return; }
+  if (e.key === 'Enter') { e.preventDefault(); document.execCommand('insertLineBreak'); }   // nur ein Zeilenumbruch, kein Absatz-Block
+  else if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '    '); }
+});
+txEdEl.addEventListener('paste', e => { e.preventDefault(); e.stopPropagation(); const s = e.clipboardData.getData('text/plain'); if (s) document.execCommand('insertText', false, s.replace(/\r\n?/g, '\n')); });
+txEdEl.addEventListener('drop', e => e.preventDefault());
+txEdEl.addEventListener('input', placeTextBar);
+// Griff rechts: Breite ziehen
+let txGripD = null;   // Ziehen am Griff: Startpunkt und -breite
+txGrip.addEventListener('pointerdown', e => { if (!txEd) return; e.preventDefault(); try { txGrip.setPointerCapture(e.pointerId); } catch (err) {} txGripD = { x: e.clientX, w: txEd.w }; });
+txGrip.addEventListener('pointermove', e => { if (!txEd || !txGripD) return; txEd.w = Math.max(40 / S.view.z, txGripD.w + (e.clientX - txGripD.x) / S.view.z); styleTextEd(); });
+const txGripEnd = () => { txGripD = null; };
+// Dreieck unten rechts: das ganze Textfeld verschieben (Cursor und Markierung bleiben im Text); mit Raster rastet es ein
+let txMoveD = null;
+txMove.addEventListener('pointerdown', e => { if (!txEd) return; e.preventDefault(); try { txMove.setPointerCapture(e.pointerId); } catch (err) {} txMoveD = { x: e.clientX, y: e.clientY, ox: txEd.x, oy: txEd.y }; });
+txMove.addEventListener('pointermove', e => {
+  if (!txEd || !txMoveD) return;
+  let x = txMoveD.ox + (e.clientX - txMoveD.x) / S.view.z, y = txMoveD.oy + (e.clientY - txMoveD.y) / S.view.z;
+  if (S.snap) { x = snapX(x); y = snapY(y); }
+  txEd.x = x; txEd.y = y; styleTextEd();
+});
+const txMoveEnd = () => { txMoveD = null; };
+txMove.addEventListener('pointerup', txMoveEnd); txMove.addEventListener('pointercancel', txMoveEnd);
+txGrip.addEventListener('pointerup', txGripEnd); txGrip.addEventListener('pointercancel', txGripEnd);
+// Cornell: Knopf oben rechts in der Notizen-Spalte des Blatts in der Mitte; verdeckt die Notizen (unscharf) und deckt sie
+// wieder auf. Er bleibt beim Scrollen unter der Leiste stehen, solange die Spalte zu sehen ist
+function setCornellHide(on) {
+  if (!!S.cornellHide === on || !isCornell()) return;
+  S.cornellHide = on;
+  for (let k = 0; k < sheetCount(); k++) invalidateBox(cornellNotes(k));
+  requestDraw(); placeCornellBtn();
+}
+function placeCornellBtn() {
+  const b = $('#cornBtn'), on = !!S.note && isCornell();
+  b.classList.toggle('hidden', !on); if (!on) return;
+  const hide = !!S.cornellHide, txt = hide ? 'Aufdecken' : 'Verdecken';
+  if (b.dataset.st !== txt) { b.dataset.st = txt; b.querySelector('span').textContent = txt; b.title = hide ? 'Notizen wieder zeigen' : 'Notizen unscharf machen: mit den Stichworten links abfragen'; b.classList.toggle('on', hide); }
+  const k = currentSheet(), f = cornellNotes(k), [x0, y0] = toScreen(f[0], f[1]), [x1, y1] = toScreen(f[2], f[3]);
+  const w = b.offsetWidth, h = b.offsetHeight, x = Math.min(x1, VW) - w - 12, y = clamp(y0 + 10, barBottom() + 10, y1 - h - 10);
+  const vis = x > x0 && y1 - y0 > h + 20 && y1 > barBottom() + h + 20 && y0 < VH;
+  b.style.visibility = vis ? '' : 'hidden'; b.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
+}
+$('#cornBtn').onclick = () => setCornellHide(!S.cornellHide);
 // Bild-Knopf: kleines Menü, aus der Zwischenablage oder aus einer Datei
 $('#bImg').onclick = () => openMenu($('#imgMenu'), $('#bImg'));
 $('#mImgClip').onclick = () => { closeMenus(); pasteImage(); };
 $('#mImgFile').onclick = () => { closeMenus(); $('#fImg').click(); };
-$('#bPdf').onclick = () => $('#fPdf').click();
+$('#mImgPdf').onclick = () => { closeMenus(); $('#fPdf').click(); };   // PDF: im Menü des Bild-Knopfs (Platz in der Leiste für den Text-Knopf)
 $('#fImg').onchange = e => { insertImages(e.target.files); e.target.value = ''; };
 $('#fPdf').onchange = e => { if (e.target.files[0]) insertPdf(e.target.files[0]); e.target.value = ''; };
 document.addEventListener('paste', e => {
-  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT') return;
+  if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
   const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
-  if (ncCur && files.length) { e.preventDefault(); setNoteImage(files[0]); return; }   // offene Erklärung: Bild hinein
+  if (ncCur && files.length) { e.preventDefault(); setNoteImage(files[0]); return; }   // offene Notiz: Bild hinein
   if (e.target.tagName === 'TEXTAREA') return;
+  if (ncCur) { const text = e.clipboardData?.getData('text/plain'); if (text) { e.preventDefault(); insertNoteText(text); } return; }   // offene Notiz: Text ins Textfeld
   if (files.length) { e.preventDefault(); insertImages(files); }
 });
 window.addEventListener('dragover', e => e.preventDefault());
@@ -3679,12 +4431,15 @@ async function renderTo(items, box, scale, bg, o = {}) {
     for (let k = 0; k < sheetCount(n); k++) {
       const r = sheetRect(k, n); if (!boxHit(r, box)) continue;
       ctx.fillStyle = paperColor(); ctx.fillRect(X(r[0]), Y(r[1]), (r[2] - r[0]) * scale, (r[3] - r[1]) * scale);
+      const cor = isCornell(n) ? cornellOf(k, n) : null;
+      if (cor) cornellTint(ctx, cor, scale, X(0), Y(0));
       for (const f of fieldsOf(k, n)) {
-        const pad = 2;
-        ctx.save(); ctx.beginPath(); ctx.rect(X(f[0]) - pad, Y(f[1]) - pad, (f[2] - f[0]) * scale + 2 * pad, (f[3] - f[1]) * scale + 2 * pad); ctx.clip();
+        const pad = 2, top = cor ? Y(cor.head) + pad : Y(f[1]) - pad;
+        ctx.save(); ctx.beginPath(); ctx.rect(X(f[0]) - pad, top, (f[2] - f[0]) * scale + 2 * pad, Y(f[3]) + pad - top); ctx.clip();
         drawBg(ctx, bg, { tx: X(f[0]), ty: Y(f[1]), z: scale }, W, H, 1);
         ctx.restore();
       }
+      if (cor) drawCornell(ctx, cor, scale, X(0), Y(0), Math.max(1, 0.5 * scale));
     }
   });
   ctx.setTransform(scale, 0, 0, scale, -x0 * scale, -y0 * scale);
@@ -3696,11 +4451,12 @@ async function renderTo(items, box, scale, bg, o = {}) {
       const use = bmp || e.low;
       if (use) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(use, it.x, it.y, it.w, it.h); }
       if (bmp) bmp.close();
-    } else if (o.cheap) paint(() => {
+    } else if (o.cheap && it.t === 's' && !it.nt) paint(() => {
       // Vorschaubild: Striche als einfache Linien (schnell), Tapes deckend bzw. aufgedeckt nur als Schimmer
       ctx.strokeStyle = colorOf(it.c); ctx.lineWidth = it.w; ctx.lineCap = ctx.lineJoin = 'round';
       if (!it.tp) { const a = strokeAlpha(it); if (a < 1) ctx.globalAlpha = a; if (it.hl && !isDark()) ctx.globalCompositeOperation = 'multiply'; }
       if (it.tp) { ctx.lineCap = 'butt'; if (!covered(it)) ctx.globalAlpha = 0.16; }
+      if (it.ds) ctx.setLineDash(it.ds === 'dot' ? [0.01, Math.max(4.5, it.w * 2.9)] : [Math.max(6, it.w * 3.4), Math.max(4.5, it.w * 2.3)]);   // gestrichelt, gepunktet
       ctx.beginPath(); ctx.moveTo(it.pts[0], it.pts[1]);
       const step = Math.max(3, Math.floor(it.pts.length / 3 / 20) * 3);
       for (let i = step; i < it.pts.length; i += step) ctx.lineTo(it.pts[i], it.pts[i + 1]);
@@ -3709,7 +4465,7 @@ async function renderTo(items, box, scale, bg, o = {}) {
         ctx.fillStyle = colorOf(it.c);
         for (const [a, b] of it.fl) { ctx.beginPath(); ctx.moveTo(it.pts[a * 3], it.pts[a * 3 + 1]); for (let i = a + 1; i <= b; i++) ctx.lineTo(it.pts[i * 3], it.pts[i * 3 + 1]); ctx.fill(); }
       }
-      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.setLineDash([]);
     });
     else paint(() => drawItem(ctx, it, scale));
   }
@@ -3848,14 +4604,16 @@ function dialog(msg, o = {}) {
     box.classList.toggle('pf', pf); fmt.classList.toggle('hidden', !pf);
     if (pf) {
       const upd = () => {
-        fmt.querySelectorAll('[data-f]').forEach(b => b.classList.toggle('on', b.dataset.f === sel.f));
-        fmt.querySelectorAll('[data-o]').forEach(b => { b.classList.toggle('on', b.dataset.o === sel.o); b.disabled = sel.f === 'inf'; });
+        const cor = sel.t === 'cornell';
+        fmt.querySelectorAll('[data-f]').forEach(b => b.classList.toggle('on', b.dataset.f === (cor ? 'cornell' : sel.f)));
+        fmt.querySelectorAll('[data-o]').forEach(b => { b.classList.toggle('on', b.dataset.o === sel.o); b.disabled = sel.f === 'inf' || cor; });
         fmt.classList.toggle('ls', sel.o === 'l'); fmt.classList.toggle('inf', sel.f === 'inf');
         $('#dlgFmtHint').textContent = sel.f === 'inf' ? 'Freie Fläche ohne Rand, sie wächst in alle Richtungen.'
+          : cor ? 'Cornell: rechts mitschreiben, danach links Stichworte und Fragen, unten eine kurze Zusammenfassung. Zum Lernen die Notizen verdecken und die Fragen aus dem Kopf beantworten.'
           : sel.f === 'a3' && sel.o === 'l' ? 'Jede PDF-Seite kommt auf die linke Hälfte eines Blatts, rechts bleibt eine A4-Seite frei für Notizen.'
           : 'Mehrere Blätter untereinander; ein PDF kommt Seite für Seite auf eigene Blätter.';
       };
-      fmt.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { sel.f = b.dataset.f; upd(); });
+      fmt.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { if (b.dataset.f === 'cornell') Object.assign(sel, { f: 'a4', o: 'p', t: 'cornell' }); else { sel.f = b.dataset.f; delete sel.t; } upd(); });
       fmt.querySelectorAll('[data-o]').forEach(b => b.onclick = () => { sel.o = b.dataset.o; upd(); });
       upd();
     }
@@ -4502,7 +5260,7 @@ async function newPage() {
     const { books, notes } = await ensureBooks(), book = books.find(b => b.id === homeBook);
     const last = book && notes.filter(x => x.book === book.id).sort(byCreated).pop();
     const st = store.get('paper', {}), was = last ? (last.paper && PAPER[last.paper.f] ? last.paper : { f: 'inf', o: st.o }) : st;
-    fmt = await askPage({ f: PAPER[was.f] ? was.f : 'inf', o: was.o === 'l' ? 'l' : 'p' });
+    fmt = await askPage({ f: PAPER[was.f] ? was.f : 'inf', o: was.o === 'l' ? 'l' : 'p', ...(was.t === 'cornell' ? { t: 'cornell' } : {}) });
   } catch (e) { toast('Speicher nicht verfügbar: ' + e.message, 5000); return; }
   if (!fmt || navBusy || S.note) return;
   store.set('paper', fmt);
@@ -4516,7 +5274,7 @@ async function newPage() {
     // neue Seite immer ans Ende, mit dem Hintergrund der letzten Seite (z. B. kariert in Mathe)
     n = { id: uid(), name: 'Seite ' + (pages.length + 1), created: Math.max(now, prev ? (prev.created || 0) + 1 : 0), updated: now,
       thumb: null, bg: (prev && prev.bg) || 'dots', view: { tx: 0, ty: 0, z: 1 }, book: book.id };
-    if (PAPER[fmt.f]) { n.paper = { f: fmt.f, o: fmt.o }; n.view = null; }   // Blatt: beim Öffnen ganz zeigen
+    if (PAPER[fmt.f]) { n.paper = { f: fmt.f, o: fmt.o, ...(fmt.t === 'cornell' ? { t: 'cornell' } : {}) }; n.view = null; }   // Blatt: beim Öffnen ganz zeigen
     await dbIndexPut(n); homeBook = book.id;
   } catch (e) { toast('Speichern nicht möglich: ' + e.message, 5000); navBusy = false; return; }
   navBusy = false;
@@ -4548,7 +5306,7 @@ async function openNote(meta) {
     S.note = meta; S.items = items; S.saved = new Map(items.map(i => [i.id, i]));
     if (renumber) { items.forEach((it, i) => it.o = i); S.saved = new Map(); }
     S.view = meta.view ? { ...meta.view } : { tx: 0, ty: 0, z: 1 }; S.level = S.view.z;
-    S.undo = []; S.redo = []; S.sel = null; action = null; S.thumbDirty = false;
+    S.undo = []; S.redo = []; S.sel = null; action = null; S.thumbDirty = false; S.cornellHide = false;
     clearTiles(); pathCache.clear();
     $('#title').value = meta.name; xpTitle();
     if (!$('#home').classList.contains('hidden')) homeScroll = { key: homeKey, top: $('#grid').scrollTop };
@@ -4569,6 +5327,7 @@ async function flushNote() {
 async function closeNote() {
   if (!S.note || navBusy) return;
   if (ncCur) closeMenus();
+  if (txEd) commitText();
   dropOverview();
   if (S.busy) { toast('Bitte warten, bis der Import fertig ist'); return; }
   navBusy = true;
@@ -4589,7 +5348,7 @@ async function closeNote() {
     st.index('n').openKeyCursor(IDBKeyRange.only(note.id)).onsuccess = ev => { const c = ev.target.result; if (c) { if (!used.has(c.primaryKey)) st.delete(c.primaryKey); c.continue(); } };
   } catch (e) {}
 }
-window.__flush = () => { syncNoteCard(); return flushNote().catch(() => {}); };
+window.__flush = () => { syncNoteCard(); if (txEd) commitText(); return flushNote().catch(() => {}); };
 $('#bBack').onclick = closeNote;
 $('#title').addEventListener('input', () => { if (S.note) { S.note.name = $('#title').value.trim() || 'Ohne Titel'; markDirty(); } xpTitle(); fitBar(); });
 $('#title').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); });
@@ -4635,7 +5394,7 @@ function shapeFromBackup(r) {
   if (typeof r.id !== 'string' || !r.id || !Array.isArray(r.strokes)) return null;
   const strokes = r.strokes.filter(st => st && Array.isArray(st.pts) && st.pts.length >= 3 && st.pts.length % 3 === 0 && st.pts.every(Number.isFinite))
     .map(st => ({ c: typeof st.c === 'string' ? st.c : 'ink', w: st.w > 0 ? +st.w : 2, hl: !!st.hl, pts: Float32Array.from(st.pts),
-      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}), ...(validFl(st.fl, st.pts.length / 3) ? { fl: st.fl.map(r => [r[0], r[1]]) } : {}) }));
+      ...(st.al > 0 && st.al <= 1 ? { al: +st.al } : {}), ...(validFl(st.fl, st.pts.length / 3) ? { fl: st.fl.map(r => [r[0], r[1]]) } : {}), ...(st.ds === 'dash' || st.ds === 'dot' ? { ds: st.ds } : {}) }));
   if (!strokes.length) return null;
   const [x0, y0] = geoBox(strokes);
   if (x0 || y0) for (const st of strokes) for (let i = 0; i < st.pts.length; i += 3) { st.pts[i] -= x0; st.pts[i + 1] -= y0; }
@@ -4692,7 +5451,7 @@ $('#fRestore').onchange = async e => {
         noteMap.set(r.id, { id: newId, copy, meta, replace: !copy, done: false });
       } else if (r.k === 'items') {
         const m = noteMap.get(r.n); if (!m || m.skip || m.done) continue;
-        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts), ...(it.nt && it.nt.img ? { nt: { ...it.nt, img: mapImg(r.n, it.nt.img) } } : {}) } : { img: mapImg(r.n, it.img) }) }));
+        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts), ...(it.nt && it.nt.img ? { nt: { ...it.nt, img: mapImg(r.n, it.nt.img) } } : {}) } : it.t === 'i' ? { img: mapImg(r.n, it.img) } : {}) }));
         await writeRecords(m.meta, items, [], m.replace); m.done = true; count++;
       } else if (r.k === 'img') {
         const m = noteMap.get(r.n); if (!m || m.skip) continue;
@@ -4709,7 +5468,7 @@ $('#fRestore').onchange = async e => {
   renderHome();   // ordnet Seiten ohne Buch (ältere Sicherungen) dem Buch „Meine Notizen“ zu
 };
 document.addEventListener('visibilitychange', () => { if (document.hidden && S.note) { syncNoteCard(); flushNote(); } });
-window.addEventListener('pagehide', () => { if (S.note) { syncNoteCard(); saveNow(); } });
+window.addEventListener('pagehide', () => { if (S.note) { syncNoteCard(); if (txEd) commitText(); saveNow(); } });
 
 /* ---------- Start ---------- */
 applyDark(); applyTheme();

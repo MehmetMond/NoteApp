@@ -85,10 +85,10 @@ const DEMO = {
   const shapesDB = () => p.evaluate(async () => (await dbShapesAll()).sort(byCreated).map(r => ({ id: r.id, name: r.name, created: r.created, w: r.w, h: r.h, f32: r.strokes.every(s => s.pts instanceof Float32Array), strokes: r.strokes.map(s => ({ c: s.c, w: s.w, hl: s.hl, pts: Array.from(s.pts) })) })));
   // öffnen; schließt es ein gleichzeitiges Anpassen an die Fenstergröße (gleich nach einer neuen Seite) wieder, nochmal
   const openMenu = async () => {
-    for (let i = 0; i < 3 && !(await vis('#shapeMenu')); i++) { await p.evaluate(() => { if (S.tool !== 'shape') setTool('shape'); openGroupMenu(); }); await p.waitForTimeout(150); }
+    for (let i = 0; i < 3 && !(await vis('#shapeMenu')); i++) { await p.evaluate(() => openShapeMenu()); await p.waitForTimeout(150); }
     await p.waitForSelector('#shapeMenu:not(.hidden)'); await settled('#shapeMenu');
   };
-  const closeMenu = async () => { if (await vis('#shapeMenu')) await p.click('#bGroup'); };
+  const closeMenu = async () => { if (await vis('#shapeMenu')) await p.click('#sbCustom'); };
   const pickCustom = async id => { await openMenu(); await p.click(`#shapeMenu [data-shape="custom:${id}"]`); await frames(); };
   // Auswahl über die Oberfläche speichern (Knopf in der Auswahlleiste, Name im Dialog, Enter)
   async function saveSel(name) {
@@ -214,10 +214,10 @@ const DEMO = {
   await openMenu();
   const menu1 = await p.evaluate(() => ({ sections: $$('#shapeMenu .mh').map(e => e.textContent), tiles: $$('#customGrid .cpick').map(b => [b.dataset.shape, b.querySelector('.cn').textContent, b.title]),
     canvas: $$('#customGrid canvas').map(c => [c.width, c.height, c.getBoundingClientRect().width]), del: $$('#customGrid .cdel').length, hint: $('#shapeMenu .mhint').textContent, tool: S.tool }));
-  check('menuLibrary', menu1.sections.join() === 'Formen,Graphen,Eigene Formen' && menu1.tiles.length === 1 && menu1.tiles[0][0] === 'custom:' + idHaus && menu1.tiles[0][1] === 'Haus'
+  check('menuLibrary', menu1.sections.join() === 'Eigene Formen' && menu1.tiles.length === 1 && menu1.tiles[0][0] === 'custom:' + idHaus && menu1.tiles[0][1] === 'Haus'
     && menu1.canvas[0][0] === 112 && menu1.canvas[0][2] === 56 && menu1.del === 1 && menu1.hint === 'Ziehen zum Zeichnen · Umschalt: gerade/quadratisch' && menu1.tool === 'shape', menu1);
   await p.click(`#customGrid [data-shape="custom:${idHaus}"]`); await frames();
-  const picked = await p.evaluate(() => ({ menu: !isOpen($('#shapeMenu')), shape: S.shape, pref: localStorage.getItem('notizen.shape'), title: $('#bGroup').title.split(' · ')[0], tool: S.tool, colors: $('#colors').style.opacity, sizes: $('#sizes').style.opacity }));
+  const picked = await p.evaluate(() => ({ menu: !isOpen($('#shapeMenu')), shape: S.shape, pref: localStorage.getItem('notizen.shape'), title: $('#bShape').title, tool: S.tool, colors: $('#colors').style.opacity, sizes: $('#sizes').style.opacity }));
   check('pickCustom', picked.menu && picked.shape === 'custom:' + idHaus && picked.pref === JSON.stringify('custom:' + idHaus) && picked.title === 'Formen (F) – Haus' && picked.tool === 'shape' && picked.colors === '0.35' && picked.sizes === '0.35', picked);
   await openMenu();
   const menu2 = await p.evaluate(() => ({ on: $$('#shapeMenu [data-shape].on').map(b => b.dataset.shape), hint: $('#shapeMenu .mhint').textContent }));
@@ -347,7 +347,7 @@ const DEMO = {
     await p.click(`#customGrid .ct:has([data-shape="custom:${idBig}"]) .cdel`); await p.waitForSelector('#dlg:not(.hidden)');
     await p.click('#dlgOk'); await p.waitForFunction(id => !CUSTOM.some(r => r.id === id), idBig);
     const gone = await p.evaluate(async id => ({ db: !!(await dbShapeGet(id)), tile: !!document.querySelector(`#customGrid [data-shape="custom:${id}"]`), menu: isOpen($('#shapeMenu')), shape: S.shape,
-      pref: localStorage.getItem('notizen.shape'), placed: S.items.filter(i => i.k === 'custom').length, title: $('#bGroup').title.split(' · ')[0] }), idBig);
+      pref: localStorage.getItem('notizen.shape'), placed: S.items.filter(i => i.k === 'custom').length, title: $('#bShape').title }), idBig);
     check('deleteFromLibrary', askMsg[0] === 'Form „Groß“ löschen?' && askMsg[1] === 'Löschen' && askMsg[2] && kept[0] && kept[1] && !gone.db && !gone.tile && gone.menu
       && gone.shape === 'rect' && gone.pref === '"rect"' && gone.placed === 50 && gone.title === 'Formen (F) – Rechteck', { askMsg, kept, gone });
     await closeMenu();
@@ -433,7 +433,7 @@ const DEMO = {
   await p.reload(); await p.waitForTimeout(600); await idle(); await p.waitForFunction(() => customReady);
   const libAfter = await shapesDB();
   check('libraryPersisted', JSON.stringify(libAfter) === JSON.stringify(libBefore) && libAfter.length === 8, libAfter.map(r => r.name));
-  check('prefPersisted', await p.evaluate(id => S.shape === 'custom:' + id && $('#bGroup').title.startsWith('Formen (F) – Blume ·'), demoIds.Blume));
+  check('prefPersisted', await p.evaluate(id => S.shape === 'custom:' + id && $('#bShape').title === 'Formen (F) – Blume', demoIds.Blume));
   await p.evaluate(async id => { await openNote((await dbIndexAll()).find(n => n.id === id)); }, noteId); await p.waitForTimeout(300);
   const pageAfter = await items();
   check('stampsPersisted', JSON.stringify(pageAfter) === JSON.stringify(pageBefore) && new Set(pageAfter.map(i => i.g)).size === 14 && pageAfter.every(i => i.k === 'custom'), { before: pageBefore.length, after: pageAfter.length });
@@ -487,7 +487,7 @@ const DEMO = {
     check('oldBackupRestores', r.notes > 0 && r.shapes === 0 && r.custom === 0 && /wiederhergestellt$/.test(r.toast), r);
     // leere Bibliothek im Menü (Hinweis)
     await q.evaluate(async () => { const now = Date.now(); const n = { id: uid(), name: 'Leer', created: now, updated: now, thumb: null, bg: 'dots', view: { tx: 0, ty: 0, z: 1 } }; await dbIndexPut(n); await openNote(n); });
-    await q.waitForTimeout(200); await q.evaluate(() => { if (S.tool !== 'shape') setTool('shape'); openGroupMenu(); }); await q.waitForTimeout(150);
+    await q.waitForTimeout(200); await q.evaluate(() => openShapeMenu()); await q.waitForTimeout(150);
     const e = await q.evaluate(() => ({ text: $('#customGrid .cempty') && $('#customGrid .cempty').textContent, tiles: $$('#customGrid .cpick').length }));
     const mb = await q.$eval('#shapeMenu', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
     await q.screenshot({ path: path.join(OUT, 'custom_menu_empty.png'), clip: { x: 0, y: 0, width: Math.min(1440, mb.x + mb.w + 40), height: mb.y + mb.h + 30 } });

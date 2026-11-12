@@ -44,7 +44,7 @@ const FILE = path.resolve(process.argv[2] || path.join(DIR, 'Notizen.html'));
   check(res.prevInk > 300, 'Vorschau zeigt den Graphen (' + res.prevInk + ' Pixel)');
   await p.click('#grSteps button:nth-child(3)');
   await p.fill('#grLx', 't'); await p.fill('#grLy', 's(t)'); await p.waitForTimeout(200);
-  res.settings = await p.evaluate(() => [S.graph, JSON.parse(localStorage.getItem('notizen.graph')), $('#shapeMenu [data-shape=axes2] span').textContent]);
+  res.settings = await p.evaluate(() => [S.graph, JSON.parse(localStorage.getItem('notizen.graph')), $('#shapeBar [data-shape=axes2]').title]);
   check(res.settings[0].step === 2 && res.settings[0].lx === 't' && res.settings[0].ly === 's(t)' && res.settings[1].ly === 's(t)' && res.settings[2] === 'Koordinatensystem (t, s(t))', 'Einstellungen gespeichert, Formen-Menü zeigt sie (' + JSON.stringify(res.settings) + ')');
   await p.keyboard.press('Escape'); await p.waitForTimeout(300);
   await shape('axes2', 700, 200, 1020, 480); const g2 = await lastG(); res.g2 = await info(g2);

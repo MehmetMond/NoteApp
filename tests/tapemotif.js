@@ -36,8 +36,8 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   };
   // Muster im Menü: sechs, in zwei Reihen
   await p.keyboard.press('t'); await p.click('#sizes .sz.on');
-  res.chips = await p.evaluate(() => { const bs = [...document.querySelectorAll('#tpPats button')]; return { names: bs.map(b => b.textContent), rows: new Set(bs.map(b => Math.round(b.getBoundingClientRect().top))).size }; });
-  check(res.chips.names.join() === 'Uni,Streifen,Punkte,Karo,Kätzchen,Hündchen,Teufelchen' && res.chips.rows === 2, 'Muster in einer Reihe, Figuren in der zweiten (' + JSON.stringify(res.chips) + ')');
+  res.chips = await p.evaluate(() => { const bs = [...document.querySelectorAll('#tpPats button')]; return { names: bs.map(b => b.textContent), rows: new Set(bs.map(b => Math.round(b.getBoundingClientRect().top))).size, pics: bs.every(b => b.querySelector('canvas')), titles: bs.map(b => b.title).join() }; });
+  check(res.chips.names.join() === 'Uni,Streifen,Punkte,Karo,Kätzchen,Hündchen,Teufelchen' && res.chips.titles === res.chips.names.join() && res.chips.pics && res.chips.rows === 1, 'Muster als kleine Bilder, alle in einer Reihe (' + JSON.stringify(res.chips) + ')');
   await p.click('#tpPats button:text-is("Kätzchen")');
   res.pick = await p.evaluate(() => [S.tapePat, localStorage.getItem('notizen.tapePat'), $('#tpPats button.on').textContent, S.color.tape, JSON.parse(localStorage.getItem('notizen.color')).tape]);
   check(res.pick.join() === 'kitty,"kitty",Kätzchen,#f4a7b9,#f4a7b9', 'Kätzchen gewählt und gemerkt, Rosa gleich mit (' + res.pick + ')');

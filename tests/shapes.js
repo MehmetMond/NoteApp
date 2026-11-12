@@ -364,49 +364,46 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   const rerOk = Object.entries(id).every(([k, v]) => strict.includes(k) ? v.liveVsRerender.changedPixels === 0 : v.liveVsRerender.maxDelta <= 1);
   check('pixelIdentity', exact && rerOk, id);
 
-  // ---------- 8. Menü und Werkzeugleiste ----------
+  // ---------- 8. Knopf „Formen“, Formenleiste und Werkzeugleiste ----------
   {
     const r = {};
     await p.evaluate(() => { localStorage.removeItem('notizen.shape'); S.shape = 'rect'; setTool('lasso'); setTool('pen'); });
-    // offen = sichtbar und nicht gerade beim Zugehen (Menüs huschen kurz zusammen, bevor sie verschwinden)
-    const vis = () => p.evaluate(() => isOpen($('#shapeMenu')));
-    const gvis = () => p.evaluate(() => isOpen($('#grpMenu')));
-    // Lasso, Tape und Formen in einem Knopf: Antippen wählt das gezeigte Werkzeug, nochmal öffnet die Auswahl der drei
-    await p.click('#bGroup'); r.first = await p.evaluate(() => [S.tool, isOpen($('#grpMenu'))]);
-    await p.click('#bGroup'); r.grp = await p.evaluate(() => [isOpen($('#grpMenu')), $$('#grpMenu [data-gtool]').map(b => b.dataset.gtool + (b.classList.contains('on') ? '*' : '')).join()]);
-    await p.click('#grpMenu [data-gtool=shape]'); r.open1 = await vis() && await gvis(); r.tool = await p.evaluate(() => S.tool);
-    r.below = await p.evaluate(() => $('#shapeMenu').getBoundingClientRect().top >= $('#grpMenu').getBoundingClientRect().bottom && $('#grpMenu').getBoundingClientRect().top >= barBottom());
-    await p.click('#bGroup'); r.closed = !(await vis()) && !(await gvis());
-    await p.click('#bGroup'); r.open2 = await vis();
-    r.items = await p.$$eval('#shapeMenu [data-shape]', l => l.map(b => b.dataset.shape + ':' + b.textContent.trim()));
-    r.sections = await p.$$eval('#shapeMenu .mh', l => l.map(e => e.textContent));
-    r.hint = await p.$eval('#shapeMenu .mhint', e => e.textContent);
-    r.onMark = await p.$$eval('#shapeMenu [data-shape].on', l => l.map(b => b.dataset.shape));
-    await p.click('#shapeMenu [data-shape=arrow]'); r.closedAfterPick = !(await vis()) && !(await gvis());
-    r.picked = await p.evaluate(() => [S.shape, localStorage.getItem('notizen.shape'), $('#bGroup').title.split(' · ')[0]]);
-    await p.click('#bGroup'); r.onMark2 = await p.$$eval('#shapeMenu [data-shape].on', l => l.map(b => b.dataset.shape));
-    // Antippen der Zeichenfläche schließt das Menü, ohne zu zeichnen
-    const n0 = await count(); await p.mouse.click(700, 700); r.canvasCloses = !(await vis()) && !(await gvis()) && (await count()) === n0;
+    const bar = () => p.evaluate(() => { const b = $('#shapeBar'); return !b.classList.contains('hidden') && !b.dataset.closing; });
+    await p.waitForTimeout(250); r.hiddenPen = !(await bar());
+    // eigener Knopf nach „Text“: Antippen wählt Formen, unter der Leiste erscheint die Formenleiste (bei Farben und Dicken)
+    await p.click('#bShape'); await p.waitForTimeout(300);
+    r.first = await p.evaluate(() => [S.tool, $('#bShape').classList.contains('on')]); r.bar = await bar();
+    r.pos = await p.evaluate(() => { const s = $('#shapeBar').getBoundingClientRect(), c = $('#colors').getBoundingClientRect(), b = $('#bar').getBoundingClientRect();
+      return { below: s.top >= b.bottom, atColors: Math.abs(s.left - c.left) <= 12, inside: s.left >= 0 && s.right <= innerWidth, menusBelow: Math.abs(barBottom() - s.bottom) < 1.5 }; });
+    r.items = await p.$$eval('#shapeBar [data-shape]', l => l.map(b => b.dataset.shape + ':' + b.title));
+    r.onMark = await p.$$eval('#shapeBar [data-shape].on', l => l.map(b => b.dataset.shape));
+    await p.click('#shapeBar [data-shape=arrow]'); await p.waitForTimeout(100);
+    r.picked = await p.evaluate(() => [S.shape, localStorage.getItem('notizen.shape'), $('#bShape').title, $('#bShape use').getAttribute('href'), S.tool]);
+    r.onMark2 = await p.$$eval('#shapeBar [data-shape].on', l => l.map(b => b.dataset.shape)); r.barAfterPick = await bar();
+    // Antippen der Zeichenfläche zeichnet nichts (zu klein), die Formenleiste bleibt
+    const n0 = await count(); await p.mouse.click(700, 700); r.canvasTap = (await count()) === n0 && await bar();
     // Farbe und Dicke bleiben beim Formen-Werkzeug
     await p.click('#colors .sw:nth-child(6)'); await p.click('#sizes .sz:nth-child(4)');
-    r.colorSize = await p.evaluate(() => [S.tool, S.color.pen, S.size.pen, $('#colors').style.opacity, $('#bGroup').classList.contains('on')]);
-    await p.keyboard.press('p'); await p.keyboard.press('f'); r.keyF = await p.evaluate(() => [S.tool, cvLive.style.cursor]);
-    // Taste T: der Knopf zeigt Tape; danach Stift und wieder Antippen wählt Tape
+    r.colorSize = await p.evaluate(() => [S.tool, S.color.pen, S.size.pen, $('#colors').style.opacity, $('#bShape').classList.contains('on')]);
+    await p.keyboard.press('p'); r.hiddenAgain = await p.waitForFunction(() => $('#shapeBar').classList.contains('hidden'), null, { timeout: 2000 }).then(() => true, () => false);
+    await p.keyboard.press('f'); await p.waitForTimeout(150); r.keyF = await p.evaluate(() => [S.tool, cvLive.style.cursor]); r.barKeyF = await bar();
+    // der Lasso-Knopf hat nur noch Lasso und Tape; Taste T: der Knopf zeigt Tape
     await p.keyboard.press('t'); await p.keyboard.press('p'); r.keyT = await p.evaluate(() => [$('#bGroup').dataset.tool, $('#bGroup use').getAttribute('href'), $('#bGroup').classList.contains('on')]);
     await p.click('#bGroup'); r.tapeAgain = await p.evaluate(() => [S.tool, isOpen($('#grpMenu'))]);
-    await p.click('#bGroup'); await p.click('#grpMenu [data-gtool=lasso]'); r.toLasso = await p.evaluate(() => [S.tool, $('#bGroup').dataset.tool, isOpen($('#grpMenu'))]);
+    await p.click('#bGroup'); r.grp = await p.evaluate(() => [isOpen($('#grpMenu')), $$('#grpMenu [data-gtool]').map(b => b.dataset.gtool + (b.classList.contains('on') ? '*' : '')).join()]);
+    await p.click('#grpMenu [data-gtool=lasso]'); r.toLasso = await p.evaluate(() => [S.tool, $('#bGroup').dataset.tool, isOpen($('#grpMenu'))]);
     await p.keyboard.press('f'); await p.keyboard.press('Escape');
     await p.keyboard.press('g'); r.keyG = await p.evaluate(() => [S.snap, $('#toast').textContent]); await p.keyboard.press('g');
     r.titles = await p.evaluate(() => [$('#bSnap').title, $('#bGroup').title]);
     r.order = await p.$$eval('#bar > *', l => l.map(e => e.id || e.dataset.tool || e.className).join(' '));
-    const ok = r.first.join() === 'lasso,false' && r.grp.join() === 'true,lasso*,tape,shape' && r.open1 && r.tool === 'shape' && r.below && r.closed && r.open2
-      && r.items.length === 11 && r.sections.join() === 'Formen,Graphen,Eigene Formen'
-      && r.hint === 'Ziehen zum Zeichnen · Umschalt: gerade/quadratisch' && r.onMark.join() === 'rect' && r.closedAfterPick
-      && r.picked[0] === 'arrow' && r.picked[1] === '"arrow"' && r.picked[2] === 'Formen (F) – Pfeil' && r.onMark2.join() === 'arrow' && r.canvasCloses
+    const ok = r.hiddenPen && r.first.join() === 'shape,true' && r.bar && r.pos.below && r.pos.atColors && r.pos.inside && r.pos.menusBelow
+      && r.items.length === 11 && r.items[1] === 'arrow:Pfeil' && r.items[8] === 'axes2:Koordinatensystem (x, y)' && r.onMark.join() === 'rect'
+      && r.picked[0] === 'arrow' && r.picked[1] === '"arrow"' && r.picked[2] === 'Formen (F) – Pfeil' && r.picked[3] === '#sh-arrow' && r.picked[4] === 'shape' && r.onMark2.join() === 'arrow' && r.barAfterPick && r.canvasTap
       && r.colorSize[0] === 'shape' && r.colorSize[1] === '#1e88e5' && r.colorSize[2] === 6 && r.colorSize[3] === '1' && r.colorSize[4]
-      && r.keyF.join() === 'shape,crosshair' && r.keyT.join() === 'tape,#ic-tape,false' && r.tapeAgain.join() === 'tape,false' && r.toLasso.join() === 'lasso,lasso,false'
-      && r.keyG[0] === true && r.keyG[1] === 'Am Raster ausrichten: an'
-      && /pen hl bGroup eraser hand/.test(r.order) && /bBg bSnap/.test(r.order);
+      && r.hiddenAgain && r.keyF.join() === 'shape,crosshair' && r.barKeyF
+      && r.keyT.join() === 'tape,#ic-tape,false' && r.tapeAgain.join() === 'tape,false' && r.grp.join() === 'true,lasso,tape*' && r.toLasso.join() === 'lasso,lasso,false'
+      && r.keyG[0] === true && r.keyG[1] === 'Am Raster ausrichten: an' && r.titles[1] === 'Auswählen / Verschieben (L) · nochmal antippen: Lasso oder Tape'
+      && /pen hl text bShape bGroup eraser hand/.test(r.order) && /bBg bSnap/.test(r.order);
     check('menuUI', ok, r);
     // Farbe/Dicke werden für die Form übernommen
     await drag(300, 300, 500, 420); const [s] = await last();
@@ -470,17 +467,16 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     await p.evaluate(() => toggleSnap()); await p.waitForTimeout(1600);   // Magnet aktiv zeigen (Hinweis abwarten)
     await p.screenshot({ path: path.join(OUT, `shapes_toolbar_${mode}.png`), clip: { x: 0, y: 0, width: 1440, height: 110 } });
     await p.evaluate(() => toggleSnap()); await p.waitForTimeout(100);
-    await p.click('#bGroup'); await p.waitForTimeout(150);
-    const mb = await p.$eval('#shapeMenu', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
+    await p.waitForTimeout(150);   // Formenleiste (statt des Menüs)
+    const mb = await p.$eval('#shapeBar', e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
     await p.screenshot({ path: path.join(OUT, `shapes_menu_${mode}.png`), clip: { x: 0, y: 0, width: Math.min(1440, mb.x + mb.w + 40), height: mb.y + mb.h + 30 } });
     res['menuBox_' + mode] = mb;
-    await p.click('#bGroup');
   }
   await p.evaluate(() => { if (S.dark) toggleDark(); });
   // Hochformat: Leiste umbrechen, Menü bleibt im Bild
   await p.setViewportSize({ width: 960, height: 1440 }); await p.waitForTimeout(300);
-  await p.click('#bGroup'); await p.waitForTimeout(150);
-  res.menuPortrait = await p.$eval('#shapeMenu', e => { const r = e.getBoundingClientRect(); return [r.left >= 0, r.right <= innerWidth, r.top >= barBottom()]; });
+  await p.waitForTimeout(150);
+  res.menuPortrait = await p.$eval('#shapeBar', e => { const r = e.getBoundingClientRect(); return [!e.classList.contains('hidden'), r.left >= 0, r.right <= innerWidth, r.top >= $('#bar').getBoundingClientRect().bottom]; });
   await p.screenshot({ path: path.join(OUT, 'shapes_portrait.png') });
   check('portraitMenuFits', res.menuPortrait.every(Boolean), res.menuPortrait);
 

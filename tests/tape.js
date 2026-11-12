@@ -52,6 +52,29 @@ const path = require('path'), DIR = path.resolve(__dirname, '..');
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 600, y: 192 }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await p.waitForTimeout(200);
   res.afterFinger = await st(); check(res.afterFinger.tapes[0] === true, 'Finger antippen deckt wieder ab');
+  // Blase am Tape: nach dem Antippen über dem Tape, Schalter für genau dieses Tape, Mülleimer
+  res.bubble = await p.evaluate(id => {
+    const m = $('#tapeMenu'), r = m.getBoundingClientRect(), t = S.items.find(i => i.id === id), [, ty] = toScreen(t.bb[0], t.bb[1]);
+    return { open: isOpen(m), above: r.bottom <= cvLive.getBoundingClientRect().top + ty + 1, checked: $('#tmCover').getAttribute('aria-checked'), pic: !!$('#tmPic canvas') };
+  }, tape.id);
+  check(res.bubble.open && res.bubble.above && res.bubble.checked === 'true' && res.bubble.pic, 'Blase am Tape nach dem Antippen (abgedeckt) ' + JSON.stringify(res.bubble));
+  if (process.env.NOTES_SHOTS) { const r = await p.evaluate(() => { const a = $('#tapeMenu').getBoundingClientRect(); return { x: a.left - 40, y: a.top - 20, width: a.width + 80, height: 150 }; }); await p.waitForTimeout(300); await p.screenshot({ path: path.join(process.env.NOTES_SHOTS, 'tape_bubble.png'), clip: r }); }
+  await p.click('#tmCover'); await p.waitForTimeout(150);
+  res.bubbleSwitch = { tapes: (await st()).tapes, checked: await p.evaluate(() => $('#tmCover').getAttribute('aria-checked')), open: await p.evaluate(() => isOpen($('#tapeMenu'))) };
+  check(res.bubbleSwitch.tapes[0] === false && res.bubbleSwitch.checked === 'false' && res.bubbleSwitch.open, 'Schalter in der Blase deckt genau dieses Tape auf, die Blase bleibt');
+  await p.click('#tmCover'); await p.waitForTimeout(150);
+  check((await st()).tapes[0] === true, 'Schalter deckt wieder ab');
+  // nächster Fingertipp bei offener Blase geht nicht verloren: deckt gleich auf
+  await p.waitForTimeout(800);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 600, y: 192 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await p.waitForTimeout(250);
+  res.bubbleNext = { tapes: (await st()).tapes, open: await p.evaluate(() => isOpen($('#tapeMenu'))) };
+  check(res.bubbleNext.tapes[0] === false && res.bubbleNext.open, 'Tipp bei offener Blase wirkt sofort (deckt auf)');
+  await p.click('#tmDel'); await p.waitForTimeout(150);
+  check(!(await has(tape.id)) && !(await has(onTape.id)) && !(await p.evaluate(() => isOpen($('#tapeMenu')))), 'Mülleimer entfernt genau dieses Tape mit seiner Schrift');
+  await p.click('#bUndo'); await p.waitForTimeout(100);
+  check(await has(tape.id) && await has(onTape.id), 'Rückgängig holt das entfernte Tape zurück');
+  await p.keyboard.press('l'); check(!(await p.evaluate(() => isOpen($('#tapeMenu')))), 'Werkzeugwechsel schließt die Blase');
   // Lasso um das Tape: Schrift darauf kommt mit
   await p.keyboard.press('l');
   const sel = await p.evaluate(id => { const t = S.items.find(i => i.id === id); setSel(withGroups(new Set([t.id]))); return [...S.sel.ids]; }, tape.id);
