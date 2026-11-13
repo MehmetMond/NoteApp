@@ -379,6 +379,14 @@ html.xp #txBar .txc{border-radius:2px;border:1px solid #fff;box-shadow:0 0 0 1px
 #shapePop button:hover{background:var(--panel)}
 #shapePop button.on{background:var(--accent-soft);color:var(--accent)}
 #shapePop svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#shapePop .spc{gap:5px;padding:5px 7px}
+#shapePop .spcol{width:22px;height:22px;border-radius:50%;background:var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14)}
+#shapePop .spcol:hover{background:var(--c);transform:scale(1.1)}
+#shapePop .spcol.on{background:var(--c);box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--accent)}
+html.dark #shapePop .spcol{box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+html.dark #shapePop .spcol.on{background:var(--c);box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--accent)}
+#shapePop .spdot span{display:block;border-radius:50%;background:var(--text)}
+#shapePop .spdot.on span{background:var(--accent)}
 #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 18px;border-radius:12px;z-index:50;box-shadow:var(--shadow);font-size:14px;transition:opacity .2s;pointer-events:none;max-width:90vw}
 html.dark #toast{background:#eee;color:#111}
 #dlg{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
@@ -1349,6 +1357,7 @@ const validFl = (fl, n) => Array.isArray(fl) && fl.length > 0 && fl.every(r => A
 // fl: Flächen im Strich (gefüllte Pfeilspitzen), je [erster, letzter] Punkt eines geschlossenen Umrisses. Ihre Kanten
 // bekommen keinen Strich (sonst würde die Spitze rund), die Fläche wird gefüllt; die Linie dazwischen wie gewohnt.
 function buildPath(pts, w, hl, fl, ds) {
+  if (hl) return hlGeo(pts, w).P;   // Textmarker: Mittellinie, als Strich gemalt (paintPath)
   const n = pts.length / 3, rs = Array.isArray(fl) ? fl.filter(r => Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[0] >= 0 && r[1] > r[0] + 1 && r[1] < n) : [];
   const linePath = ds === 'dash' || ds === 'dot' ? (P, q, w, hl) => dashPath(P, q, w, hl, ds) : solidPath;   // Kontur der Form (Flächen bleiben voll)
   if (!rs.length) return linePath(new Path2D(), pts, w, hl);
@@ -1417,8 +1426,7 @@ function dashPath(P, pts, w, hl, ds) {
   return P;
 }
 // Stück i eines Strichs (ab 1): die Verbindung von Punkt i-1 nach i und das Gelenk bei i-1 zum vorigen Stück (Kreis in
-// Kurven über 20°, sonst zwei Dreiecke). st: Richtung des vorigen Stücks, wird fortgeschrieben; ohne P nur sie (der
-// Textmarker füllt beim Schreiben einzelne Stellen neu und braucht dafür die Richtungen davor)
+// Kurven über 20°, sonst zwei Dreiecke). st: Richtung des vorigen Stücks, wird fortgeschrieben; ohne P nur sie
 function joinPiece(P, pts, i, w, hl, st) {
   const x = pts[i * 3], y = pts[i * 3 + 1], x0 = pts[i * 3 - 3], y0 = pts[i * 3 - 2];
   const dx = x - x0, dy = y - y0, L = Math.hypot(dx, dy);
@@ -1439,63 +1447,107 @@ function solidPath(P, pts, w, hl) {
   const n = pts.length / 3, st = { px: 0, py: 0, has: false };
   for (let i = 1; i < n; i++) joinPiece(P, pts, i, w, hl, st);
   if (!n) return P;
-  if (hl) flatEnds(P, pts, w);   // Textmarker: flache Enden
-  else { circleAt(P, pts, 0, w, hl); if (n > 1) circleAt(P, pts, n - 1, w, hl); }
+  circleAt(P, pts, 0, w, hl); if (n > 1) circleAt(P, pts, n - 1, w, hl);
   return P;
 }
-// Textmarker wie ein echter Marker mit Keilspitze: gerade abgeschnittene Enden, etwas (w · 0,22) über den ersten und
-// letzten Punkt hinaus, im gleichen Umlaufsinn wie die übrigen Teile; nur angetippt: ein kleines Quadrat.
-// flatDir: Richtung vom Punkt i zum nächsten (step 1) bzw. vorigen (step -1) Punkt, der mehr als 0,5 entfernt ist
-function flatDir(pts, i, step) {
-  const n = pts.length / 3;
-  for (let j = i + step; j >= 0 && j < n; j += step) { const dx = pts[j * 3] - pts[i * 3], dy = pts[j * 3 + 1] - pts[i * 3 + 1], L = Math.hypot(dx, dy); if (L > 0.5) return [dx / L, dy / L]; }
-  return null;
+// Textmarker: eine Mittellinie, gemalt als Strich fester Breite (paintPath): flache Enden genau am ersten und letzten
+// Punkt (butt, kein Überstand), runde Verbindungen. Das erste und letzte Stück (bis eine halbe Breite) ist gerade, damit
+// die Enden quer zur Bewegung liegen (beim Aufsetzen und Abheben zittert der Stift); dazwischen geglättet: quadratische
+// Bögen durch die Mitten der Stücke, so bleiben Kurven und Ecken weich statt kantig. Nur angetippt: ein Quadrat.
+// b: letzter Punkt vor dem geraden Ende, len: Länge (für das Zeichnen beim Schreiben)
+function hlGeo(pts, w) {
+  const n = pts.length / 3, P = new Path2D(), X = i => pts[i * 3], Y = i => pts[i * 3 + 1], d = (i, j) => Math.hypot(X(i) - X(j), Y(i) - Y(j));
+  let len = 0; for (let i = 1; i < n; i++) len += d(i, i - 1);
+  if (!(len >= 0.5)) { P.moveTo(X(0) - w / 2, Y(0)); P.lineTo(X(0) + w / 2, Y(0)); return { P, b: 0, len: len || 0 }; }
+  const dmin = Math.min(w * 0.5, len / 3);
+  let a = 1; while (a < n - 1 && d(a, 0) < dmin) a++;
+  let b = n - 2; while (b > 0 && d(b, n - 1) < dmin) b--;
+  const q = [0]; for (let i = a; i <= b; i++) q.push(i); q.push(n - 1);
+  P.moveTo(X(0), Y(0));
+  for (let k = 1; k < q.length - 1; k++) { const i = q[k], j = q[k + 1]; P.quadraticCurveTo(X(i), Y(i), (X(i) + X(j)) / 2, (Y(i) + Y(j)) / 2); }
+  P.lineTo(X(n - 1), Y(n - 1));
+  return { P, b: Math.max(0, b), len };
 }
-function flatQuad(P, x0, y0, x1, y1, r) { const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L * r, ny = dx / L * r; P.moveTo(x0 + nx, y0 + ny); P.lineTo(x0 - nx, y0 - ny); P.lineTo(x1 - nx, y1 - ny); P.lineTo(x1 + nx, y1 + ny); }
-// Anfang (u: Richtung in den Strich hinein), Ende (zurück in den Strich, sonst -u), nur angetippt
-function flatStart(P, pts, w, u) { const x = pts[0], y = pts[1], e = w * 0.22; flatQuad(P, x - u[0] * e, y - u[1] * e, x, y, w / 2); }
-function flatEnd(P, pts, w, u) {
-  const k = pts.length / 3 - 1, x = pts[k * 3], y = pts[k * 3 + 1], e = w * 0.22, v = flatDir(pts, k, -1) || [-u[0], -u[1]];
-  flatQuad(P, x, y, x - v[0] * e, y - v[1] * e, w / 2);
+// Pfad eines Strichs malen: Textmarker als Strich (Mittellinie), alles andere gefüllt; Farbe aus fillStyle
+function paintPath(ctx, P, w, hl) {
+  if (!hl) { ctx.fill(P); return; }
+  ctx.save(); ctx.lineWidth = w; ctx.lineCap = 'butt'; ctx.lineJoin = 'round'; ctx.strokeStyle = ctx.fillStyle; ctx.stroke(P); ctx.restore();
 }
-function flatTap(P, pts, w) { const x = pts[0], y = pts[1], r = w / 2; flatQuad(P, x - r, y, x + r, y, r); }
-function flatEnds(P, pts, w) {
-  const u = flatDir(pts, 0, 1);
-  if (!u) { flatTap(P, pts, w); return; }
-  flatStart(P, pts, w, u); flatEnd(P, pts, w, u);
-}
-// Textmarker beim Schreiben: Stück für Stück wie der Stift (den ganzen Strich in jedem Bild neu zu füllen kostete bei
-// langen Strichen viele Millisekunden je Bild), aus denselben Teilen wie der fertige Strich: Verbindungen mit Gelenken,
-// der flache Anfang, sobald seine Richtung feststeht, und das flache Ende als Spitze (nur angetippt: das Quadrat). Die
-// Spitze wandert mit: ihr Kasten wird geleert und mit den Stücken darin neu gefüllt (auf den Kasten beschnitten, auch
-// wo der Strich über sich selbst geht), dann kommen die neuen Stücke und die neue Spitze. Am Ende sieht die Ebene aus
-// wie der fertige Strich. g: Live-Ebene oder Schreibfläche der Notiz; k, ox, oy: Welt -> Gerätepixel; a: der Strich
-// (pts, w, c; drawn: gezeichnete Punkte, hs: Richtung am Anfang, sobald gezeichnet, hst: Richtung, tip: Kasten der Spitze)
-function hlLive(g, a, k, ox, oy) {
-  const pts = a.pts, n = pts.length / 3, w = a.w, r = w / 2;
-  if (!n || (a.tip && a.drawn >= n)) return;
-  g.fillStyle = colorOf(a.c);
-  if (a.tip) {
-    const [x0, y0, x1, y1] = a.tip, b = [(x0 - ox) / k, (y0 - oy) / k, (x1 - ox) / k, (y1 - oy) / k];
-    const P = new Path2D(), st = { px: 0, py: 0, has: false };
-    for (let i = 1; i < a.drawn; i++) {   // nur die Stücke, die den Kasten der alten Spitze berühren
-      const xa = pts[i * 3 - 3], ya = pts[i * 3 - 2], xb = pts[i * 3], yb = pts[i * 3 + 1];
-      const hit = Math.min(xa, xb) - r < b[2] && Math.max(xa, xb) + r > b[0] && Math.min(ya, yb) - r < b[3] && Math.max(ya, yb) + r > b[1];
-      joinPiece(hit ? P : null, pts, i, w, true, st);
+const isHlStroke = it => it.t === 's' && it.hl && !it.tp && !it.nt;
+const alKey = a => Math.round(a * 1000);   // Deckkraft vergleichen (0,42 · 0,42 / 0,42 ist nicht genau 0,42)
+const hlBox = st => st.bb || bboxOf(st.pts, st.w);
+// Textmarker als eine Schicht: wo sich Textmarker gleicher Deckkraft überlappen, wird es nicht dunkler. Sie kommen deckend
+// auf eine Hilfsfläche (der spätere über den früheren) und die einmal mit ihrer Deckkraft (hell multipliziert) auf die
+// Fläche. Die Hilfsfläche ist nur so groß wie die Striche (auf der Fläche), ctx hat die Welt-Transformation
+let hlScratch = null;
+function paintHl(ctx, group) {
+  const M = ctx.getTransform(), cw = ctx.canvas.width, ch = ctx.canvas.height, byA = new Map();
+  for (const st of group) { const a = alKey(strokeAlpha(st)); let l = byA.get(a); if (!l) byA.set(a, l = []); l.push(st); }
+  for (const [ak, l] of byA) {
+    const a = ak / 1000;
+    let x0 = 0, y0 = 0, x1 = cw, y1 = ch;
+    if (!M.b && !M.c) {
+      let b0 = Infinity, b1 = Infinity, b2 = -Infinity, b3 = -Infinity;
+      for (const st of l) { const q = hlBox(st); b0 = Math.min(b0, q[0]); b1 = Math.min(b1, q[1]); b2 = Math.max(b2, q[2]); b3 = Math.max(b3, q[3]); }
+      x0 = Math.max(0, Math.floor(Math.min(M.a * b0, M.a * b2) + M.e) - 2); x1 = Math.min(cw, Math.ceil(Math.max(M.a * b0, M.a * b2) + M.e) + 2);
+      y0 = Math.max(0, Math.floor(Math.min(M.d * b1, M.d * b3) + M.f) - 2); y1 = Math.min(ch, Math.ceil(Math.max(M.d * b1, M.d * b3) + M.f) + 2);
     }
-    if (a.hs) flatStart(P, pts, w, a.hs);
-    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(x0, y0, x1 - x0, y1 - y0);
-    g.save(); g.beginPath(); g.rect(x0, y0, x1 - x0, y1 - y0); g.clip(); g.setTransform(k, 0, 0, k, ox, oy); g.fill(P); g.restore();
+    if (x1 <= x0 || y1 <= y0) continue;
+    const W = x1 - x0, H = y1 - y0;
+    if (!hlScratch) hlScratch = document.createElement('canvas');
+    if (hlScratch.width < W || hlScratch.height < H) { hlScratch.width = Math.max(hlScratch.width, W); hlScratch.height = Math.max(hlScratch.height, H); }
+    const g = hlScratch.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, W, H);
+    g.setTransform(M.a, M.b, M.c, M.d, M.e - x0, M.f - y0);
+    for (const st of l) { g.fillStyle = colorOf(st.c); paintPath(g, strokePath(st), st.w, true); }
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = a; if (!isDark()) ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(hlScratch, 0, 0, W, H, x0, y0, W, H); ctx.restore();
   }
-  g.setTransform(k, 0, 0, k, ox, oy);
-  const P = new Path2D(), st = a.hst || (a.hst = { px: 0, py: 0, has: false });
-  for (let i = Math.max(1, a.drawn); i < n; i++) joinPiece(P, pts, i, w, true, st);
-  if (!a.hs) { const u = flatDir(pts, 0, 1); if (u) { flatStart(P, pts, w, u); a.hs = u; } }
-  a.drawn = n;
-  if (a.hs) flatEnd(P, pts, w, a.hs); else flatTap(P, pts, w);
-  g.fill(P);
-  const j = a.hs ? n - 1 : 0, x = pts[j * 3] * k + ox, y = pts[j * 3 + 1] * k + oy, m = w * 0.72 * k + 2;   // Spitze: höchstens 0,72 · w vom Punkt
-  a.tip = [Math.floor(x - m), Math.floor(y - m), Math.ceil(x + m), Math.ceil(y + m)];
+}
+// Liste in ihrer Reihenfolge malen (skip: auslassen); aufeinanderfolgende Textmarker als eine Schicht (paintHl)
+function paintItems(ctx, list, s, skip) {
+  for (let i = 0; i < list.length;) {
+    const it = list[i];
+    if (skip && skip(it)) { i++; continue; }
+    if (!isHlStroke(it)) { drawItem(ctx, it, s); i++; continue; }
+    const group = []; let j = i;
+    for (; j < list.length; j++) { const q = list[j]; if (skip && skip(q)) continue; if (!isHlStroke(q)) break; group.push(q); }
+    paintHl(ctx, group); i = j;
+  }
+}
+/* Textmarker beim Schreiben: nur der Teil, der sich ändert (ab dem Punkt vor dem geraden Ende), wird geleert und mit dem
+   ganzen Strich neu gemalt, auf diesen Bereich beschnitten (deckend; die Ebene hat die Deckkraft). Dort wird ausgespart,
+   was auf der Seite schon liegt und gleich aussehen soll: Textmarker gleicher Deckkraft (sonst würde es beim Überlappen
+   dunkler) und alles, was über dem Textmarker liegt (Schrift, Formen, Tapes): der Marker liegt schon beim Ziehen darunter.
+   g: Ebene; k, ox, oy: Welt -> Gerätepixel; a: { pts, w, c, cut: [Liste, Kasten, Aussparen] }, hlB/hlLen: Stand des vorigen
+   Bilds (ohne: alles neu). Gibt den Bereich in Gerätepixeln zurück */
+function hlLive(g, a, k, ox, oy) {
+  const pts = a.pts, n = pts.length / 3, w = a.w; if (!n) return null;
+  const geo = hlGeo(pts, w), part = a.hlB != null && a.hlLen >= w * 1.6 && geo.len >= w * 1.6, from = part ? Math.max(0, Math.min(a.hlB, geo.b) - 1) : 0;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = from; i < n; i++) { const x = pts[i * 3], y = pts[i * 3 + 1]; if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+  const m = w * 0.75 + 3 / k, R = [Math.floor((x0 - m) * k + ox), Math.floor((y0 - m) * k + oy), Math.ceil((x1 + m) * k + ox), Math.ceil((y1 + m) * k + oy)];
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(R[0], R[1], R[2] - R[0], R[3] - R[1]);
+  g.beginPath(); g.rect(R[0], R[1], R[2] - R[0], R[3] - R[1]); g.clip();
+  g.setTransform(k, 0, 0, k, ox, oy); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.fillStyle = colorOf(a.c); paintPath(g, geo.P, w, true);
+  if (a.cut) {
+    const [list, box, out] = a.cut, rb = [(R[0] - ox) / k, (R[1] - oy) / k, (R[2] - ox) / k, (R[3] - oy) / k];
+    for (const it of list) if (boxHit(box(it), rb)) { g.save(); g.globalCompositeOperation = 'destination-out'; out(g, it, k); g.restore(); }
+  }
+  g.restore();
+  a.hlB = geo.b; a.hlLen = geo.len;
+  return R;
+}
+// Was ein neuer Textmarker auf der Seite ausspart (sichtbar in der Ansicht): Textmarker gleicher Deckkraft und alles, was
+// über dem Textmarker liegt; Bilder liegen darunter
+function hlCutPage(al) {
+  const [vx0, vy0] = toWorld(-40, -40), [vx1, vy1] = toWorld(VW + 40, VH + 40), vb = [vx0, vy0, vx1, vy1], list = [];
+  for (const it of paintOrder()) {
+    if (it.t === 'i' || it.nt || !boxHit(itemBox(it), vb)) continue;
+    if (isHlStroke(it) && !it.on && alKey(strokeAlpha(it)) !== alKey(al)) continue;
+    list.push(it);
+  }
+  const out = (g, it, k) => { if (isHlStroke(it)) paintPath(g, strokePath(it), it.w, true); else if (it.tp) drawTape(g, it, k, true); else drawItem(g, it, k); };
+  return [list, itemBox, out];
 }
 function circleAt(P, pts, i, w, hl) { const x = pts[i * 3], y = pts[i * 3 + 1], r = radAt(pts, i, w, hl); P.moveTo(x + r, y); P.arc(x, y, r, 0, Math.PI * 2); }
 function strokePath(s) { let p = pathCache.get(s); if (!p) { p = buildPath(s.pts, s.w, s.hl, s.fl, s.ds); pathCache.set(s, p); } return p; }
@@ -1524,7 +1576,7 @@ function fillStroke(ctx, s, P) {
   ctx.fillStyle = colorOf(s.c);
   const a = strokeAlpha(s); if (a < 1) ctx.globalAlpha = a;
   if (s.hl && !isDark()) ctx.globalCompositeOperation = 'multiply';
-  ctx.fill(P);
+  paintPath(ctx, P, s.w, s.hl);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 // Füllung einer geschlossenen Form (fs: 'solid' | 'hachure' | 'cross') unter ihrer Kontur. Die Fläche sind die Punkte
@@ -1899,7 +1951,7 @@ function motifBitmap(kind, part, hPx) {
   if (motifBmps.size >= 48) motifBmps.delete(motifBmps.keys().next().value);
   motifBmps.set(key, c); return c;
 }
-function drawMotifs(ctx, s, g, ds) {
+function drawMotifs(ctx, s, g, ds, box) {   // box: nur dort stempeln (Weltkoordinaten)
   const Q = g.q, n = Q.length, L = [0];
   for (let i = 1; i < n; i++) L.push(L[i - 1] + Math.hypot(Q[i][0] - Q[i - 1][0], Q[i][1] - Q[i - 1][1]));
   const m = TAPE_MOTIFS[s.tp], total = L[n - 1], h = 0.72 * s.w, ha = 0.3 * s.w, lm = h * m.w, la = ha * m.aw, sp = lm * 1.18 + la;
@@ -1925,7 +1977,9 @@ function drawMotifs(ctx, s, g, ds) {
   const bent = d => { const a = pos(d - lm / 2), b = pos(d + lm / 2); return Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.7 * lm; };
   // sichtbarer Ausschnitt in Weltkoordinaten (Kachel, Vorschau, Export: ohne Drehung), Figuren daneben nicht stempeln
   const T = ctx.getTransform(), cw = ctx.canvas.width, chh = ctx.canvas.height, rr = h * Math.max(m.w, 1);
-  const cull = !T.b && !T.c && T.a > 0 && T.d > 0, vx0 = -T.e / T.a - rr, vy0 = -T.f / T.d - rr, vx1 = (cw - T.e) / T.a + rr, vy1 = (chh - T.f) / T.d + rr;
+  const cull = !T.b && !T.c && T.a > 0 && T.d > 0;
+  let vx0 = -T.e / T.a - rr, vy0 = -T.f / T.d - rr, vx1 = (cw - T.e) / T.a + rr, vy1 = (chh - T.f) / T.d + rr;
+  if (box) { vx0 = Math.max(vx0, box[0] - rr); vy0 = Math.max(vy0, box[1] - rr); vx1 = Math.min(vx1, box[2] + rr); vy1 = Math.min(vy1, box[3] + rr); }
   const bm = motifBitmap(s.tp, 'm', h * ds), ba = motifBitmap(s.tp, 'a', ha * ds), ends = [];
   const stamp = (c, x, y, r, hw) => {   // hw: Höhe in Welteinheiten
     const k = hw / c.px;
@@ -1943,7 +1997,7 @@ function drawMotifs(ctx, s, g, ds) {
   else for (let d = sp / 2; d - lm / 2 < total; d += sp) { put(bm, d, h, lm, true); if (d + sp / 2 - la / 2 < total) put(ba, d + sp / 2, ha, la, false); }
   if (ends.length) { ctx.save(); ctx.clip(g.edge); for (const e of ends) stamp(...e); ctx.restore(); }
 }
-function drawTape(ctx, s, ds = 1, flat = false) {   // flat: ohne Schatten (gewähltes Muster im Menü, dort mit Umriss)
+function drawTape(ctx, s, ds = 1, flat = false, box = null) {   // flat: ohne Schatten (gewähltes Muster im Menü, dort mit Umriss); box: Figuren nur dort
   const g = tapeGeo(s), on = covered(s);
   ctx.save(); ctx.lineCap = 'butt'; ctx.lineJoin = 'round'; ctx.lineWidth = s.w;
   if (!on) ctx.globalAlpha = 0.16;
@@ -1958,7 +2012,7 @@ function drawTape(ctx, s, ds = 1, flat = false) {   // flat: ohne Schatten (gew�
     ctx.restore();
   }
   ctx.strokeStyle = ctx.fillStyle = s.c; ctx.stroke(g.line); ctx.fill(g.teeth);
-  if (on && TAPE_MOTIFS[s.tp]) drawMotifs(ctx, s, g, ds);
+  if (on && TAPE_MOTIFS[s.tp]) drawMotifs(ctx, s, g, ds, box);
   else {
     const pat = on && tapePattern(ctx, s.tp, ds);
     if (pat) { ctx.strokeStyle = ctx.fillStyle = pat; ctx.stroke(g.line); ctx.fill(g.teethS); }   // halb durchsichtig: nicht doppelt
@@ -2110,28 +2164,92 @@ function hiddenIds() {
   return null;
 }
 function renderTile(L, i, j) {
-  const t = tilePool.pop() || newTile(), s = L * DPR, ctx = t.ctx;
+  const t = tilePool.pop() || newTile(), s = L * DPR;
   t.L = L; t.wb = [i * T / s, j * T / s, (i + 1) * T / s, (j + 1) * T / s]; t.v++;
-  fillBg(ctx, L, -i * T, -j * T, T, T);
-  ctx.setTransform(s, 0, 0, s, -i * T, -j * T);
+  paintTile(t, i, j, null);
+  const key = tkey(L, i, j), old = stale.get(key);
+  if (old) { stale.delete(key); tilePool.push(old); }   // Platzhalter hat ausgedient
+  tiles.set(key, t);
+  return t;
+}
+// Kachel malen, ganz oder nur in den Rechtecken clips (Kachelpixel, ein Durchgang für alle): Papier, dann alles darauf
+// in der Reihenfolge; gemalt wird nur, was eines der Rechtecke berührt
+function paintTile(t, i, j, clips) {
+  const L = t.L, s = L * DPR, ctx = t.ctx, x = i * T, y = j * T;
+  const wbs = clips && clips.map(c => [(x + c[0]) / s, (y + c[1]) / s, (x + c[2]) / s, (y + c[3]) / s]);
+  const wb = wbs ? wbs.reduce((u, q) => [Math.min(u[0], q[0]), Math.min(u[1], q[1]), Math.max(u[2], q[2]), Math.max(u[3], q[3])], [Infinity, Infinity, -Infinity, -Infinity]) : t.wb;
+  ctx.save();
+  if (clips) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.beginPath(); for (const c of clips) ctx.rect(c[0], c[1], c[2] - c[0], c[3] - c[1]); ctx.clip(); }
+  fillBg(ctx, L, -x, -y, T, T);
+  ctx.setTransform(s, 0, 0, s, -x, -y);
   const hid = hiddenIds();
-  for (const it of paintOrder()) {
-    if (hid && hid.has(it.id)) continue;
-    if (boxHit(itemBox(it), t.wb)) drawItem(ctx, it, s);
-  }
+  paintItems(ctx, paintOrder(), s, it => {
+    if (hid && hid.has(it.id)) return true;
+    const b = itemBox(it); if (!boxHit(b, wb)) return true;
+    if (wbs && wbs.length > 1) { for (const q of wbs) if (boxHit(b, q)) return false; return true; }
+    return false;
+  });
   // Cornell, Notizen verdeckt: die Spalte noch einmal, Papier frisch und alles darauf unscharf (die Stichworte bleiben)
   if (S.cornellHide && isCornell()) for (let k = sheetAt(t.wb[1]); k <= sheetAt(t.wb[3]); k++) {
     const f = cornellNotes(k); if (!boxHit(f, t.wb)) continue;
     ctx.save(); ctx.beginPath(); ctx.rect(f[0], f[1], f[2] - f[0], f[3] - f[1]); ctx.clip();
     fillBg(ctx, L, -i * T, -j * T, T, T);
     ctx.setTransform(s, 0, 0, s, -i * T, -j * T); ctx.filter = `blur(${(7 * s).toFixed(1)}px)`;
-    for (const it of paintOrder()) if (!(hid && hid.has(it.id)) && boxHit(itemBox(it), f) && boxHit(itemBox(it), t.wb)) drawItem(ctx, it, s);
+    paintItems(ctx, paintOrder(), s, it => (hid && hid.has(it.id)) || !boxHit(itemBox(it), f) || !boxHit(itemBox(it), wb));
     ctx.restore();
   }
-  const key = tkey(L, i, j), old = stale.get(key);
-  if (old) { stale.delete(key); tilePool.push(old); }   // Platzhalter hat ausgedient
-  tiles.set(key, t);
-  return t;
+  ctx.restore();
+}
+/* Neue Striche in die Kacheln der Ansicht bringen, ohne ganze Kacheln neu zu rastern (das kostete beim Loslassen auf
+   dem Surface spürbar Zeit): ein neues Tape liegt über allem und kommt einfach darüber (paintOnTop); sonst werden nur
+   Streifen entlang der Striche neu gemalt (bei Füllung der ganze Kasten), mit allem, was dort liegt, in der Reihenfolge.
+   Kacheln anderer Zoomstufen werden verworfen, Platzhalter bleiben (sie werden ohnehin ganz neu gemalt) */
+function forTiles(bb, fn) {
+  for (const [k, t] of [...tiles]) {
+    if (!boxHit(t.wb, bb)) continue;
+    if (t.L !== S.level) { tiles.delete(k); tilePool.push(t); continue; }
+    const [, i, j] = k.split(':').map(Number); fn(t, i, j);
+  }
+}
+function paintOnTop(list) {
+  const s = S.level * DPR;
+  forTiles(contentBox(list), (t, i, j) => {
+    const ctx = t.ctx; ctx.save(); ctx.setTransform(s, 0, 0, s, -i * T, -j * T);
+    for (const st of list) if (boxHit(itemBox(st), t.wb)) drawItem(ctx, st, s);
+    ctx.restore(); t.v++;
+  });
+}
+function stripRects(st, s) {   // Gerätepixel bei Stufe s: Stücke von höchstens 64 px entlang des Strichs (lange Abschnitte geteilt)
+  const p = st.pts, m = (st.hl ? st.w * 0.5 : st.w * 0.8) * s + 3, out = [], CH = 64;
+  if (st.fs || p.length < 6) { const b = itemBox(st); return [[Math.floor(b[0] * s) - 3, Math.floor(b[1] * s) - 3, Math.ceil(b[2] * s) + 3, Math.ceil(b[3] * s) + 3]]; }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const flush = () => { if (x0 <= x1) out.push([Math.floor(x0 - m), Math.floor(y0 - m), Math.ceil(x1 + m), Math.ceil(y1 + m)]); x0 = y0 = Infinity; x1 = y1 = -Infinity; };
+  for (let i = 3; i < p.length; i += 3) {
+    const ax = p[i - 3] * s, ay = p[i - 2] * s, bx = p[i] * s, by = p[i + 1] * s, n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / CH));
+    for (let q = 0; q < n; q++) {
+      const ux = ax + (bx - ax) * q / n, uy = ay + (by - ay) * q / n, vx = ax + (bx - ax) * (q + 1) / n, vy = ay + (by - ay) * (q + 1) / n;
+      if (Math.max(x1, ux, vx) - Math.min(x0, ux, vx) > CH || Math.max(y1, uy, vy) - Math.min(y0, uy, vy) > CH) flush();
+      x0 = Math.min(x0, ux, vx); y0 = Math.min(y0, uy, vy); x1 = Math.max(x1, ux, vx); y1 = Math.max(y1, uy, vy);
+    }
+  }
+  flush(); return out;
+}
+function repaintStrips(list, within) {   // within: Kästen (Welt), nur der Schnitt der Streifen mit ihnen wird neu gemalt
+  const s = S.level * DPR; let rects = list.flatMap(st => stripRects(st, s));
+  if (within) {
+    const out = [];
+    for (const q of rects) for (const b of within) { const r = [Math.max(q[0], Math.floor(b[0] * s) - 2), Math.max(q[1], Math.floor(b[1] * s) - 2), Math.min(q[2], Math.ceil(b[2] * s) + 2), Math.min(q[3], Math.ceil(b[3] * s) + 2)]; if (r[2] > r[0] && r[3] > r[1]) out.push(r); }
+    rects = out;
+  }
+  if (!rects.length) return;
+  forTiles(contentBox(list), (t, i, j) => {   // je Kachel ein Durchgang mit allen Streifen darin
+    const cs = [];
+    for (const q of rects) {
+      const c = [Math.max(q[0] - i * T, 0), Math.max(q[1] - j * T, 0), Math.min(q[2] - i * T, T), Math.min(q[3] - j * T, T)];
+      if (c[2] > c[0] && c[3] > c[1]) cs.push(c);
+    }
+    if (cs.length) { paintTile(t, i, j, cs); t.v++; }
+  });
 }
 // Kacheln auf dem Bildschirm (Gerätepixel des Bildschirms, so groß wie cvLive)
 function tileRange(L) {
@@ -2425,15 +2543,17 @@ function markPts(pts, m, i0 = 0) {
 }
 function drawLive() {
   liveQ = false;
-  if (action && action.kind === 'draw') {   // der Strich wird direkt gezeichnet; Tape und Geraden hier jedes Mal ganz
-    const a = action;
-    if (a.hlInc && !a.redraw) { hlLivePage(a); return; }   // Textmarker: nur das Neue und die Spitze
+  if (action && action.kind === 'draw') {   // der Strich wird direkt gezeichnet
+    const a = action, { tx, ty, z } = S.view, k = DPR * z, ox = DPR * tx, oy = DPR * ty;
+    if (a.hlInc && !a.redraw) { hlLivePage(a); return; }   // Textmarker: nur, was sich ändert
     if (!a.redraw) return;
-    liveClear(); liveWorld();
+    if (a.tape && tapTiny(a.raw || a.start, a.start, a.pts, z)) return;   // Tape: erst nach mehr als einem Antippen
+    if (a.tape && !a.straight) { const R = tapeLive(ctxLive, a, k, ox, oy, a.pts); liveMarkDev(R[0], R[1], R[2], R[3]); return; }
+    liveClear(); liveWorld();   // Geraden: jedes Mal ganz
     const pts = a.straight ? straightPts(a) : a.pts;
-    markPts(pts, a.tape ? a.w * 1.5 : a.w);   // Tape: mit Zacken und Schatten
-    if (a.tape) drawTape(ctxLive, { pts, w: a.w, c: a.c, tp: a.tp, live: true }, DPR * S.view.z);
-    else { ctxLive.fillStyle = colorOf(a.c); ctxLive.fill(buildPath(pts, a.w, a.hl)); }
+    if (a.tape) { markPts(pts, a.w * 1.5); drawTape(ctxLive, { pts, w: a.w, c: a.c, tp: a.tp, live: true }, k); }
+    else if (a.hl) { const R = hlLive(ctxLive, { pts, w: a.w, c: a.c, cut: a.cut }, k, ox, oy); if (R) liveMarkDev(R[0], R[1], R[2], R[3]); }
+    else { markPts(pts, a.w); ctxLive.fillStyle = colorOf(a.c); ctxLive.fill(buildPath(pts, a.w, false)); }
     return;
   }
   liveClear();
@@ -2480,7 +2600,7 @@ function drawLive() {
           const [ax, ay] = a.anchor, f = v => v * a.s; ctx.translate(ax, ay); ctx.scale(a.s, a.s); ctx.translate(-ax, -ay);
           liveMark(ax + f(a0 - ax), ay + f(b0 - ay), ax + f(a1 - ax), ay + f(b1 - ay));
         }
-        for (const it of paintOrder()) if (S.sel.ids.has(it.id)) drawItem(ctx, it, DPR * z * (a.s || 1));
+        paintItems(ctx, paintOrder(), DPR * z * (a.s || 1), it => !S.sel.ids.has(it.id));
         ctx.restore();
       }
       if (a.kind === 'move') { a0 += a.dx; a1 += a.dx; b0 += a.dy; b1 += a.dy; }
@@ -2563,8 +2683,8 @@ function setView(tx, ty, z, settle) {
   placeCornellBtn(); hideTapeMenu();
   if (action && action.kind === 'draw') {   // Ansicht ändert sich während des Schreibens: Strich neu zeichnen
     const a = action; a.noComposite = true; liveClear(); a.drawn = 0;
-    if (a.redraw) requestLive();
-    else if (a.hlInc) { a.hs = a.hst = a.tip = null; hlLivePage(a); }
+    if (a.redraw) { a.tapeT0 = null; requestLive(); }
+    else if (a.hlInc) { a.hlB = null; if (a.hl) a.cut = hlCutPage(strokeAlpha(a)); hlLivePage(a); }
     else { liveWorld(); ctxLive.fillStyle = colorOf(a.c); livePiece(a); }
   }
   if (settle) settleZoom();
@@ -2802,7 +2922,7 @@ function selBitmap() {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d'), z = S.view.z;
   g.setTransform(DPR * z, 0, 0, DPR * z, DPR * (S.view.tx - sx0), DPR * (S.view.ty - sy0));
-  for (const it of paintOrder()) if (S.sel.ids.has(it.id)) drawItem(g, it, DPR * z);
+  paintItems(g, paintOrder(), DPR * z, it => !S.sel.ids.has(it.id));
   return { c, sx: sx0, sy: sy0 };
 }
 
@@ -3716,9 +3836,30 @@ function catchUp(a) {
 function settleStroke(a) { if (a.raw) { catchUp(a); livePiece(a); } }
 // Textmarker auf der Live-Ebene (in der Ansicht der Seite), mit dem Bereich, den er berührt hat
 function hlLivePage(a) {
-  const from = Math.max(0, a.drawn - 1), { tx, ty, z } = S.view;
-  hlLive(ctxLive, a, DPR * z, DPR * tx, DPR * ty);
-  markPts(a.pts, a.w, from);
+  const { tx, ty, z } = S.view, R = hlLive(ctxLive, a, DPR * z, DPR * tx, DPR * ty);
+  if (R) liveMarkDev(R[0], R[1], R[2], R[3]);
+}
+// noch ein Antippen (wie beim Loslassen geprüft): das Tape erscheint erst danach (sonst blitzte ein dünnes Stück auf)
+const tapTiny = (r, start, pts, z) => Math.hypot(r[0] - start[0], r[1] - start[1]) < 6 && pathLen(pts) * z < 12;
+/* Tape beim Ziehen: nur der Bereich, der sich ändert, wird geleert und mit dem ganzen Tape neu gemalt, auf ihn
+   beschnitten (Figuren daneben werden nicht gestempelt): das Ende mit Schnittkante, Zacken und den letzten Figuren; der
+   Rest steht schon auf der Ebene. Solange das Tape kurz ist, ganz. a.tapeT0/tapeLen: Stand des vorigen Bilds */
+function tapeLive(g, a, k, ox, oy, pts) {
+  const n = pts.length / 3, w = a.w, mt = TAPE_MOTIFS[a.tp], X = i => pts[i * 3], Y = i => pts[i * 3 + 1];
+  let len = 0; for (let i = 1; i < n; i++) len += Math.hypot(X(i) - X(i - 1), Y(i) - Y(i - 1));
+  const sp = mt ? 0.72 * w * mt.w * 1.18 + 0.3 * w * mt.aw : 0, tail = w * 1.6 + 2 * sp, short = w * 2 + sp;   // sp: Abstand der Figuren (drawMotifs)
+  let t0 = n - 1, acc = 0; while (t0 > 0 && acc < tail) { acc += Math.hypot(X(t0) - X(t0 - 1), Y(t0) - Y(t0 - 1)); t0--; }
+  const from = a.tapeT0 == null || len < short || a.tapeLen < short ? 0 : Math.min(a.tapeT0, t0);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = from; i < n; i++) { const x = X(i), y = Y(i); if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+  const m = w * 0.75 + (mt ? 0.36 * w * Math.max(mt.w, 1) : 0) + 3 / k;
+  const R = [Math.floor((x0 - m) * k + ox), Math.floor((y0 - m) * k + oy), Math.ceil((x1 + m) * k + ox), Math.ceil((y1 + m) * k + oy)];
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(R[0], R[1], R[2] - R[0], R[3] - R[1]);
+  g.beginPath(); g.rect(R[0], R[1], R[2] - R[0], R[3] - R[1]); g.clip(); g.setTransform(k, 0, 0, k, ox, oy);
+  drawTape(g, { pts, w, c: a.c, tp: a.tp, live: true }, k, false, [(R[0] - ox) / k, (R[1] - oy) / k, (R[2] - ox) / k, (R[3] - oy) / k]);
+  g.restore();
+  a.tapeT0 = t0; a.tapeLen = len;
+  return R;
 }
 function livePiece(a) {
   const P = new Path2D(), n = a.pts.length / 3;
@@ -3755,6 +3896,7 @@ function startAction(e) {
     action = { kind: 'draw', id: e.pointerId, hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[tool], w: S.size[tool], al: tape ? undefined : S.alpha[tool], drawn: 0,
       ...smoothStart(sx, sy, p, e.timeStamp), start: [sx, sy], still: [sx, sy], straight: !!S.straight[tool] };
     if (!tape) { const t = tapeAt(wx, wy); if (t && covered(t)) action.on = t.id; }   // auf ein abgedecktes Tape geschrieben
+    if (hl) action.cut = hlCutPage(strokeAlpha(action));   // was der Marker beim Ziehen ausspart
     liveClear(); liveStyle(tape ? null : action);
     if (tape || action.straight) { action.redraw = true; requestLive(); }
     else if (hl) { action.hlInc = true; hlLivePage(action); }   // Textmarker: Stück für Stück mit flachen Enden (hlLive)
@@ -3858,10 +4000,16 @@ function finishStroke(a) {
 function commitLive(list, noComposite, sync) {
   const bb = contentBox(list), hl = list[0].hl;
   const [vx0, vy0] = toWorld(0, 0), [vx1, vy1] = toWorld(VW, VH);
-  const underTape = list.some(s => !s.tp && !s.on) && S.items.some(t => t.tp && boxHit(t.bb, bb));   // Tapes liegen obendrauf
-  const inView = !noComposite && !underTape && bb[0] > vx0 && bb[1] > vy0 && bb[2] < vx1 && bb[3] < vy1 && S.view.z === S.level;
-  commit(appendItems(S.items, list), !inView);
-  if (!inView && sync && S.view.z === S.level) {
+  // Tapes liegen obendrauf: wird unter einem gezogen, kommen erst die Pixel der Live-Ebene, dann werden nur die Streifen
+  // neu gemalt, die ein Tape berühren (dort liegt es dann wieder darüber)
+  const tapesHit = list.some(s => !s.tp && !s.on) ? S.items.filter(t => t.tp && boxHit(t.bb, bb)) : [];
+  const inView = !noComposite && bb[0] > vx0 && bb[1] > vy0 && bb[2] < vx1 && bb[3] < vy1 && S.view.z === S.level;
+  // sonst ohne ganze Kacheln: neues Tape obendrauf, Textmarker und Striche unter einem Tape als Streifen (nicht mitten im
+  // Zoomen und nicht bei verdeckten Cornell-Notizen: dort wie bisher ganze Kacheln)
+  const part = !inView && S.view.z === S.level && !(S.cornellHide && isCornell());
+  commit(appendItems(S.items, list), !inView && !part);
+  if (part) { if (list.every(st => st.tp)) paintOnTop(list); else repaintStrips(list); }
+  else if (!inView && sync && S.view.z === S.level) {
     const L = S.level, s = L * DPR, r = tileRange(L);
     for (let j = Math.max(r.j0, Math.floor(bb[1] * s / T)); j <= Math.min(r.j1, Math.floor(bb[3] * s / T)); j++)
       for (let i = Math.max(r.i0, Math.floor(bb[0] * s / T)); i <= Math.min(r.i1, Math.floor(bb[2] * s / T)); i++) if (!tiles.has(tkey(L, i, j))) renderTile(L, i, j);
@@ -3877,6 +4025,8 @@ function commitLive(list, noComposite, sync) {
       g.drawImage(cvLive, i * T + txD, j * T + tyD, T, T, 0, 0, T, T);
       g.restore();
     }
+    if (tapesHit.length && !(S.cornellHide && isCornell())) repaintStrips(list, tapesHit.map(t => t.bb));
+    else if (tapesHit.length) invalidateBox(bb);
   }
   draw();
   deferLiveClear();
@@ -4286,10 +4436,10 @@ function sizeStrip(k, v) {
     q.push(f.reduce((s, m, j) => s + m * B[j][0], 0), f.reduce((s, m, j) => s + m * B[j][1], 0), 0.5);
   }
   const P = Float32Array.from(q), col = colorOf(S.color.hl), a = Math.min(1, strokeAlpha({ hl: true, al: S.alpha.hl }) * (isDark() ? 1.45 : 1.6));
-  const layer = () => { const o = document.createElement('canvas'); o.width = c.width; o.height = c.height; const g = o.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.fillStyle = col; g.fill(buildPath(P, h, true)); return [o, g]; };
+  const layer = () => { const o = document.createElement('canvas'); o.width = c.width; o.height = c.height; const g = o.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.fillStyle = col; paintPath(g, buildPath(P, h, true), h, true); return [o, g]; };
   const g = c.getContext('2d');
   const [body] = layer(); g.globalAlpha = a; g.drawImage(body, 0, 0);   // der Strich deckend, dann mit Deckkraft: gleichmäßig
-  const [rim, rg] = layer(); rg.globalCompositeOperation = 'destination-out'; rg.fill(buildPath(P, h * 0.62, true));   // Ränder
+  const [rim, rg] = layer(); rg.globalCompositeOperation = 'destination-out'; paintPath(rg, buildPath(P, h * 0.62, true), h * 0.62, true);   // Ränder
   g.globalAlpha = a * 0.32; g.drawImage(rim, 0, 0);
   const [ends, eg] = layer(); eg.globalCompositeOperation = 'destination-in';   // Enden: nach innen weich auslaufend
   const m = document.createElement('canvas'); m.width = c.width; m.height = c.height; const mg = m.getContext('2d'); mg.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -4363,7 +4513,7 @@ function drawSizePreview(k, v) {
   if (k === 'tape' || (k === 'hl' && S.straight.hl)) {
     const pts = [m, H / 2, 0.5, W - m, H / 2, 0.5];
     if (k === 'tape') drawTape(g, { pts, w, c: S.color.tape, tp: S.tapePat, live: true }, DPR);
-    else { g.globalAlpha = strokeAlpha({ hl: true, al: S.alpha.hl }); g.fillStyle = colorOf(S.color.hl); g.fill(buildPath(pts, w, true)); }
+    else { g.globalAlpha = strokeAlpha({ hl: true, al: S.alpha.hl }); g.fillStyle = colorOf(S.color.hl); paintPath(g, buildPath(pts, w, true), w, true); }
     return;
   }
   // Schreibprobe wie Handschrift: vier Schlaufen, leichtes Zittern, etwa 1 s geschrieben (4 ms je Punkt), in den Bögen langsamer
@@ -4481,7 +4631,8 @@ $$('#shStyle button').forEach(b => b.onclick = () => {
   markShapeMenu();
 });
 /* Popup neben einer mit dem Lasso gewählten Form (nur Grundformen in der Auswahl, nicht im Formen-Werkzeug, dort ist die
-   Formenleiste): Kontur, Kanten, Sauberkeit und Füllung mit denselben Knöpfen wie in der Formenleiste, aber nur für die
+   Formenleiste): Farbe und Dicke (wie beim Stift), Kontur, Kanten, Sauberkeit und Füllung (dieselben Knöpfe wie in der
+   Formenleiste), aber nur für die
    gewählten Formen; der Stil für neue Formen bleibt. Jede Änderung ist ein Schritt. Es zeigt, was gerade gilt (bei
    mehreren Formen nur, was alle gemeinsam haben), und nur, was zu ihnen passt: Kanten bei Rechteck, Dreiecken und
    Raute, Füllung bei Kastenformen. Es kommt und geht mit der Auswahlleiste und sitzt rechts neben der Auswahl (sonst
@@ -4489,12 +4640,16 @@ $$('#shStyle button').forEach(b => b.onclick = () => {
 const SP_NAMES = { ds: 'Kontur', rnd: 'Kanten', sl: 'Sauberkeit', fs: 'Füllung' };
 const SP_VAL = { ds: it => it.ds || 'solid', rnd: it => shOf(it).rnd || 0, sl: it => shOf(it).sl || 0, fs: it => it.fs || 'none' };
 const SP_FITS = { ds: () => true, rnd: it => SHAPE_CLOSED.has(it.k), sl: () => true, fs: it => SHAPE_FILL.has(it.k) };
+for (const [g, name] of [['c', 'Farbe'], ['w', 'Dicke']]) {   // Farbe und Dicke: Knöpfe kommen beim Zeigen (placeShapePop)
+  const row = document.createElement('div'), lab = document.createElement('span'), box = document.createElement('div');
+  row.className = 'sprow'; row.dataset.g = g; lab.textContent = name; box.className = 'sp' + g; row.append(lab, box); $('#shapePop').appendChild(row);
+}
 $$('#shStyle .shgrp').forEach(gp => {
   const g = ['ds', 'rnd', 'sl', 'fs'].find(k => gp.querySelector(`[data-${k}]`));
   const row = document.createElement('div'), lab = document.createElement('span'); row.className = 'sprow'; row.dataset.g = g; lab.textContent = SP_NAMES[g];
   row.append(lab, gp.firstElementChild.cloneNode(true)); $('#shapePop').appendChild(row);
 });
-$$('#shapePop button').forEach(b => b.onclick = () => {
+$$('#shapePop .sprow:not([data-g=c]):not([data-g=w]) button').forEach(b => b.onclick = () => {
   const d = b.dataset;
   restyleSel(d.ds ? { ds: d.ds } : d.rnd ? { rnd: +d.rnd } : d.sl ? { sl: +d.sl } : { fs: d.fs }, true);
 });
@@ -4506,6 +4661,18 @@ function popShapes() {
 function placeShapePop(show) {
   const pop = $('#shapePop'), items = show ? popShapes() : null;
   if (!items) { pop.classList.add('hidden'); return; }
+  // Farbe: die Farben des Stifts, eine gemeinsame eigene dazu; Dicke: die Stärken des Stifts (Punkt wie in der Leiste)
+  const cs = new Set(items.map(it => it.c)), c1 = cs.size === 1 ? [...cs][0] : null, ws = new Set(items.map(it => Math.round(it.w * 100))), w1 = ws.size === 1 ? [...ws][0] / 100 : null;
+  const cbox = pop.querySelector('.spc'), wbox = pop.querySelector('.spw'); cbox.replaceChildren(); wbox.replaceChildren();
+  for (const c of c1 && !PALETTE.includes(c1) ? [...PALETTE, c1] : PALETTE) {
+    const b = document.createElement('button'); b.className = 'spcol' + (c === c1 ? ' on' : ''); b.style.setProperty('--c', colorOf(c));
+    b.title = c === 'ink' ? 'Schwarz / Weiß' : c; b.setAttribute('aria-label', 'Farbe ' + b.title); b.onclick = () => restyleSel({ c }, true); cbox.appendChild(b);
+  }
+  for (const v of S.presets.pen) {
+    const b = document.createElement('button'), d = document.createElement('span'); b.className = 'spdot' + (w1 !== null && Math.abs(v - w1) < 0.01 ? ' on' : '');
+    d.style.width = d.style.height = Math.min(16, dotPx('pen', v)) + 'px'; b.title = 'Dicke ' + fmtSize(v); b.setAttribute('aria-label', b.title);
+    b.appendChild(d); b.onclick = () => restyleSel({ w: v }, true); wbox.appendChild(b);
+  }
   for (const g of ['ds', 'rnd', 'sl', 'fs']) {
     const its = items.filter(SP_FITS[g]), vs = new Set(its.map(SP_VAL[g])), one = vs.size === 1 ? String([...vs][0]) : null;
     pop.querySelector(`.sprow[data-g=${g}]`).hidden = !its.length;
@@ -5358,7 +5525,7 @@ function drawNoteInk() {
   if (S.note) { let sp = (S.note.bg === 'lines' ? 34 : 28) * s; while (sp < 14) sp *= 2; fillPattern(g, s, sp * DPR / 2, sp * DPR / 2, w, h); }   // Muster wie auf der Seite, nicht am Rand angeschnitten
   g.setTransform(DPR * s, 0, 0, DPR * s, 0, 0);
   const vis = inkShown(list);
-  for (const st of list) if (st.pts.length && st.hl && !st.on) paintInk(g, st, s);   // Textmarker unter der Schrift
+  { const hlg = list.filter(st => st.pts.length && st.hl && !st.on && !st.tp); if (hlg.length) paintHl(g, hlg); }   // Textmarker unter der Schrift, als eine Schicht
   for (const st of list) if (st.pts.length && !st.tp && !st.on && !st.hl) paintInk(g, st, s);   // Schrift
   for (const t of list) if (t.tp && t.pts.length) { paintInk(g, t, s); for (const st of list) if (st.on === t.id && st.pts.length && vis(st)) paintInk(g, st, s); }   // Tapes immer oben, mit dem, was darauf steht
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
@@ -5378,12 +5545,28 @@ function inkStraight(d) {
   if (ang < 4 || ang > 176) ey = y0; else if (Math.abs(ang - 90) < 4) ex = x0;
   return [x0, y0, d.g.p, ex, ey, d.g.p];
 }
-// Tape und gerade Striche: die schnelle Ebene jedes Mal ganz neu (Muster, Gerade)
+// Tape und gerade Striche auf der schnellen Ebene: Tape erst nach mehr als einem Antippen, dann nur das Ende neu (wie
+// auf der Seite); Geraden jedes Mal ganz
 function inkRedraw(d) {
-  const g = ncLiveCtx, s = d.s; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ncLive.width, ncLive.height); g.setTransform(DPR * s, 0, 0, DPR * s, 0, 0);
+  const g = ncLiveCtx, s = d.s, k = DPR * s;
+  if (d.tape && tapTiny(d.raw || d.start, d.start, d.pts, s)) return;
+  if (d.tape && !d.straight) { tapeLive(g, d, k, 0, 0, d.pts); return; }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ncLive.width, ncLive.height); g.setTransform(k, 0, 0, k, 0, 0);
   const pts = d.straight ? inkStraight(d) : d.pts;
-  if (d.tape) { if (pts.length < 6) return; const o = d.live || (d.live = { c: d.c, w: d.w, tp: d.tp, hid: true, live: true }); o.pts = pts; drawTape(g, o, DPR * s); }
-  else { g.fillStyle = colorOf(d.c); g.fill(buildPath(Float32Array.from(pts), d.w, d.hl)); }
+  if (d.tape) { if (pts.length < 6) return; const o = d.live || (d.live = { c: d.c, w: d.w, tp: d.tp, hid: true, live: true }); o.pts = pts; drawTape(g, o, k); }
+  else if (d.hl) hlLive(g, { pts, w: d.w, c: d.c, cut: d.cut }, k, 0, 0);
+  else { g.fillStyle = colorOf(d.c); g.fill(buildPath(Float32Array.from(pts), d.w, false)); }
+}
+// was ein neuer Textmarker in der Notiz ausspart: Textmarker gleicher Deckkraft und alles darüber (Schrift, Tapes)
+const inkBoxes = new WeakMap(), inkStBox = st => { let b = inkBoxes.get(st); if (!b) inkBoxes.set(st, b = bboxOf(st.pts, st.w)); return b; };
+function hlCutInk(al, s) {
+  const list = ncCur ? ncCur.nt.ink : [], vis = inkShown(list), out = [];
+  for (const st of list) {
+    if (!st.pts.length || (st.on && !vis(st))) continue;
+    if (st.hl && !st.tp && !st.on && alKey(strokeAlpha(st)) !== alKey(al)) continue;
+    out.push(st);
+  }
+  return [out, inkStBox, (g, st) => { if (st.hl && !st.tp) paintPath(g, strokePath(st), st.w, true); else if (st.tp) drawTape(g, st, DPR * s, true); else paintInk(g, st, s); }];
 }
 // Textmarker und Tape: knapp eine halbe Sekunde still halten macht den Strich gerade (wie auf der Seite)
 function armInkHold(d) { clearTimeout(d.holdT); d.holdT = setTimeout(() => { if (ncDraw === d && !d.straight && d.pts.length > 9) { d.straight = d.redraw = true; inkRedraw(d); } }, 450); }
@@ -5430,10 +5613,11 @@ ncLive.addEventListener('pointerdown', e => {
   const d = ncDraw = { id: e.pointerId, r, s, hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[k], w: S.size[k], al: tape ? undefined : S.alpha[k], drawn: 0,
     touch: e.pointerType === 'touch', start: [x, y], still: [x, y], straight: !!S.straight[k], ...smoothStart(x, y, pressureOf(e), e.timeStamp, (u, v) => [u / s, v / s]) };
   if (!tape) { const tp = inkTapeAt(x / s, y / s); if (tp && covered(tp)) d.on = tp.id; }   // auf ein abgedecktes Tape geschrieben: gehört dazu
+  if (hl) d.cut = hlCutInk(strokeAlpha(d), s);
   liveInkClear();
   if (!tape) { const al = strokeAlpha(d); if (al < 1) ncLive.style.opacity = String(al); if (hl && !isDark()) ncLive.style.mixBlendMode = 'multiply'; }   // wie auf der Seite
   if (tape || d.straight) { d.redraw = true; inkRedraw(d); }
-  else if (hl) { d.hlInc = true; hlLive(ncLiveCtx, d, DPR * s, 0, 0); }   // Textmarker: Stück für Stück (wie auf der Seite)
+  else if (hl) { d.hlInc = true; hlLive(ncLiveCtx, d, DPR * s, 0, 0); }   // Textmarker: nur, was sich ändert (wie auf der Seite)
   else { ncLiveCtx.setTransform(DPR * s, 0, 0, DPR * s, 0, 0); ncLiveCtx.fillStyle = colorOf(d.c); inkPiece(d); }
   if (hl || tape) armInkHold(d);
   $('#noteCard').classList.add('inked');
@@ -5799,7 +5983,13 @@ async function renderTo(items, box, scale, bg, o = {}) {
     }
   });
   ctx.setTransform(scale, 0, 0, scale, -x0 * scale, -y0 * scale);
-  for (const it of paintOrder(items)) {
+  const order = paintOrder(items);
+  for (let n = 0; n < order.length; n++) {
+    const it = order[n];
+    if (!o.cheap && isHlStroke(it)) {   // Textmarker als eine Schicht (wie auf der Seite)
+      const group = [it]; while (n + 1 < order.length && isHlStroke(order[n + 1])) group.push(order[++n]);
+      paint(() => paintHl(ctx, group)); continue;
+    }
     if (it.t === 'i') {
       const e = imgEntry(it.img); await e.ready;
       // Export: jedes Bild einzeln in voller Auflösung dekodieren und gleich wieder freigeben

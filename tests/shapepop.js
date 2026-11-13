@@ -63,7 +63,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   await p.evaluate(() => setTool('lasso'));
   await tap(300, 315);
   res.rect = await pop();
-  check('Lasso-Tipp aufs Rechteck: Popup mit allen vier Zeilen, aktueller Stil markiert', res.rect.vis && res.rect.ids.join() === R && res.rect.rows.join() === 'ds,rnd,sl,fs'
+  check('Lasso-Tipp aufs Rechteck: Popup mit Farbe, Dicke und den vier Stil-Zeilen, aktueller Stil markiert', res.rect.vis && res.rect.ids.join() === R && res.rect.rows.join() === 'c,w,ds,rnd,sl,fs'
     && res.rect.on.ds === 'solid' && res.rect.on.rnd === '0' && res.rect.on.sl === '0' && res.rect.on.fs === 'none', res.rect);
   check('Popup rechts neben der Auswahl (Griffe frei), verdeckt die Auswahlleiste nicht', res.rect.box[0] >= res.rect.sel[2] + 20 && !res.rect.overlapsBar && res.rect.barVis, res.rect);
   if (SHOTS) await p.screenshot({ path: path.join(SHOTS, 'shapepop_light.png'), clip: { x: 260, y: 150, width: 560, height: 300 } });
@@ -84,7 +84,13 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   // ---- Pfeil: nur Kontur und Sauberkeit ----
   await p.evaluate(() => clearSel()); await tap(870, 290);
   res.arrow = await pop();
-  check('Pfeil: Popup nur mit Kontur und Sauberkeit', res.arrow.vis && res.arrow.ids.join() === A && res.arrow.rows.join() === 'ds,sl', res.arrow);
+  check('Pfeil: Popup mit Farbe, Dicke, Kontur und Sauberkeit (ohne Kanten und Füllung)', res.arrow.vis && res.arrow.ids.join() === A && res.arrow.rows.join() === 'c,w,ds,sl', res.arrow);
+  // Farbe und Dicke für den Pfeil: je ein Schritt, im Popup markiert
+  const st1 = await p.evaluate(() => S.undo.length);
+  await p.click('#shapePop .spcol:nth-child(2)'); await p.click('#shapePop .spdot:nth-child(4)');
+  res.arrowCW = { it: await p.evaluate(id => { const s = S.items.find(i => i.id === id); return { c: s.c, w: s.w }; }, A), want: await p.evaluate(() => [PALETTE[1], S.presets.pen[3]]), steps: (await p.evaluate(() => S.undo.length)) - st1,
+    on: await p.evaluate(() => [$('#shapePop .spcol.on') && $('#shapePop .spcol.on').title, $('#shapePop .spdot.on') && $('#shapePop .spdot.on').title]) };
+  check('Pfeil: Farbe und Dicke aus dem Popup, je ein Schritt, markiert', res.arrowCW.it.c === res.arrowCW.want[0] && Math.abs(res.arrowCW.it.w - res.arrowCW.want[1]) < 0.01 && res.arrowCW.steps === 2 && res.arrowCW.on[0] === res.arrowCW.want[0] && !!res.arrowCW.on[1], res.arrowCW);
   await p.click('#shapePop button[data-sl="1"]');
   check('Pfeil: leicht von Hand', (await item(A)).sl === 1, await item(A));
 
