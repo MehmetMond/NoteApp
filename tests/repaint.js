@@ -66,6 +66,52 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   const motif = await p.evaluate(() => (TAPE_PATTERNS.find(([k]) => TAPE_MOTIFS[k]) || ['uni'])[0]);
   await scenario('Tape mit Figuren obendrauf', m => { setTool('tape'); S.tapePat = m; S.straight.tape = false; }, line(120, 700, 1100, 760, 50), motif);
   await scenario('Tape uni obendrauf', () => { setTool('tape'); S.tapePat = 'uni'; }, line(200, 150, 1000, 200, 40));
+  // Radierer: wo weggewischt wird, nur Streifen neu (keine ganze Kachel), danach wie frisch gemalt
+  await p.evaluate(() => { setTool('eraser'); window.__rt = 0; window.__n0 = S.items.length; });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 350, y: 600, pointerType: 'pen' }); await pen('mousePressed', 350, 600);
+  for (let k = 1; k <= 30; k++) { await pen('mouseMoved', 350 + k * 12, 600 + Math.sin(k / 3) * 30); if (k % 3 === 0) await frames(); }
+  await pen('mouseReleased', 710, 600); await frames(); await p.waitForTimeout(150);
+  res.erase = await p.evaluate(() => {
+    const bb = [330, 550, 730, 650], out = { rt: window.__rt, removed: window.__n0 - S.items.length, tiles: 0, big: 0, small: 0, max: 0 };
+    for (const [key, t] of tiles) {
+      if (t.L !== S.level || !boxHit(t.wb, bb)) continue;
+      const [, i, j] = key.split(':').map(Number), c = document.createElement('canvas'); c.width = c.height = T;
+      const fresh = { c, ctx: c.getContext('2d', { alpha: false }), L: t.L, wb: t.wb, v: 0 }; paintTile(fresh, i, j, null);
+      const A = t.ctx.getImageData(0, 0, T, T).data, B = fresh.ctx.getImageData(0, 0, T, T).data;
+      for (let q = 0; q < A.length; q += 4) { const d = Math.max(Math.abs(A[q] - B[q]), Math.abs(A[q + 1] - B[q + 1]), Math.abs(A[q + 2] - B[q + 2])); if (d > 40) out.big++; else if (d > 2) out.small++; if (d > out.max) out.max = d; }
+      out.tiles++;
+    }
+    return out;
+  });
+  check('Radierer: keine ganze Kachel neu, danach wie frisch gemalt', res.erase.rt === 0 && res.erase.removed > 3 && res.erase.tiles > 0 && res.erase.big <= 20 && res.erase.small <= res.erase.tiles * T_ * T_ * 0.004, res.erase);
+  // Vergleich der Kacheln in einem Kasten mit frisch gemalten
+  const compare = bb => p.evaluate(bb => {
+    const out = { tiles: 0, big: 0, small: 0, max: 0 };
+    for (const [key, t] of tiles) {
+      if (t.L !== S.level || !boxHit(t.wb, bb)) continue;
+      const [, i, j] = key.split(':').map(Number), c = document.createElement('canvas'); c.width = c.height = T;
+      const fresh = { c, ctx: c.getContext('2d', { alpha: false }), L: t.L, wb: t.wb, v: 0 }; paintTile(fresh, i, j, null);
+      const A = t.ctx.getImageData(0, 0, T, T).data, B = fresh.ctx.getImageData(0, 0, T, T).data;
+      for (let q = 0; q < A.length; q += 4) { const d = Math.max(Math.abs(A[q] - B[q]), Math.abs(A[q + 1] - B[q + 1]), Math.abs(A[q + 2] - B[q + 2])); if (d > 40) out.big++; else if (d > 2) out.small++; if (d > out.max) out.max = d; }
+      out.tiles++;
+    }
+    return out;
+  }, bb);
+  const fine = r => r.tiles > 0 && r.big <= 20 && r.small <= r.tiles * T_ * T_ * 0.004;
+  // Rückgängig (holt die weggewischten Striche zurück): nur Streifen neu, danach wie frisch gemalt
+  await p.evaluate(() => { window.__rt = 0; undo(); }); await frames(); await p.waitForTimeout(100);
+  res.undo = { rt: await p.evaluate(() => window.__rt), back: await p.evaluate(() => S.items.length - window.__n0), ...(await compare([330, 550, 730, 650])) };
+  check('Rückgängig: keine ganze Kachel neu, danach wie frisch gemalt', res.undo.rt === 0 && res.undo.back === 0 && fine(res.undo), res.undo);
+  // Auswahl verschieben: am Anfang (ohne die Auswahl) und am Ende (an der neuen Stelle) nur Streifen, danach wie frisch gemalt
+  await p.evaluate(() => { setTool('lasso'); const ids = new Set(S.items.filter(it => it.t === 's' && !it.tp && !it.hl && boxHit(it.bb, [600, 250, 760, 330])).map(it => it.id)); setSel(ids); window.__sel = ids.size; window.__rt = 0; });
+  const sb = await p.evaluate(() => S.sel.bb);
+  const mx = (sb[0] + sb[2]) / 2, my = (sb[1] + sb[3]) / 2;
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: mx, y: my, pointerType: 'pen' }); await pen('mousePressed', mx, my);
+  for (let k = 1; k <= 12; k++) { await pen('mouseMoved', mx + k * 9, my + k * 5); if (k % 3 === 0) await frames(); }
+  await pen('mouseReleased', mx + 108, my + 60); await frames(); await p.waitForTimeout(150);
+  res.move = { sel: await p.evaluate(() => window.__sel), rt: await p.evaluate(() => window.__rt), moved: await p.evaluate(() => !!S.sel && S.sel.bb[0] > 0), ...(await compare([sb[0] - 10, sb[1] - 10, sb[2] + 120, sb[3] + 70])) };
+  check('Auswahl verschieben: keine ganze Kachel neu, danach wie frisch gemalt', res.move.sel > 3 && res.move.rt === 0 && fine(res.move), res.move);
+  await p.evaluate(() => clearSel());
   await p.evaluate(() => { S.dark = true; applyDark(); }); await p.waitForTimeout(400);
   await scenario('Dunkel: Textmarker', () => { setTool('hl'); }, line(200, 880, 1000, 860, 40));
   await scenario('Dunkel: Stift unter Tape', () => { setTool('pen'); }, line(830, 280, 840, 720, 30));

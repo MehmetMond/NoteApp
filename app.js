@@ -267,21 +267,30 @@ function markDirty() {
   S.note.updated = Date.now(); S.thumbDirty = true;
   const now = performance.now(); if (!firstDirty) firstDirty = now;
   clearTimeout(saveT);
-  saveT = setTimeout(saveNow, Math.max(0, Math.min(400, 2000 - (now - firstDirty))));
+  saveT = setTimeout(saveSoon, Math.max(0, Math.min(400, 2000 - (now - firstDirty))));
 }
+// solange der Stift unten ist (Strich, Radierer …), nicht speichern: kurz warten, höchstens 8 s nach der ersten Änderung.
+// Schließen, Ausblenden und Seitenwechsel speichern weiter sofort (saveNow)
+function saveSoon() { if (action && performance.now() - firstDirty < 8000) { saveT = setTimeout(saveSoon, 300); return; } saveNow(); }
 function saveNow() {
   clearTimeout(saveT); saveT = null; firstDirty = 0;
   const note = S.note; if (!note) return saving;
   saving = saving.then(async () => {
     if (S.note !== note) return;
-    const n = note.id, prev = S.saved, cur = new Map();
-    for (const it of S.items) cur.set(it.id, it);
+    const n = note.id, prev = S.saved, list = S.items, old = S.savedList;
     const tx = db.transaction(['items', 'index'], 'readwrite'), st = tx.objectStore('items');
-    for (const [id, it] of cur) if (prev.get(id) !== it) st.put({ ...it, n });
-    for (const id of prev.keys()) if (!cur.has(id)) st.delete([n, id]);
+    // meist kam nur etwas dazu (neue Striche hinten): dann nur das Neue schreiben, ohne alles zu vergleichen
+    let i = 0; if (old) { const m = Math.min(old.length, list.length); while (i < m && old[i] === list[i]) i++; }
+    const app = !!old && i === old.length; let cur = null;
+    if (app) for (let k = i; k < list.length; k++) st.put({ ...list[k], n });
+    else {
+      cur = new Map(); for (const it of list) cur.set(it.id, it);
+      for (const [id, it] of cur) if (prev.get(id) !== it) st.put({ ...it, n });
+      for (const id of prev.keys()) if (!cur.has(id)) st.delete([n, id]);
+    }
     tx.objectStore('index').put({ ...note, view: { ...S.view } });
     await txDone(tx);
-    if (S.note === note) S.saved = cur;
+    if (S.note === note) { if (app) for (let k = i; k < list.length; k++) prev.set(list[k].id, list[k]); else S.saved = cur; S.savedList = list; }
     S.saveError = null;
   }).catch(e => { S.saveError = e; toast('Speichern fehlgeschlagen: ' + e.message, 6000); markDirtyLater(); });
   return saving;
@@ -511,6 +520,9 @@ function paintPath(ctx, P, w, hl) {
   if (!hl) { ctx.fill(P); return; }
   ctx.save(); ctx.lineWidth = w; ctx.lineCap = 'butt'; ctx.lineJoin = 'round'; ctx.strokeStyle = ctx.fillStyle; ctx.stroke(P); ctx.restore();
 }
+// Rechteck R (ganze Gerätepixel) durchsichtig machen: Übermalen mit „destination-out“ statt clearRect. Auf dem Surface
+// kostet clearRect auf einem Teil einer Fläche so viel wie auf der ganzen (siehe liveClear), Übermalen nur die Fläche
+function wipe(g, R) { g.globalCompositeOperation = 'destination-out'; g.globalAlpha = 1; g.fillStyle = '#000'; g.fillRect(R[0], R[1], R[2] - R[0], R[3] - R[1]); g.globalCompositeOperation = 'source-over'; }
 const isHlStroke = it => it.t === 's' && it.hl && !it.tp && !it.nt;
 const alKey = a => Math.round(a * 1000);   // Deckkraft vergleichen (0,42 · 0,42 / 0,42 ist nicht genau 0,42)
 const hlBox = st => st.bb || bboxOf(st.pts, st.w);
@@ -532,13 +544,15 @@ function paintHl(ctx, group) {
     }
     if (x1 <= x0 || y1 <= y0) continue;
     const W = x1 - x0, H = y1 - y0;
-    if (!hlScratch) hlScratch = document.createElement('canvas');
-    if (hlScratch.width < W || hlScratch.height < H) { hlScratch.width = Math.max(hlScratch.width, W); hlScratch.height = Math.max(hlScratch.height, H); }
-    const g = hlScratch.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, W, H);
+    // Kacheln und Ausschnitte: eine Hilfsfläche, die bleibt; Großes (Export, Auswahl) nur für diesmal (sonst bliebe sie riesig)
+    const big = W * H > 1100 * 1100, sc = big ? document.createElement('canvas') : hlScratch || (hlScratch = document.createElement('canvas'));
+    if (big) { sc.width = W; sc.height = H; } else if (sc.width < W || sc.height < H) { sc.width = Math.max(sc.width, W); sc.height = Math.max(sc.height, H); }
+    const g = sc.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); if (!big) wipe(g, [0, 0, W, H]); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
     g.setTransform(M.a, M.b, M.c, M.d, M.e - x0, M.f - y0);
     for (const st of l) { g.fillStyle = colorOf(st.c); paintPath(g, strokePath(st), st.w, true); }
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = a; if (!isDark()) ctx.globalCompositeOperation = 'multiply';
-    ctx.drawImage(hlScratch, 0, 0, W, H, x0, y0, W, H); ctx.restore();
+    ctx.drawImage(sc, 0, 0, W, H, x0, y0, W, H); ctx.restore();
+    if (big) sc.width = sc.height = 0;
   }
 }
 // Liste in ihrer Reihenfolge malen (skip: auslassen); aufeinanderfolgende Textmarker als eine Schicht (paintHl)
@@ -564,7 +578,7 @@ function hlLive(g, a, k, ox, oy) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = from; i < n; i++) { const x = pts[i * 3], y = pts[i * 3 + 1]; if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
   const m = w * 0.75 + 3 / k, R = [Math.floor((x0 - m) * k + ox), Math.floor((y0 - m) * k + oy), Math.ceil((x1 + m) * k + ox), Math.ceil((y1 + m) * k + oy)];
-  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(R[0], R[1], R[2] - R[0], R[3] - R[1]);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); wipe(g, R);
   g.beginPath(); g.rect(R[0], R[1], R[2] - R[0], R[3] - R[1]); g.clip();
   g.setTransform(k, 0, 0, k, ox, oy); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.fillStyle = colorOf(a.c); paintPath(g, geo.P, w, true);
   if (a.cut) {
@@ -1259,7 +1273,7 @@ function paintOnTop(list) {
 }
 function stripRects(st, s) {   // Gerätepixel bei Stufe s: Stücke von höchstens 64 px entlang des Strichs (lange Abschnitte geteilt)
   const p = st.pts, m = (st.hl ? st.w * 0.5 : st.w * 0.8) * s + 3, out = [], CH = 64;
-  if (st.fs || p.length < 6) { const b = itemBox(st); return [[Math.floor(b[0] * s) - 3, Math.floor(b[1] * s) - 3, Math.ceil(b[2] * s) + 3, Math.ceil(b[3] * s) + 3]]; }
+  if (st.t !== 's' || st.fs || !p || p.length < 6) { const b = itemBox(st); return [[Math.floor(b[0] * s) - 3, Math.floor(b[1] * s) - 3, Math.ceil(b[2] * s) + 3, Math.ceil(b[3] * s) + 3]]; }
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const flush = () => { if (x0 <= x1) out.push([Math.floor(x0 - m), Math.floor(y0 - m), Math.ceil(x1 + m), Math.ceil(y1 + m)]); x0 = y0 = Infinity; x1 = y1 = -Infinity; };
   for (let i = 3; i < p.length; i += 3) {
@@ -1286,7 +1300,12 @@ function repaintStrips(list, within) {   // within: Kästen (Welt), nur der Schn
       const c = [Math.max(q[0] - i * T, 0), Math.max(q[1] - j * T, 0), Math.min(q[2] - i * T, T), Math.min(q[3] - j * T, T)];
       if (c[2] > c[0] && c[3] > c[1]) cs.push(c);
     }
-    if (cs.length) { paintTile(t, i, j, cs); t.v++; }
+    if (!cs.length) return;
+    let area = 0; for (const c of cs) area += (c[2] - c[0]) * (c[3] - c[1]);
+    if (cs.length > 300 || area > T * T * 4) {   // sehr viel auf einmal (z. B. alles verschoben): wie bisher ganz neu, das ist dann schneller
+      const k = tkey(t.L, i, j); tiles.delete(k); const old = stale.get(k); if (old) tilePool.push(old); stale.set(k, t); requestDraw(); return;
+    }
+    paintTile(t, i, j, cs); t.v++;
   });
 }
 // Kacheln auf dem Bildschirm (Gerätepixel des Bildschirms, so groß wie cvLive)
@@ -1405,7 +1424,9 @@ function draw() {
     }
     // Beim Öffnen alles sofort zeichnen, beim Verschieben/Zoomen nur wenige ms pro Bild (Rest folgt)
     const first = have === 0 && fallbackL == null;
-    const t0 = performance.now(), budget = first ? 250 : 7, maxN = first ? Infinity : (gesture || wheelT ? 3 : 8);
+    // mitten im Zoomen (Stufe passt nicht): Kacheln der alten Stufe würden gleich verworfen; die Ränder zeigt die Übersicht
+    const zooming = (gesture || wheelT) && S.view.z !== L, ovOk = !!ov && ov.note === S.note && ov.items === S.items && ov.dark === S.dark;
+    const t0 = performance.now(), budget = first ? 250 : 7, maxN = first ? Infinity : zooming ? (ovOk ? 0 : 1) : (gesture || wheelT ? 3 : 8);
     let done = 0;
     while (missing.length && done < maxN && performance.now() - t0 < budget) { const [i, j] = missing.shift(); renderTile(L, i, j); done++; }
   }
@@ -1488,9 +1509,14 @@ function buildOverview(dl) {
   }
   const cb = contentBox(items);
   if (!cb) { dropOverview(); return; }
-  const pad = 24, box = [cb[0] - pad, cb[1] - pad, cb[2] + pad, cb[3] + pad], w = box[2] - box[0], h = box[3] - box[1];
+  // Rahmen mit Reserve, damit Weiterschreiben (nächste Zeile darunter) meist nur dazukommt statt alles neu zu zeichnen:
+  // DIN-Seiten alle Blätter, unendliche Fläche ein Viertel der Größe rundum
+  let box;
+  if (paperSize()) { const a = sheetRect(0), z = sheetRect(sheetCount() - 1); box = [Math.min(cb[0], a[0]) - 24, Math.min(cb[1], a[1]) - 24, Math.max(cb[2], z[2]) + 24, Math.max(cb[3], z[3]) + 24]; }
+  else { const m = Math.max(400, (cb[2] - cb[0]) / 4, (cb[3] - cb[1]) / 4); box = [cb[0] - m, cb[1] - m, cb[2] + m, cb[3] + m]; }
+  const w = box[2] - box[0], h = box[3] - box[1];
   const s = Math.min(1, OV_MAX / w, OV_MAX / h), c = document.createElement('canvas');
-  c.width = Math.max(1, Math.ceil(w * s)); c.height = Math.max(1, Math.ceil(h * s));
+  c.width = Math.max(1, Math.ceil(w * s - 1e-6)); c.height = Math.max(1, Math.ceil(h * s - 1e-6));   // 1536,0000001 ist 1536
   const ctx = c.getContext('2d'); ctx.setTransform(s, 0, 0, s, -box[0] * s, -box[1] * s);
   const order = paintOrder(items); let k = 0;
   const step = d => {
@@ -1746,7 +1772,7 @@ function contentBox(items = S.items) {
 }
 // Unterkante der Leiste; mit Formen darunter die der Formenleiste (Menüs, Blasen und „Alles anzeigen“ beginnen darunter)
 // (aus dem Layout, nicht aus der Lage während des Aufploppens: #editor liegt fest bei 0, 0)
-function barBottom() { const sb = $('#shapeBar'); return sb.classList.contains('hidden') || sb.dataset.closing ? $('#bar').getBoundingClientRect().bottom : (parseFloat(sb.style.top) || 0) + sb.offsetHeight; }
+function barBottom() { const sb = $('#shapeBar'); return sb.classList.contains('hidden') || sb.dataset.closing ? (barGeo ? barGeo.bottom : $('#bar').getBoundingClientRect().bottom) : (parseFloat(sb.style.top) || 0) + (shapeBarWH ? shapeBarWH[1] : sb.offsetHeight); }
 // Blatt in der Mitte des Bildschirms
 function currentSheet() { return sheetAt(viewCenterWorld()[1]); }
 // mit Seitenformat: das ganze Blatt in der Mitte (oder Blatt k), sonst alles Beschriebene
@@ -1762,16 +1788,38 @@ function fitAll(k) {
 /* ---------- Änderungen & Verlauf ---------- */
 // Neue Liste übernehmen; geänderte Bereiche der Kacheln werden neu gezeichnet
 function setItems(next, inval = true) {
+  let changed = null;
   if (inval) {
-    const oldSet = new Set(S.items), newSet = new Set(next);
-    for (const it of next) if (!oldSet.has(it)) invalidateBox(itemBox(it));
-    for (const it of S.items) if (!newSet.has(it)) invalidateBox(itemBox(it));
+    const oldSet = new Set(S.items), newSet = new Set(next); changed = [];
+    for (const it of next) if (!oldSet.has(it)) changed.push(it);
+    for (const it of S.items) if (!newSet.has(it)) changed.push(it);
   }
   S.items = next;
+  if (changed) repaintItems(changed);   // mit der neuen Liste: wo etwas weg ist, kommt, oder sich ändert
+}
+// Kacheln dort neu, wo diese Dinge liegen oder lagen: nur Streifen (repaintStrips) statt ganzer Kacheln; ganze Kacheln wie
+// bisher mitten im Zoomen, bei verdeckten Cornell-Notizen und für Erklärungen (ihr „i“ ragt über den Kasten)
+function repaintItems(list) {
+  if (!list.length) return;
+  const strips = S.view.z === S.level && !(S.cornellHide && isCornell()) ? list.filter(it => !it.nt) : [];
+  if (strips.length) { repaintStrips(strips); requestDraw(); }
+  for (const it of list) if (!strips.includes(it)) invalidateBox(itemBox(it));
 }
 // Jeder Stand im Verlauf merkt sich die Zahl der Blätter (Blatt anhängen, PDF einfügen: Rückgängig nimmt die Blätter mit)
+// Eine Erklärung ohne ihre Stelle: Ist mit dieser Änderung das Letzte weg, was sie markiert (Radierer, Text löschen,
+// Tape entfernen …), geht sie mit; solange noch etwas davon da ist, bleibt sie. Rückgängig holt beides zurück
+function dropOrphanNotes(prev, next) {
+  let notes = null; for (const it of next) if (it.nt) (notes || (notes = new Set())).add(it.id);
+  if (!notes) return next;
+  const still = new Set(); for (const it of next) if (it.on && notes.has(it.on)) still.add(it.on);
+  const gone = new Set(); for (const it of prev) if (it.on && notes.has(it.on) && !still.has(it.on)) gone.add(it.on);
+  if (!gone.size) return next;
+  for (const it of next) if (gone.has(it.id)) invalidateBox(itemBox(it));   // das „i“ verschwindet auch ohne Neuzeichnen der Änderung
+  return next.filter(it => !gone.has(it.id));
+}
 function commit(next, inval = true, sheets) {
   if (S.items.sheets === undefined) S.items.sheets = sheetCount();
+  if (next.length < S.items.length) next = dropOrphanNotes(S.items, next);   // etwas ist weg: Erklärung ohne Stelle mit
   next.sheets = sheets || S.items.sheets;
   S.undo.push(S.items); if (S.undo.length > 150) S.undo.shift();
   S.redo = []; setItems(next, inval); setSheets(next.sheets); markDirty(); requestDraw(); updateUndo(); prunePaths();
@@ -1784,7 +1832,7 @@ function stepHistory(from, to) {
   if (S.items.sheets === undefined) S.items.sheets = sheetCount();
   const keep = S.sel ? [...S.sel.ids] : [], auto = !!(S.sel && S.sel.auto);
   to.push(S.items); const it = from.pop(); setItems(it); setSheets(it.sheets); hideTapeMenu();
-  const still = new Set(keep.filter(id => it.some(i => i.id === id)));   // Auswahl bleibt, soweit es sie noch gibt
+  const live = new Set(it.map(i => i.id)), still = new Set(keep.filter(id => live.has(id)));   // Auswahl bleibt, soweit es sie noch gibt
   if (still.size) setSel(still, auto); else clearSel();
   markDirty(); requestDraw(); updateUndo();
 }
@@ -1880,6 +1928,13 @@ function setSel(ids, auto = false) {   // auto: eben gezeichnet (nur im Formen-W
   if (!items.length) return clearSel();
   S.sel = { ids: new Set(items.map(i => i.id)), bb: contentBox(items), auto: !!auto }; requestLive(); placeSelbar();
 }
+// was Auswahlleiste, Formen-Fenster und Griffe über die Auswahl wissen müssen: einmal je Auswahl und Stand der Seite
+// (draw() führt die Leiste in jedem Bild nach, beim Verschieben und Zoomen)
+function selFacts() {
+  const s = S.sel; if (s.facts && s.facts.items === S.items) return s.facts;
+  const sel = S.items.filter(it => s.ids.has(it.id));
+  return s.facts = { items: S.items, sel, strokes: sel.some(it => it.t === 's'), note: sel.some(it => !it.tp), graph: selGraph() };
+}
 function clearSel() {
   if (action && (action.kind === 'move' || action.kind === 'scale' || action.kind === 'bend')) cancelAction();
   S.sel = null; $('#selbar').classList.add('hidden'); $('#shapePop').classList.add('hidden'); requestLive();
@@ -1888,10 +1943,10 @@ function refreshSel() { if (S.sel) setSel(S.sel.ids, S.sel.auto); }
 function placeSelbar() {
   const bar = $('#selbar');
   if (!S.sel || !S.note || (S.tool === 'shape' && S.sel.auto) || (action && (action.kind === 'move' || action.kind === 'scale' || action.kind === 'bend'))) { bar.classList.add('hidden'); placeShapePop(false); return; }
-  const strokes = S.items.some(it => S.sel.ids.has(it.id) && it.t === 's');
-  for (const id of ['#sColor', '#sSize', '#sSave']) $(id).classList.toggle('hidden', !strokes);
-  $('#sGraph').classList.toggle('hidden', !selGraph());
-  $('#sNote').classList.toggle('hidden', !S.items.some(it => S.sel.ids.has(it.id) && !it.tp));
+  const f = selFacts();
+  for (const id of ['#sColor', '#sSize', '#sSave']) $(id).classList.toggle('hidden', !f.strokes);
+  $('#sGraph').classList.toggle('hidden', !f.graph);
+  $('#sNote').classList.toggle('hidden', !f.note);
   const appear = bar.classList.contains('hidden');   // nur beim Erscheinen aufploppen, nicht bei jedem Nachführen
   bar.classList.remove('hidden');
   const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]);
@@ -1915,6 +1970,19 @@ function transformItem(it, s, ox, oy, dx, dy) {
     return n;
   }
   return { ...it, x: f(it.x, ox) + dx, y: f(it.y, oy) + dy, w: it.w * s, h: it.h * s, ...(it.t === 'x' ? { fs: it.fs * s } : {}) };
+}
+// Lasso-Test für viele Punkte: die Kanten nach ihrer Höhe in Streifen sortiert, ein Punkt prüft nur die Kanten seines
+// Streifens (gleiches Ergebnis wie pointInPoly, bei großem Lasso viel schneller)
+function polyTester(P) {
+  let y0 = Infinity, y1 = -Infinity; for (let i = 1; i < P.length; i += 2) { if (P[i] < y0) y0 = P[i]; if (P[i] > y1) y1 = P[i]; }
+  const B = Math.max(1, Math.min(64, P.length >> 3)), h = (y1 - y0) / B || 1, bands = Array.from({ length: B }, () => []), band = y => clamp(Math.floor((y - y0) / h), 0, B - 1);
+  for (let i = 0, j = P.length - 2; i < P.length; j = i, i += 2) { const a = band(Math.min(P[i + 1], P[j + 1])), b = band(Math.max(P[i + 1], P[j + 1])); for (let k = a; k <= b; k++) bands[k].push(i, j); }
+  return (x, y) => {
+    if (!(y >= y0 && y <= y1)) return false;
+    const e = bands[band(y)]; let inside = false;
+    for (let q = 0; q < e.length; q += 2) { const i = e[q], j = e[q + 1], xi = P[i], yi = P[i + 1], xj = P[j], yj = P[j + 1]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside; }
+    return inside;
+  };
 }
 function pointInPoly(x, y, P) {
   let inside = false;
@@ -1942,13 +2010,14 @@ function lassoSelect(P) {
   }
   const lb = [Infinity, Infinity, -Infinity, -Infinity];
   for (let i = 0; i < P.length; i += 2) { lb[0] = Math.min(lb[0], P[i]); lb[1] = Math.min(lb[1], P[i + 1]); lb[2] = Math.max(lb[2], P[i]); lb[3] = Math.max(lb[3], P[i + 1]); }
+  const inPoly = polyTester(P);
   for (const it of S.items) {
     const b = itemBox(it); if (!boxHit(b, lb) || !shown(it)) continue;
-    if (isBox(it)) { if (pointInPoly(it.x + it.w / 2, it.y + it.h / 2, P)) ids.add(it.id); continue; }
-    const n = it.pts.length / 3, step = Math.max(1, Math.floor(n / 40));
-    let inside = 0, tested = 0;
-    for (let i = 0; i < n; i += step) { tested++; if (pointInPoly(it.pts[i * 3], it.pts[i * 3 + 1], P)) inside++; }
-    if (inside / tested >= 0.5) ids.add(it.id);
+    if (isBox(it)) { if (inPoly(it.x + it.w / 2, it.y + it.h / 2)) ids.add(it.id); continue; }
+    const n = it.pts.length / 3, step = Math.max(1, Math.floor(n / 40)), total = Math.ceil(n / step);
+    let inside = 0, tested = 0;   // mindestens die Hälfte der Punkte im Lasso; aufhören, sobald das entschieden ist
+    for (let i = 0; i < n; i += step) { tested++; if (inPoly(it.pts[i * 3], it.pts[i * 3 + 1])) inside++; if (inside * 2 >= total || (tested - inside) * 2 > total) break; }
+    if (inside * 2 >= total) ids.add(it.id);
   }
   return withGroups(ids);
 }
@@ -1971,6 +2040,7 @@ function distSeg(px, py, ax, ay, bx, by) {
   let t = L ? ((px - ax) * dx + (py - ay) * dy) / L : 0; t = clamp(t, 0, 1);
   return Math.hypot(px - ax - t * dx, py - ay - t * dy);
 }
+const boxNear = (b, x, y, r) => x >= b[0] - r && x <= b[2] + r && y >= b[1] - r && y <= b[3] + r;
 function hitStroke(s, x, y, r) {
   const b = s.bb; if (x < b[0] - r || x > b[2] + r || y < b[1] - r || y > b[3] + r) return false;
   const p = s.pts, lim = r + s.w / 2;
@@ -1978,11 +2048,21 @@ function hitStroke(s, x, y, r) {
   for (let i = 3; i < p.length; i += 3) if (distSeg(x, y, p[i - 3], p[i - 2], p[i], p[i + 1]) < lim) return true;
   return false;
 }
+// zwischen zwei Abtastungen in Schritten von höchstens dem Radius: schnelles Wischen erwischt auch dünne Striche dazwischen
 function eraseAt(x, y) {
-  const r = ERASE_R / S.view.z;
-  for (const it of S.items) if (it.t === 's' && !it.nt && !action.removed.has(it.id) && shown(it) && hitStroke(it, x, y, r)) {
-    action.removed.add(it.id); invalidateBox(it.bb);
-    if (it.tp) for (const o of S.items) if (o.on === it.id && !action.removed.has(o.id)) { action.removed.add(o.id); invalidateBox(o.bb); }   // was darauf steht, geht mit
+  const r = ERASE_R / S.view.z, a = action, [fx, fy] = a.last || [x, y], n = Math.max(1, Math.ceil(Math.hypot(x - fx, y - fy) / r));
+  const gone = [];
+  for (let k = 1; k <= n; k++) eraseOne(fx + (x - fx) * k / n, fy + (y - fy) * k / n, r, gone);
+  a.last = [x, y];
+  if (!gone.length) return;
+  // wo sie lagen, nur Streifen neu malen (hiddenIds lässt die weggewischten aus) statt ganze Kacheln neu zu rastern
+  if (S.view.z === S.level && !(S.cornellHide && isCornell())) { repaintStrips(gone); requestDraw(); }
+  else for (const it of gone) invalidateBox(itemBox(it));
+}
+function eraseOne(x, y, r, gone) {
+  for (const it of S.items) if (it.t === 's' && !it.nt && boxNear(it.bb, x, y, r) && !action.removed.has(it.id) && shown(it) && hitStroke(it, x, y, r)) {
+    action.removed.add(it.id); gone.push(it);
+    if (it.tp) for (const o of S.items) if (o.on === it.id && !action.removed.has(o.id)) { action.removed.add(o.id); gone.push(o); }   // was darauf steht, geht mit
   }
 }
 
@@ -2191,7 +2271,7 @@ function boxHandleAt(it, sx, sy) {
 // Griffe an den Seiten
 function editTarget() {
   if (!S.sel || S.sel.ids.size !== 1) return null;
-  const it = S.items.find(i => S.sel.ids.has(i.id)); return restylable(it) ? it : null;
+  const it = selFacts().sel[0]; return restylable(it) ? it : null;   // je Stand einmal gesucht (Schweben fragt bei jeder Bewegung)
 }
 const editPartAt = (it, sx, sy) => LINE_SHAPES.has(it.k) ? lineHandleAt(it, sx, sy) : SHAPE_FILL.has(it.k) ? boxHandleAt(it, sx, sy) : null;
 const bendHit = (it, sx, sy) => !!editPartAt(it, sx, sy);
@@ -2892,7 +2972,7 @@ function tapeLive(g, a, k, ox, oy, pts) {
   for (let i = from; i < n; i++) { const x = X(i), y = Y(i); if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
   const m = w * 0.75 + (mt ? 0.36 * w * Math.max(mt.w, 1) : 0) + 3 / k;
   const R = [Math.floor((x0 - m) * k + ox), Math.floor((y0 - m) * k + oy), Math.ceil((x1 + m) * k + ox), Math.ceil((y1 + m) * k + oy)];
-  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(R[0], R[1], R[2] - R[0], R[3] - R[1]);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); wipe(g, R);
   g.beginPath(); g.rect(R[0], R[1], R[2] - R[0], R[3] - R[1]); g.clip(); g.setTransform(k, 0, 0, k, ox, oy);
   drawTape(g, { pts, w, c: a.c, tp: a.tp, live: true }, k, false, [(R[0] - ox) / k, (R[1] - oy) / k, (R[2] - ox) / k, (R[3] - oy) / k]);
   g.restore();
@@ -2970,7 +3050,7 @@ function startAction(e) {
 function beginTransform(a) {
   action = a;
   a.bmp = selBitmap();
-  invalidateBox(S.sel.bb);         // Kacheln ohne die Auswahl neu zeichnen
+  repaintItems(selFacts().sel);   // Kacheln ohne die Auswahl (hiddenIds), nur wo sie liegt
   placeSelbar(); requestLive();
 }
 function moveAction(e) {
@@ -3085,12 +3165,12 @@ function endAction(cancel) {
   if (a.kind === 'pan') { lastPan = { right: a.right, moved: S.view.tx !== a.tx || S.view.ty !== a.ty, t: performance.now() }; viewChanged(); requestLive(); return; }
   if (a.kind === 'bend') {
     if (!cancel && a.moved && a.tmp) { commit(S.items.map(x => x.id === a.it.id ? a.tmp : x)); if (S.sel) refreshSel(); }
-    else invalidateBox(a.it.bb);
+    else repaintItems([a.it]);
     requestDraw(); requestLive(); placeSelbar(); return;
   }
   if (cancel) {
     if (a.kind === 'erase') for (const id of a.removed) { const it = S.items.find(i => i.id === id); if (it) invalidateBox(it.bb); }
-    if ((a.kind === 'move' || a.kind === 'scale') && S.sel) invalidateBox(S.sel.bb);
+    if ((a.kind === 'move' || a.kind === 'scale') && S.sel) repaintItems(selFacts().sel);
     requestDraw(); requestLive(); placeSelbar(); return;
   }
   if (a.kind === 'erase') { if (a.removed.size) commit(S.items.filter(it => !a.removed.has(it.id)), false); }
@@ -3101,7 +3181,7 @@ function endAction(cancel) {
       const [ox, oy] = a.kind === 'scale' ? a.anchor : [0, 0], s = a.kind === 'scale' ? a.s : 1;
       commit(S.items.map(it => S.sel.ids.has(it.id) ? transformItem(it, s, ox, oy, a.dx || 0, a.dy || 0) : it));
       refreshSel();
-    } else invalidateBox(S.sel.bb);
+    } else repaintItems(selFacts().sel);
   }
   requestDraw(); requestLive(); placeSelbar();
 }
@@ -3283,29 +3363,38 @@ function setTool(t) {
   if (t !== 'lasso' || (S.sel && S.sel.auto)) clearSel(); else if (S.sel) placeSelbar();   // die Auswahl nach dem Zeichnen gilt nur im Formen-Werkzeug
   $('#sizeMenu').classList.add('hidden'); $('#colorMenu').classList.add('hidden'); $('#tapeMenu').classList.add('hidden'); $('#bTune').classList.remove('on'); if (t !== 'shape') $('#shapeMenu').classList.add('hidden');
   cvLive.style.cursor = toolCursor(t); penDot.style.display = '';   // der Punkt kommt mit der nächsten Stiftbewegung wieder
-  renderColors(); renderSizes(); fitBar();
+  renderColors(); placeShapeBar();   // die Leiste selbst ändert sich nicht (feste Breiten): nicht neu messen
 }
 // Lasso, Tape und Formen teilen sich einen Knopf, damit die Leiste einzeilig bleibt. Er zeigt das zuletzt gewählte der
 // drei: Antippen wählt es (Formen: mit der Auswahl der Form), ist es schon gewählt, öffnet sich die Auswahl der drei
 // Die Leiste bleibt einzeilig: wird es eng, wird zuerst der Titel schmaler; erst wenn das nicht reicht, bricht sie um
+// barGeo: Unterkante der Leiste und linke Kante der Farben, gemessen in fitBar (Größe, Öffnen, Name, Aussehen). Beim
+// Werkzeugwechsel bleibt beides gleich; jedes Messen nach einer Änderung zwänge den Browser, die ganze Seite neu
+// anzuordnen (auf dem Surface spürbar beim Wechsel zwischen Tape und Formen)
+let barGeo = null, shapeBarWH = null;
 function fitBar() {
   const bar = $('#bar'); if (!bar.offsetParent) return;
   bar.classList.remove('wrap');
   if (bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('wrap');
   const ti = $('#title'); ti.title = ti.scrollWidth > ti.clientWidth + 1 ? ti.value : '';   // gekürzt: ganzer Name beim Draufzeigen
+  barGeo = { left: $('#colors').getBoundingClientRect().left, bottom: bar.getBoundingClientRect().bottom, btn: $('#bShape').getBoundingClientRect() }; shapeBarWH = null;
   placeShapeBar();
 }
 // Formenleiste: solange Formen gewählt ist, unter der Leiste, links bündig mit den Farben (dort, wo die Einstellungen
 // des Stifts stehen); passt sie dort nicht, rückt sie nach links
 function placeShapeBar() {
-  const sb = $('#shapeBar'), show = S.tool === 'shape' && !!S.note && !!$('#bar').offsetParent;
+  const sb = $('#shapeBar'), show = S.tool === 'shape' && !!S.note && !!barGeo;
   if (!show) { if (!sb.classList.contains('hidden')) popOut(sb); return; }
   const was = sb.classList.contains('hidden') || !!sb.dataset.closing;
   sb.classList.remove('hidden');
-  const c = $('#colors').getBoundingClientRect(), w = sb.offsetWidth;
-  sb.style.top = $('#bar').getBoundingClientRect().bottom + 8 + 'px';
-  sb.style.left = clamp(c.left - 8, 8, innerWidth - w - 8) + 'px';
-  if (was) { markShapeMenu(); popIn(sb, $('#bShape')); }
+  if (!shapeBarWH) shapeBarWH = [sb.offsetWidth, sb.offsetHeight];   // einmal je Leistenlage messen
+  sb.style.top = barGeo.bottom + 8 + 'px';
+  sb.style.left = clamp(barGeo.left - 8, 8, innerWidth - shapeBarWH[0] - 8) + 'px';
+  if (was) {   // aus dem Knopf „Formen“ (Lage gemerkt, nichts messen)
+    markShapeMenu();
+    const r = barGeo.btn, L = parseFloat(sb.style.left), Tp = barGeo.bottom + 8, [w, h] = shapeBarWH;
+    popIn(sb, null, '', 0, POP.from, [clamp(r.left + r.width / 2 - L, 12, w - 12), r.top + r.height / 2 < Tp + h / 2 ? -10 : h + 10]);
+  }
 }
 // Farbe und Dicke gelten für Stift, Textmarker, Lasso (übernehmen) und Formen – nicht für eigene Formen,
 // die behalten ihre gespeicherten Farben (Antippen wechselt dann zum Stift, wie beim Radierer)
@@ -3461,7 +3550,15 @@ function setSize(k, i) { S.sizeIdx[k] = i; S.size[k] = S.presets[k][i]; store.se
 // kräftiger und an den Enden mit weich etwas mehr Tinte. In der Leiste kräftiger als auf der Seite, damit er auch
 // dunkel leuchtet; hell wie auf Papier multipliziert. Die Dicke wächst wie die Punkte beim Stift (dotPx), der Schwung
 // wird dabei flacher, damit er in den Knopf passt
+// gleiche Dicke, Farbe, Muster, Deckkraft, Hell/Dunkel: dasselbe Bild (der Werkzeugwechsel baut es nicht jedes Mal neu)
+const stripCache = new Map();
 function sizeStrip(k, v) {
+  const key = [k, v, k === 'tape' ? S.tapePat : '', S.color[k], k === 'tape' ? '' : S.alpha[k], isDark(), DPR].join('|');
+  let c = stripCache.get(key);
+  if (!c) { c = makeSizeStrip(k, v); stripCache.set(key, c); if (stripCache.size > 48) stripCache.delete(stripCache.keys().next().value); }
+  return c;
+}
+function makeSizeStrip(k, v) {
   const h = Math.round(dotPx(k, v));
   if (k === 'tape') return tapeSwatch(S.tapePat, 26, h + 2);
   const W = 34, A = Math.max(3.5, 8 - h * 0.22), H = Math.ceil(h + 2 * A + 6), c = document.createElement('canvas');
@@ -3693,7 +3790,7 @@ $$('#shapePop .sprow:not([data-g=c]):not([data-g=w]) button').forEach(b => b.onc
 });
 function popShapes() {
   if (!S.sel || S.sel.auto || S.tool === 'shape') return null;
-  const items = S.items.filter(it => S.sel.ids.has(it.id));
+  const items = selFacts().sel;
   return items.length && items.every(restylable) ? items : null;
 }
 function placeShapePop(show) {
@@ -3701,23 +3798,26 @@ function placeShapePop(show) {
   if (!items) { pop.classList.add('hidden'); return; }
   // Farbe: die Farben des Stifts, eine gemeinsame eigene dazu; Dicke: die Stärken des Stifts (Punkt wie in der Leiste)
   const cs = new Set(items.map(it => it.c)), c1 = cs.size === 1 ? [...cs][0] : null, ws = new Set(items.map(it => Math.round(it.w * 100))), w1 = ws.size === 1 ? [...ws][0] / 100 : null;
-  const cbox = pop.querySelector('.spc'), wbox = pop.querySelector('.spw'); cbox.replaceChildren(); wbox.replaceChildren();
-  for (const c of c1 && !PALETTE.includes(c1) ? [...PALETTE, c1] : PALETTE) {
+  // die Knöpfe nur neu bauen, wenn sich etwas daran ändert (nicht bei jedem Nachführen)
+  const sig = [c1, w1, S.presets.pen.join()].join('|'), rebuild = pop.dataset.sig !== sig;
+  const cbox = pop.querySelector('.spc'), wbox = pop.querySelector('.spw'); if (rebuild) { pop.dataset.sig = sig; pop.wh = null; cbox.replaceChildren(); wbox.replaceChildren(); }
+  if (rebuild) for (const c of c1 && !PALETTE.includes(c1) ? [...PALETTE, c1] : PALETTE) {
     const b = document.createElement('button'); b.className = 'spcol' + (c === c1 ? ' on' : ''); b.style.setProperty('--c', colorOf(c));
     b.title = c === 'ink' ? 'Schwarz / Weiß' : c; b.setAttribute('aria-label', 'Farbe ' + b.title); b.onclick = () => restyleSel({ c }, true); cbox.appendChild(b);
   }
-  for (const v of S.presets.pen) {
+  if (rebuild) for (const v of S.presets.pen) {
     const b = document.createElement('button'), d = document.createElement('span'); b.className = 'spdot' + (w1 !== null && Math.abs(v - w1) < 0.01 ? ' on' : '');
     d.style.width = d.style.height = Math.min(16, dotPx('pen', v)) + 'px'; b.title = 'Dicke ' + fmtSize(v); b.setAttribute('aria-label', b.title);
     b.appendChild(d); b.onclick = () => restyleSel({ w: v }, true); wbox.appendChild(b);
   }
   for (const g of ['ds', 'rnd', 'sl', 'fs']) {
     const its = items.filter(SP_FITS[g]), vs = new Set(its.map(SP_VAL[g])), one = vs.size === 1 ? String([...vs][0]) : null;
-    pop.querySelector(`.sprow[data-g=${g}]`).hidden = !its.length;
+    const row = pop.querySelector(`.sprow[data-g=${g}]`); if (row.hidden !== !its.length) { row.hidden = !its.length; pop.wh = null; }
     pop.querySelectorAll(`button[data-${g}]`).forEach(b => b.classList.toggle('on', b.dataset[g] === one));
   }
   const appear = pop.classList.contains('hidden'); pop.classList.remove('hidden');
-  const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]), w = pop.offsetWidth, h = pop.offsetHeight, gap = 24;
+  if (!pop.wh || appear) pop.wh = [pop.offsetWidth, pop.offsetHeight];   // messen nur nach einer Änderung
+  const b = S.sel.bb, [x0, y0] = toScreen(b[0], b[1]), [x1, y1] = toScreen(b[2], b[3]), [w, h] = pop.wh, gap = 24;
   let x = x1 + gap; if (x + w > VW - 8) x = x0 - gap - w >= 8 ? x0 - gap - w : VW - 8 - w;
   const bar = $('#selbar'), shown = !bar.classList.contains('hidden'), top = barBottom() + 8, below = shown && parseFloat(bar.style.top) >= y1;
   let y = clamp(below ? y1 - h : y0, top, VH - h - 8);
@@ -3743,7 +3843,7 @@ function shapeTitle() {
   const cs = customOf(S.shape), b = !isCustom(S.shape) && $(`#shapeBar [data-shape="${S.shape}"]`);
   $('#bShape').title = 'Formen (F)' + (cs ? ' – ' + cs.name : b ? ' – ' + b.title : '');
 }
-function setShape(k) { S.shape = k; store.set('shape', k); shapeTitle(); markShapeMenu(); renderColors(); renderSizes(); }
+function setShape(k) { S.shape = k; store.set('shape', k); shapeTitle(); markShapeMenu(); renderColors(); }
 function pickShape(k) { setShape(k); closeMenus(); if (S.tool !== 'shape') setTool('shape'); }
 $$('#shapeBar [data-shape]').forEach(b => b.onclick = () => pickShape(b.dataset.shape));
 shapeTitle(); markShapeMenu();
@@ -3911,7 +4011,7 @@ async function loadCustomShapes() {
   try { CUSTOM = (await dbShapesAll()).sort(byCreated); } catch (e) { CUSTOM = []; }
   customReady = true;
   if (isCustom(S.shape) && !customOf(S.shape)) setShape('rect');   // Form gibt es nicht mehr
-  shapeTitle(); markShapeMenu(); renderColors(); renderSizes();
+  shapeTitle(); markShapeMenu(); renderColors();
   if (!$('#shapeMenu').classList.contains('hidden')) renderCustomGrid();
 }
 async function saveCustomShape() {
@@ -3981,7 +4081,7 @@ $('#bSnap').onclick = toggleSnap; $('#bSnap').classList.toggle('on', S.snap);
 $('#bUndo').onclick = undo; $('#bRedo').onclick = redo;
 $('#zoom').onclick = () => zoomAt(VW / 2, VH / 2, 1);
 // Knöpfe nach dem Klick nicht fokussiert lassen (sonst löst die Leertaste sie erneut aus)
-document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); });
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) requestAnimationFrame(() => { if (document.activeElement === b) b.blur(); }); });   // im nächsten Bild: nicht mitten im Umbau alle Stile neu
 
 function applyDark() {
   document.documentElement.classList.toggle('dark', S.dark);
@@ -4024,16 +4124,21 @@ const POP = { bounce: 0.36, ms: 380, from: 0.58 };
 const isOpen = m => !m.classList.contains('hidden') && !m.dataset.closing;
 // el ist schon sichtbar und an seinem Platz. from: Knopf, aus dem es kommt (sonst aus der Mitte); base: eigenes
 // transform des Elements (Auswahlleiste: zentriert); s0: Startgröße
-function popIn(el, from, base = '', delay = 0, s0 = POP.from) {
-  el.getAnimations().forEach(a => a.cancel()); delete el.dataset.closing;
+// popAnims: die Animationen von popIn/popOut je Element. Sie selbst abzubrechen statt getAnimations zu fragen: das zwänge
+// den Browser, alle Stile sofort neu zu berechnen (beim Werkzeugwechsel nach dem Umbau der Leiste spürbar).
+// origin: Ursprung schon bekannt (Formenleiste: aus der gemerkten Lage), dann wird nichts gemessen
+const popAnims = new WeakMap();
+function popIn(el, from, base = '', delay = 0, s0 = POP.from, origin = null) {
+  (popAnims.get(el) || []).forEach(a => a.cancel()); popAnims.delete(el); delete el.dataset.closing;
   if (reduceMotion()) return;
-  if (from) {
+  if (origin) el.style.transformOrigin = `${origin[0]}px ${origin[1]}px`;
+  else if (from) {
     const r = from.getBoundingClientRect(), m = el.getBoundingClientRect();
     const ox = clamp(r.left + r.width / 2 - m.left, 12, m.width - 12), oy = r.top + r.height / 2 < m.top + m.height / 2 ? -10 : m.height + 10;
     el.style.transformOrigin = `${ox}px ${oy}px`;
   } else el.style.transformOrigin = '';
-  el.animate([{ transform: `${base} scale(${s0})` }, { transform: base || 'none' }], sp(spring(POP.bounce, POP.ms), { delay, fill: 'backwards' }));
-  el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 110, easing: 'ease-out', delay, fill: 'backwards' });
+  popAnims.set(el, [el.animate([{ transform: `${base} scale(${s0})` }, { transform: base || 'none' }], sp(spring(POP.bounce, POP.ms), { delay, fill: 'backwards' })),
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 110, easing: 'ease-out', delay, fill: 'backwards' })]);
 }
 // Die Zugeh-Animation hält ihr Ende (fill: forwards), bis das Menü versteckt ist, und wird dann sofort entfernt. Bliebe
 // sie am versteckten Menü stehen, brachte Chromium (Windows-App, Chrome 140) beim späteren Öffnen manchmal ihr Ende
@@ -4044,6 +4149,7 @@ function popOut(el) {
   if (reduceMotion()) { el.classList.add('hidden'); return; }
   el.dataset.closing = '1';
   const a = el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.95)' }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
+  popAnims.set(el, [...(popAnims.get(el) || []), a]);
   a.onfinish = () => { if (el.dataset.closing) { delete el.dataset.closing; el.classList.add('hidden'); } a.cancel(); };
 }
 function closeMenus() { saveNoteCard(); hideDim(); $$('.menu').forEach(popOut); $$('.mbtn.on').forEach(b => b.classList.remove('on')); $('#bTune').classList.remove('on'); }
@@ -4435,7 +4541,7 @@ function openNoteCard(id, ids, box) {
   const it = id ? noteOf(id) : null; if (id && !it) return;
   const nt = it ? it.nt : { text: '', img: null, ink: [] };
   ncCur = { id: it ? it.id : null, ids: it ? null : ids, box, nt: { text: nt.text || '', img: nt.img || null, ink: (nt.ink || []).map(s => ({ ...s })) }, orig: it ? JSON.stringify(nt) : null, url: null };
-  const m = $('#noteCard'); m.classList.remove('big', 'glance'); ncDraw = null; liveInkClear();
+  const m = $('#noteCard'); m.classList.remove('big', 'glance'); ncDraw = null; liveInkClear(); ncResetView();
   ncPal.getAnimations().forEach(a => a.cancel()); delete ncPal.dataset.closing; ncPal.classList.add('hidden'); ncToolBtn();
   $('#ncText').value = ncCur.nt.text;
   m.classList.remove('hidden');
@@ -4454,7 +4560,7 @@ function setGlance(on) {
   const m = $('#noteCard'); if (!ncCur || m.classList.contains('glance') === on) return;
   const r0 = m.getBoundingClientRect();
   m.getAnimations().forEach(a => a.cancel());
-  m.classList.toggle('glance', on);
+  m.classList.toggle('glance', on); ncResetView();
   if (!on) placeNoteCard();   // zurück an ihren Platz bei der Markierung
   growBtn(); fitNoteText(); drawNoteInk();
   if (on) showDim(); else hideDim();
@@ -4541,6 +4647,23 @@ const NC_TOOLS = [['pen', 'ic-pen', 'Stift'], ['hl', 'ic-hl', 'Textmarker'], ['t
 // Maßstab der Schreibfläche: 1, außer das Geschriebene ist größer als die Fläche (im großen Fenster geschrieben) –
 // dann verkleinert, damit alles zu sehen ist. Neu Geschriebenes kommt im selben Maßstab dazu.
 let ncInkS = 1;
+/* Zoom der Schreibfläche: z über dem Grundmaßstab (ncInkS: alles zu sehen), x/y Verschiebung in CSS-Pixeln. Zwei
+   Finger zoomen und schieben, Strg + Mausrad zoomt, das Mausrad schiebt; der Knopf unten rechts zeigt den Zoom und setzt
+   ihn zurück. Man bleibt auf der Fläche (100 % bis 800 %); jede Notiz öffnet mit 100 % */
+const ncView = { z: 1, x: 0, y: 0 };
+const ncS = () => ncInkS * ncView.z;
+function ncClampView() {
+  const W = ncInk.clientWidth || 296, H = ncInk.clientHeight || 140;
+  ncView.z = clamp(ncView.z, 1, 8); ncView.x = clamp(ncView.x, W - W * ncView.z, 0); ncView.y = clamp(ncView.y, H - H * ncView.z, 0);
+  const b = $('#ncZoom'), t = Math.round(ncView.z * 100) + ' %'; b.classList.toggle('hidden', ncView.z < 1.01); if (b.textContent !== t) b.textContent = t;
+}
+function ncResetView() { ncView.z = 1; ncView.x = ncView.y = 0; ncClampView(); }
+function ncZoomAt(cx, cy, z) {   // (cx, cy): CSS-Pixel in der Fläche, der Punkt dort bleibt, wo er ist
+  const s0 = ncS(), ux = (cx - ncView.x) / s0, uy = (cy - ncView.y) / s0;
+  ncView.z = clamp(z, 1, 8); const s1 = ncS(); ncView.x = cx - ux * s1; ncView.y = cy - uy * s1; ncClampView(); requestNcDraw();
+}
+let ncDrawQ = false;
+function requestNcDraw() { if (!ncDrawQ) { ncDrawQ = true; requestAnimationFrame(() => { ncDrawQ = false; drawNoteInk(); }); } }
 function inkScale(W, H) {
   let mx = 0, my = 0;
   for (const s of ncCur ? ncCur.nt.ink : []) for (let i = 0; i < s.pts.length; i += 3) { mx = Math.max(mx, s.pts[i] + s.w + 8); my = Math.max(my, s.pts[i + 1] + s.w + 8); }   // mit etwas Rand
@@ -4557,11 +4680,12 @@ function drawNoteInk() {
   const W = ncInk.clientWidth || 296, H = ncInk.clientHeight || 140, w = Math.round(W * DPR), h = Math.round(H * DPR);
   for (const c of [ncInk, ncLive]) if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
   if (!ncDraw) ncInkS = inkScale(W, H);   // während eines Strichs (oder beim Radieren) bleibt der Maßstab
-  const g = ncBase, s = ncInkS, list = ncCur ? ncCur.nt.ink : [];
+  ncClampView();
+  const g = ncBase, s = ncS(), ox = ncView.x, oy = ncView.y, list = ncCur ? ncCur.nt.ink : [];
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
   g.fillStyle = paperColor(); g.fillRect(0, 0, w, h);
-  if (S.note) { let sp = (S.note.bg === 'lines' ? 34 : 28) * s; while (sp < 14) sp *= 2; fillPattern(g, s, sp * DPR / 2, sp * DPR / 2, w, h); }   // Muster wie auf der Seite, nicht am Rand angeschnitten
-  g.setTransform(DPR * s, 0, 0, DPR * s, 0, 0);
+  if (S.note) { let sp = (S.note.bg === 'lines' ? 34 : 28) * s; while (sp < 14) sp *= 2; fillPattern(g, s, (sp / 2 + ox) * DPR, (sp / 2 + oy) * DPR, w, h); }   // Muster wie auf der Seite, nicht am Rand angeschnitten, zieht mit
+  g.setTransform(DPR * s, 0, 0, DPR * s, DPR * ox, DPR * oy);
   const vis = inkShown(list);
   { const hlg = list.filter(st => st.pts.length && st.hl && !st.on && !st.tp); if (hlg.length) paintHl(g, hlg); }   // Textmarker unter der Schrift, als eine Schicht
   for (const st of list) if (st.pts.length && !st.tp && !st.on && !st.hl) paintInk(g, st, s);   // Schrift
@@ -4578,7 +4702,7 @@ function inkPiece(d) {
 }
 // gerade vom Anfang bis zum Stift (fast waagerecht oder senkrecht: genau), in Koordinaten der Schreibfläche
 function inkStraight(d) {
-  const s = d.s, r = d.raw || d.start, x0 = d.start[0] / s, y0 = d.start[1] / s, x1 = r[0] / s, y1 = r[1] / s;
+  const s = d.s, [ox, oy] = d.o, r = d.raw || d.start, x0 = (d.start[0] - ox) / s, y0 = (d.start[1] - oy) / s, x1 = (r[0] - ox) / s, y1 = (r[1] - oy) / s;
   const ang = Math.abs(Math.atan2(y1 - y0, x1 - x0)) * 180 / Math.PI; let ex = x1, ey = y1;
   if (ang < 4 || ang > 176) ey = y0; else if (Math.abs(ang - 90) < 4) ex = x0;
   return [x0, y0, d.g.p, ex, ey, d.g.p];
@@ -4586,13 +4710,13 @@ function inkStraight(d) {
 // Tape und gerade Striche auf der schnellen Ebene: Tape erst nach mehr als einem Antippen, dann nur das Ende neu (wie
 // auf der Seite); Geraden jedes Mal ganz
 function inkRedraw(d) {
-  const g = ncLiveCtx, s = d.s, k = DPR * s;
+  const g = ncLiveCtx, s = d.s, k = DPR * s, ox = DPR * d.o[0], oy = DPR * d.o[1];
   if (d.tape && tapTiny(d.raw || d.start, d.start, d.pts, s)) return;
-  if (d.tape && !d.straight) { tapeLive(g, d, k, 0, 0, d.pts); return; }
-  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ncLive.width, ncLive.height); g.setTransform(k, 0, 0, k, 0, 0);
+  if (d.tape && !d.straight) { tapeLive(g, d, k, ox, oy, d.pts); return; }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ncLive.width, ncLive.height); g.setTransform(k, 0, 0, k, ox, oy);
   const pts = d.straight ? inkStraight(d) : d.pts;
   if (d.tape) { if (pts.length < 6) return; const o = d.live || (d.live = { c: d.c, w: d.w, tp: d.tp, hid: true, live: true }); o.pts = pts; drawTape(g, o, k); }
-  else if (d.hl) hlLive(g, { pts, w: d.w, c: d.c, cut: d.cut }, k, 0, 0);
+  else if (d.hl) hlLive(g, { pts, w: d.w, c: d.c, cut: d.cut }, k, ox, oy);
   else { g.fillStyle = colorOf(d.c); g.fill(buildPath(Float32Array.from(pts), d.w, false)); }
 }
 // was ein neuer Textmarker in der Notiz ausspart: Textmarker gleicher Deckkraft und alles darüber (Schrift, Tapes)
@@ -4617,22 +4741,22 @@ function inkNear(st, x, y, lim) {
 // oberstes Tape unter (x, y)
 function inkTapeAt(x, y) {
   const list = ncCur ? ncCur.nt.ink : [];
-  for (let k = list.length - 1; k >= 0; k--) if (list[k].tp && inkNear(list[k], x, y, list[k].w / 2 + 4 / ncInkS)) return list[k];
+  for (let k = list.length - 1; k >= 0; k--) if (list[k].tp && inkNear(list[k], x, y, list[k].w / 2 + 4 / ncS())) return list[k];
   return null;
 }
 // Radierer: ganze Striche unter dem Stift weg (wie auf der Seite, 12 px); mit einem Tape geht auch, was darauf steht
 function inkErase(d, ev) {
-  const s = ncInkS, x = (ev.clientX - d.r.left) / s, y = (ev.clientY - d.r.top) / s, R = ERASE_R / s, ink = ncCur ? ncCur.nt.ink : [], vis = inkShown(ink);
-  const gone = new Set(ink.filter(st => vis(st) && inkNear(st, x, y, R + st.w / 2)));
+  const s = ncS(), x = (ev.clientX - d.r.left - ncView.x) / s, y = (ev.clientY - d.r.top - ncView.y) / s, R = ERASE_R / s, ink = ncCur ? ncCur.nt.ink : [], vis = inkShown(ink);
+  const gone = new Set(ink.filter(st => boxNear(inkStBox(st), x, y, R) && vis(st) && inkNear(st, x, y, R + st.w / 2)));
   if (!gone.size) return;
   for (const g of [...gone]) if (g.tp) for (const st of ink) if (st.on === g.id) gone.add(st);
-  ncCur.nt.ink = ink.filter(st => !gone.has(st)); drawNoteInk();
+  ncCur.nt.ink = ink.filter(st => !gone.has(st)); requestNcDraw();   // höchstens einmal pro Bild
 }
 // beim Schweben: Punkt in Farbe und Dicke des Werkzeugs, wo es schreiben wird (wie auf der Seite)
 function inkHover(e) {
   const k = ncTool, on = e.pointerType === 'pen' && !(e.buttons & 34) && k !== 'eraser';
   if (on) {
-    const r = ncLive.getBoundingClientRect(), d = Math.max(3, S.size[k] * ncInkS), st = ncDot.style, px = d + 'px', c = colorOf(S.color[k]);
+    const r = ncLive.getBoundingClientRect(), d = Math.max(3, S.size[k] * ncS()), st = ncDot.style, px = d + 'px', c = colorOf(S.color[k]);
     if (st.width !== px) st.width = st.height = px;
     if (ncDot.dataset.c !== c) { ncDot.dataset.c = c; st.background = c; }
     st.transform = `translate(${e.clientX - r.left - d / 2}px,${e.clientY - r.top - d / 2}px)`;
@@ -4647,16 +4771,16 @@ ncLive.addEventListener('pointerdown', e => {
   ncDot.style.display = ''; if (!ncPal.classList.contains('hidden')) popOut(ncPal);
   const r = ncLive.getBoundingClientRect(), k = penErase(e) ? 'eraser' : ncTool;
   if (k === 'eraser') { ncDraw = { id: e.pointerId, r, erase: true }; inkErase(ncDraw, e); return; }
-  const s = ncInkS, x = e.clientX - r.left, y = e.clientY - r.top, hl = k === 'hl', tape = k === 'tape';
-  const d = ncDraw = { id: e.pointerId, r, s, hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[k], w: S.size[k], al: tape ? undefined : S.alpha[k], drawn: 0,
-    touch: e.pointerType === 'touch', start: [x, y], still: [x, y], straight: !!S.straight[k], ...smoothStart(x, y, pressureOf(e), e.timeStamp, (u, v) => [u / s, v / s]) };
-  if (!tape) { const tp = inkTapeAt(x / s, y / s); if (tp && covered(tp)) d.on = tp.id; }   // auf ein abgedecktes Tape geschrieben: gehört dazu
+  const s = ncS(), ox = ncView.x, oy = ncView.y, x = e.clientX - r.left, y = e.clientY - r.top, hl = k === 'hl', tape = k === 'tape';
+  const d = ncDraw = { id: e.pointerId, r, s, o: [ox, oy], hl, tape, tp: tape ? S.tapePat : undefined, c: S.color[k], w: S.size[k], al: tape ? undefined : S.alpha[k], drawn: 0,
+    touch: e.pointerType === 'touch', start: [x, y], still: [x, y], straight: !!S.straight[k], ...smoothStart(x, y, pressureOf(e), e.timeStamp, (u, v) => [(u - ox) / s, (v - oy) / s]) };
+  if (!tape) { const tp = inkTapeAt((x - ox) / s, (y - oy) / s); if (tp && covered(tp)) d.on = tp.id; }   // auf ein abgedecktes Tape geschrieben: gehört dazu
   if (hl) d.cut = hlCutInk(strokeAlpha(d), s);
   liveInkClear();
   if (!tape) { const al = strokeAlpha(d); if (al < 1) ncLive.style.opacity = String(al); if (hl && !isDark()) ncLive.style.mixBlendMode = 'multiply'; }   // wie auf der Seite
   if (tape || d.straight) { d.redraw = true; inkRedraw(d); }
-  else if (hl) { d.hlInc = true; hlLive(ncLiveCtx, d, DPR * s, 0, 0); }   // Textmarker: nur, was sich ändert (wie auf der Seite)
-  else { ncLiveCtx.setTransform(DPR * s, 0, 0, DPR * s, 0, 0); ncLiveCtx.fillStyle = colorOf(d.c); inkPiece(d); }
+  else if (hl) { d.hlInc = true; hlLive(ncLiveCtx, d, DPR * s, DPR * ox, DPR * oy); }   // Textmarker: nur, was sich ändert (wie auf der Seite)
+  else { ncLiveCtx.setTransform(DPR * s, 0, 0, DPR * s, DPR * ox, DPR * oy); ncLiveCtx.fillStyle = colorOf(d.c); inkPiece(d); }
   if (hl || tape) armInkHold(d);
   $('#noteCard').classList.add('inked');
 });
@@ -4672,17 +4796,49 @@ ncLive.addEventListener('pointermove', e => {
     if (d.holdT !== undefined && Math.hypot(x - d.still[0], y - d.still[1]) > 4) { d.still = [x, y]; armInkHold(d); }
   }
   if (d.erase) return;
-  if (d.redraw || d.hlInc) { if (!d.rq) { d.rq = true; requestAnimationFrame(() => { d.rq = false; if (ncDraw === d) { if (d.redraw) inkRedraw(d); else hlLive(ncLiveCtx, d, DPR * d.s, 0, 0); } }); } }   // höchstens einmal pro Bild
+  if (d.redraw || d.hlInc) { if (!d.rq) { d.rq = true; requestAnimationFrame(() => { d.rq = false; if (ncDraw === d) { if (d.redraw) inkRedraw(d); else hlLive(ncLiveCtx, d, DPR * d.s, DPR * d.o[0], DPR * d.o[1]); } }); } }   // höchstens einmal pro Bild
   else inkPiece(d);
 });
 ncLive.addEventListener('pointerleave', () => { if (ncDot.style.display) ncDot.style.display = ''; });
+// zwei Finger: zoomen und schieben (ein eben mit dem Finger begonnener Strich war der Anfang davon und fällt weg)
+const ncTouches = new Map(); let ncPinch = null;
+function ncPinchState() {
+  const [a, b] = [...ncTouches.values()]; return { cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, d: Math.max(8, Math.hypot(a[0] - b[0], a[1] - b[1])) };
+}
+ncLive.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'touch' || !ncCur || performance.now() < penActiveUntil) return;
+  const r = ncLive.getBoundingClientRect(); ncTouches.set(e.pointerId, [e.clientX - r.left, e.clientY - r.top]);
+  if (ncTouches.size !== 2) return;
+  if (ncDraw && ncDraw.touch) { clearTimeout(ncDraw.holdT); ncDraw = null; liveInkClear(); drawNoteInk(); }
+  const p = ncPinchState(), s = ncS(); ncPinch = { d0: p.d, z0: ncView.z, ux: (p.cx - ncView.x) / s, uy: (p.cy - ncView.y) / s };
+  try { ncLive.setPointerCapture(e.pointerId); } catch (err) {}
+  e.stopImmediatePropagation();
+}, true);
+ncLive.addEventListener('pointermove', e => {
+  if (!ncTouches.has(e.pointerId)) return;
+  const r = ncLive.getBoundingClientRect(); ncTouches.set(e.pointerId, [e.clientX - r.left, e.clientY - r.top]);
+  if (!ncPinch || ncTouches.size < 2) return;
+  e.stopImmediatePropagation();
+  const p = ncPinchState(); ncView.z = clamp(ncPinch.z0 * p.d / ncPinch.d0, 1, 8);
+  const s = ncS(); ncView.x = p.cx - ncPinch.ux * s; ncView.y = p.cy - ncPinch.uy * s; ncClampView(); requestNcDraw();
+}, true);
+// der Finger, der danach liegen bleibt, schreibt nicht (er hat keinen Strich begonnen)
+const ncTouchUp = e => { if (ncTouches.delete(e.pointerId) && ncTouches.size < 2) ncPinch = null; };
+ncLive.addEventListener('pointerup', ncTouchUp, true); ncLive.addEventListener('pointercancel', ncTouchUp, true);
+ncLive.addEventListener('wheel', e => {
+  if (!ncCur) return;
+  const r = ncLive.getBoundingClientRect();
+  if (e.ctrlKey) { e.preventDefault(); ncZoomAt(e.clientX - r.left, e.clientY - r.top, ncView.z * Math.exp(-e.deltaY * 0.01)); }
+  else if (ncView.z > 1.01) { e.preventDefault(); ncView.x -= e.deltaX; ncView.y -= e.deltaY; ncClampView(); requestNcDraw(); }
+}, { passive: false });
+$('#ncZoom').onclick = () => { ncResetView(); drawNoteInk(); };
 const endInk = e => {
   const d = ncDraw; if (!d || e.pointerId !== d.id) return;
   ncDraw = null; clearTimeout(d.holdT);
   if (!d.erase && ncCur) {
     if (d.straight) d.pts = inkStraight(d); else if (d.raw) { catchUp(d); if (!d.redraw && !d.hlInc) inkPiece(d); }   // bis dorthin, wo der Stift abgehoben hat
     const r = d.raw || d.start, tap = !d.straight && Math.hypot(r[0] - d.start[0], r[1] - d.start[1]) < 6 && pathLen(d.pts) * d.s < 12;
-    const tp = tap && (d.tape || d.touch) ? inkTapeAt(d.start[0] / d.s, d.start[1] / d.s) : null;
+    const tp = tap && (d.tape || d.touch) ? inkTapeAt((d.start[0] - d.o[0]) / d.s, (d.start[1] - d.o[1]) / d.s) : null;
     if (tp) ncCur.nt.ink = ncCur.nt.ink.map(x => x === tp ? { ...x, hid: !covered(x) } : x);   // Tape antippen: auf- bzw. abdecken
     else if (d.pts.length && !(tap && d.tape)) {
       const st = { c: d.c, w: d.w, pts: d.pts.map(v => Math.round(v * 10) / 10) };
@@ -4965,7 +5121,8 @@ function placeCornellBtn() {
   const hide = !!S.cornellHide, txt = hide ? 'Aufdecken' : 'Verdecken';
   if (b.dataset.st !== txt) { b.dataset.st = txt; b.querySelector('span').textContent = txt; b.title = hide ? 'Notizen wieder zeigen' : 'Notizen unscharf machen: mit den Stichworten links abfragen'; b.classList.toggle('on', hide); }
   const k = currentSheet(), f = cornellNotes(k), [x0, y0] = toScreen(f[0], f[1]), [x1, y1] = toScreen(f[2], f[3]);
-  const w = b.offsetWidth, h = b.offsetHeight, x = Math.min(x1, VW) - w - 12, y = clamp(y0 + 10, barBottom() + 10, y1 - h - 10);
+  if (!b.wh || b.wh.t !== txt) b.wh = { t: txt, w: b.offsetWidth, h: b.offsetHeight };   // messen nur, wenn sich der Text ändert
+  const { w, h } = b.wh, x = Math.min(x1, VW) - w - 12, y = clamp(y0 + 10, barBottom() + 10, y1 - h - 10);
   const vis = x > x0 && y1 - y0 > h + 20 && y1 > barBottom() + h + 20 && y0 < VH;
   b.style.visibility = vis ? '' : 'hidden'; b.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
 }
@@ -5889,8 +6046,16 @@ async function openNote(meta) {
     items.sort((a, b) => a.o - b.o);
     let renumber = false;
     for (let i = 1; i < items.length; i++) if (!(items[i].o - items[i - 1].o > 1e-7)) { renumber = true; break; }
-    S.note = meta; S.items = items; S.saved = new Map(items.map(i => [i.id, i]));
-    if (renumber) { items.forEach((it, i) => it.o = i); S.saved = new Map(); }
+    // Bilder, die gleich zu sehen sind: kurz (höchstens 150 ms) auf ihre kleine Fassung warten, damit das erste Zeichnen
+    // sie schon hat (sonst erst graue Flächen und gleich alles noch einmal); die volle Fassung lädt, falls nötig, gleich mit
+    { const v = meta.view || { tx: 0, ty: 0, z: 1 }, vb = [-v.tx / v.z, -v.ty / v.z, (innerWidth - v.tx) / v.z, (innerHeight - v.ty) / v.z];
+      const vis = items.filter(it => it.t === 'i' && boxHit(itemBox(it), vb));
+      if (vis.length) {
+        await Promise.race([Promise.all(vis.map(it => imgEntry(it.img).ready)), new Promise(r => setTimeout(r, 150))]);
+        for (const it of vis) { const e = imgEntry(it.img); if (e.low && it.w * v.z * DPR > e.low.width * 1.3) wantFull(it.img, e); }
+      } }
+    S.note = meta; S.items = items; S.saved = new Map(items.map(i => [i.id, i])); S.savedList = items;
+    if (renumber) { items.forEach((it, i) => it.o = i); S.saved = new Map(); S.savedList = []; }
     S.view = meta.view ? { ...meta.view } : { tx: 0, ty: 0, z: 1 }; S.level = S.view.z;
     S.undo = []; S.redo = []; S.sel = null; action = null; S.thumbDirty = false; S.cornellHide = false;
     clearTiles(); pathCache.clear();
@@ -5923,7 +6088,7 @@ async function closeNote() {
   // Bilder, die in der Notiz nicht mehr vorkommen, aus dem Speicher entfernen
   const note = S.note, used = new Set(S.items.filter(i => i.t === 'i').map(i => i.img));
   for (const it of S.items) if (it.nt && it.nt.img) used.add(it.nt.img);   // Bild einer Erklärung
-  S.note = null; S.items = []; S.saved = new Map(); S.undo = []; S.redo = [];
+  S.note = null; S.items = []; S.saved = new Map(); S.savedList = null; S.undo = []; S.redo = [];
   clearTiles(); pathCache.clear(); releaseImages();
   $('#editor').classList.add('hidden'); $('#home').classList.remove('hidden');
   navBusy = false;

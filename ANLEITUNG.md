@@ -1,5 +1,16 @@
 # Notizen für das Surface Pro 11 (Version 1.6.1)
 
+## Bald in 1.6.2: Zoomen in Notizen, Notiz geht mit ihrer Stelle, flüssigerer Werkzeugwechsel (schon in der Browser-Version zum Ausprobieren)
+- **In einer Notiz zoomen:** Mit zwei Fingern auf der Schreibfläche auseinanderziehen zoomt hinein (bis 800 %), mit zwei Fingern schieben bewegt den Ausschnitt. Mit der Maus: Strg + Mausrad zoomt um den Zeiger, das Mausrad allein schiebt. Unten rechts zeigt ein kleiner Knopf den Zoom (zum Beispiel „250 %“), ein Tipp darauf geht zurück auf 100 %. Geschrieben, radiert und getapet wird genau dort, wo der Stift ist; jede Notiz öffnet wieder mit 100 %.
+- **Notiz geht mit ihrer Stelle:** Ist das, was eine Notiz markiert, ganz weg (zum Beispiel mit dem Radierer weggewischt oder der Text gelöscht), verschwindet auch die Notiz mit ihrem „i“. Solange noch ein Teil der Stelle da ist, bleibt sie. Rückgängig holt beides zurück.
+- **Flüssigerer Werkzeugwechsel:** Der Wechsel zwischen Tape, Formen, Stift und Textmarker baut die Leiste nicht mehr jedes Mal neu auf (die kleinen Tape- und Marker-Vorschauen werden gemerkt, die Leiste wird nicht jedes Mal neu ausgemessen).
+- **Radierer:** Auch beim schnellen Wischen werden dünne Striche erwischt, die zwischen zwei Stiftpositionen liegen. Radieren stockt nicht mehr: es wird nur noch dort neu gezeichnet, wo etwas weggewischt wurde.
+- **Rückgängig, Verschieben und Radieren ohne Stocken:** Es wird nur noch dort neu gezeichnet, wo sich etwas ändert, statt ganzer Bereiche der Seite (mit gebremstem Prozessor gemessen: Rückgängig 148 → 61 ms, eine Auswahl verschieben 530 → 206 ms).
+- **Zoomen mit zwei Fingern flüssiger:** Während des Zoomens werden keine Bereiche mehr gezeichnet, die beim Loslassen gleich wieder verworfen würden; die Ränder zeigt solange die Vorschau der ganzen Seite.
+- **PDF-Seiten öffnen:** Beim Öffnen wartet die Seite einen Augenblick auf die sichtbaren Bilder, statt erst graue Flächen zu zeichnen und dann alles noch einmal; die scharfe Fassung lädt gleich mit.
+- **Textmarker und Tape beim Ziehen sparsamer:** Die Stelle am Ende wird so geleert, dass die Grafik des Surface nur diese kleine Fläche bearbeitet statt den ganzen Bildschirm – flüssiger und akkufreundlicher.
+- **Schneller im Hintergrund:** Ein großes Lasso über viele Striche wählt beim Loslassen deutlich schneller aus. Gespeichert wird nicht mehr, während der Stift auf der Seite ist, und meist nur das Neue. Beim Verschieben und Zoomen mit einer Auswahl rechnen Auswahlleiste und Formen-Fenster nicht mehr in jedem Bild alles neu.
+
 ## Neu in 1.6.1: Textmarker neu, flüssiger auf dem Surface
 - **Textmarker neu:** gleichmäßig breit mit weichen Kurven und runden Ecken (keine Kanten mehr in Kurven), flache Enden genau dort, wo der Stift aufsetzt und abhebt – nichts steht über.
   - **Überlappen wird nicht dunkler:** Wo sich Textmarker überlappen, bleibt die Fläche einfarbig und gleich hell; bei verschiedenen Farben liegt die zuletzt gezogene oben.
