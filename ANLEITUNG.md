@@ -1,6 +1,6 @@
-# Notizen für das Surface Pro 11 (Version 1.6.0)
+# Notizen für das Surface Pro 11 (Version 1.6.1)
 
-## Bald in 1.6.1: Textmarker neu, flüssiger auf dem Surface (schon in der Browser-Version zum Ausprobieren)
+## Neu in 1.6.1: Textmarker neu, flüssiger auf dem Surface
 - **Textmarker neu:** gleichmäßig breit mit weichen Kurven und runden Ecken (keine Kanten mehr in Kurven), flache Enden genau dort, wo der Stift aufsetzt und abhebt – nichts steht über.
   - **Überlappen wird nicht dunkler:** Wo sich Textmarker überlappen, bleibt die Fläche einfarbig und gleich hell; bei verschiedenen Farben liegt die zuletzt gezogene oben.
   - **Schon beim Ziehen richtig:** Der Marker liegt beim Ziehen unter der Schrift, unter Formen und Tapes (auch im Darkmode bleibt weiße Schrift weiß), und Überlappungen bleiben gleich hell – wie nach dem Loslassen.
