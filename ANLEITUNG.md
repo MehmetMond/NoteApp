@@ -1,6 +1,6 @@
-# Notizen für das Surface Pro 11 (Version 1.6.1)
+# Notizen für das Surface Pro 11 (Version 1.6.2)
 
-## Bald in 1.6.2: Mehrere Bilder in einer Notiz, Zoomen in Notizen, Notiz geht mit ihrer Stelle, flüssigerer Werkzeugwechsel (schon in der Browser-Version zum Ausprobieren)
+## Neu in 1.6.2: Mehrere Bilder in einer Notiz, Zoomen in Notizen, Notiz geht mit ihrer Stelle, flüssigerer Werkzeugwechsel
 - **Mehrere Bilder in einer Notiz:** „Einfügen“, „Bild“ (jetzt auch mehrere Dateien auf einmal), Strg + V und Bilder, die man auf die Karte zieht, kommen zu den Bildern der Notiz dazu, statt das bisherige zu ersetzen. Mehrere Bilder stehen nebeneinander in einer Reihe: mit dem Finger wischen (oder mit dem Mausrad) blättert durch. Ein Bild antippen zeigt die Bilder groß, das angetippte in der Mitte, zum Durchwischen; nochmal antippen wieder klein. Jedes Bild hat sein eigenes ✕. Notizen mit einem Bild bleiben, wie sie sind.
 - **In einer Notiz zoomen:** Mit zwei Fingern auf der Schreibfläche auseinanderziehen zoomt hinein (bis 800 %), mit zwei Fingern schieben bewegt den Ausschnitt. Mit der Maus: Strg + Mausrad zoomt um den Zeiger, das Mausrad allein schiebt. Unten rechts zeigt ein kleiner Knopf den Zoom (zum Beispiel „250 %“), ein Tipp darauf geht zurück auf 100 %. Geschrieben, radiert und getapet wird genau dort, wo der Stift ist; jede Notiz öffnet wieder mit 100 %.
 - **Notiz geht mit ihrer Stelle:** Ist das, was eine Notiz markiert, ganz weg (zum Beispiel mit dem Radierer weggewischt oder der Text gelöscht), verschwindet auch die Notiz mit ihrem „i“. Solange noch ein Teil der Stelle da ist, bleibt sie. Rückgängig holt beides zurück.
