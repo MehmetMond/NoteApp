@@ -53,7 +53,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   const fingerTap = async (x, y, pause = 700) => { if (pause) await wait(pause); await touch('touchStart', [[x, y]]); await wait(60); await touch('touchEnd', []); await wait(300); };
   const card = () => p.evaluate(() => {
     const m = $('#noteCard'), r = m.getBoundingClientRect();
-    return { open: isOpen(m), id: ncCur && ncCur.id, sel: ncCur && ncCur.ids ? ncCur.ids.size : 0, text: $('#ncText').value, img: !!(ncCur && ncCur.nt.img), imgShown: !$('#ncImgBox').classList.contains('hidden') && $('#ncImg').naturalWidth > 0,
+    return { open: isOpen(m), id: ncCur && ncCur.id, sel: ncCur && ncCur.ids ? ncCur.ids.size : 0, text: $('#ncText').value, img: !!(ncCur && ncCur.nt.imgs.length), imgShown: !$('#ncImgBox').classList.contains('hidden') && [...$$('#ncImgBox .ncim:not(.wait) img')].some(i => i.naturalWidth > 0),
       ink: ncCur ? ncCur.nt.ink.length : -1, inked: m.classList.contains('inked'), r: { l: r.left, t: r.top, r: r.right, b: r.bottom } };
   });
   const marks = () => p.evaluate(() => S.items.filter(i => i.nt).map(m => ({ id: m.id, k: m.k, hl: m.hl, c: m.c, fl: m.fl, n: m.pts.length / 3, pts: Array.from(m.pts), nt: m.nt, box: noteBox(m), kids: S.items.filter(i => i.on === m.id).length })));
@@ -125,14 +125,14 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
     const gone = await p.evaluate(() => getComputedStyle($('#ncDot')).display);
     check('Schweben: Punkt wie auf der Seite, verschwindet beim Verlassen', h.show === 'block' && near(h.w, h.want, 0.6) && near(h.cx, 150, 1) && near(h.cy, 60, 1) && h.cur === 'none' && gone === 'none', { ...h, gone }); }
   // Bild aus der Zwischenablage
-  await p.click('#ncPaste'); await p.waitForFunction(() => ncCur && ncCur.nt.img && $('#ncImg').naturalWidth > 0, null, { timeout: 8000 }); await wait(200);
+  await p.click('#ncPaste'); await p.waitForFunction(() => ncCur && ncCur.nt.imgs.length && $('#ncImgBox img') && $('#ncImgBox img').naturalWidth > 0, null, { timeout: 8000 }); await wait(200);
   k = await card(); check('„Einfügen“: Bild in der Karte', k.img && k.imgShown && k.r.b <= 860, k);
-  const imgA = await p.evaluate(() => ncCur.nt.img);
+  const imgA = await p.evaluate(() => ncCur.nt.imgs[0]);
   await p.screenshot({ path: path.join(SHOTS, 'notes_card_xp.png'), clip: { x: Math.max(0, k.r.l - 30), y: Math.max(0, tb[1] - 40), width: Math.min(560, 1280 - Math.max(0, k.r.l - 30)), height: Math.min(860 - Math.max(0, tb[1] - 40), k.r.b - tb[1] + 70) } });
   // Bild antippen: groß, nochmal: klein
-  await p.click('#ncImg'); await wait(150);
+  await p.click('#ncImgBox img'); await wait(150);
   const big = await p.evaluate(() => [$('#noteCard').classList.contains('big'), $('#noteCard').getBoundingClientRect().width, $('#ncInk').width]);
-  await p.click('#ncImg'); await wait(150);
+  await p.click('#ncImgBox img'); await wait(150);
   const small = await p.evaluate(() => [$('#noteCard').classList.contains('big'), $('#noteCard').getBoundingClientRect().width, $('#ncInk').width]);
   check('Bild antippen: groß und wieder klein (Schreibfläche mit)', big[0] && big[1] > 600 && big[2] > 600 && !small[0] && near(small[1], 320, 1) && small[2] < 320, { big, small });
   // Größe des Fensters ändert sich (Bildschirmtastatur): Karte bleibt offen
@@ -148,7 +148,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   let [m] = await marks(); const c1 = await count();
   check('Karte zu, Stifttipp daneben setzt keinen Punkt', !(await card()).open && c1.n === c0.n + 1 && c1.undo === c0.undo + 1, { c0, c1 });
   check('Markierung: unsichtbarer Strich (Rechteck) mit Inhalt', m && m.k === 'note' && !m.hl && !m.fl && m.n === 5
-    && m.nt.text === typed && m.nt.ink.length === 4 && m.nt.img === imgA && m.kids === text.length, m && { k: m.k, hl: m.hl, fl: m.fl, n: m.n, kids: m.kids, nt: { ...m.nt, ink: m.nt.ink.length } });
+    && m.nt.text === typed && m.nt.ink.length === 4 && m.nt.imgs.length === 1 && m.nt.imgs[0] === imgA && m.kids === text.length, m && { k: m.k, hl: m.hl, fl: m.fl, n: m.n, kids: m.kids, nt: { ...m.nt, ink: m.nt.ink.length } });
   { const gb = await p.evaluate(ids => geoBox(S.items.filter(i => ids.includes(i.id))), text);
     const q = m.pts;
     check('Rechteck 6 px um die Schrift', near(q[0], gb[0] - 6, 0.05) && near(q[1], gb[1] - 6, 0.05) && near(q[6], gb[2] + 6, 0.05) && near(q[7], gb[3] + 6, 0.05)
@@ -166,7 +166,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
 
   // ---------- Wieder öffnen: Fingertipp, Stifttipp aufs „i“ (Stift und Lasso) ----------
   const mid = [(tb[0] + tb[2]) / 2, (tb[1] + tb[3]) / 2];
-  await fingerTap(...mid); await p.waitForFunction(() => $('#ncImg').naturalWidth > 0 && !$('#ncImgBox').classList.contains('hidden'), null, { timeout: 5000 }).catch(() => {});
+  await fingerTap(...mid); await p.waitForFunction(() => $('#ncImgBox img') && $('#ncImgBox img').naturalWidth > 0 && !$('#ncImgBox').classList.contains('hidden'), null, { timeout: 5000 }).catch(() => {});
   k = await card();
   check('Fingertipp auf die Markierung: Karte mit Text, Bild und Skizze', k.open && k.id === m.id && k.text === typed && k.imgShown && k.ink === 4 && k.inked, k);
   await p.keyboard.press('Escape'); await wait(300);
@@ -208,7 +208,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   await lassoAround(wb); await p.click('#sNote'); await wait(400);
   await p.click('#ncText'); await p.keyboard.type('Höhensatz'); await p.keyboard.press('Escape'); await wait(300);
   let m2 = (await marks()).find(x => x.id !== m.id);
-  check('Zweite Erklärung (zwei Zeilen) gespeichert', m2 && m2.nt.text === 'Höhensatz' && m2.kids === word.flat().length && !m2.nt.img && m2.nt.ink.length === 0, m2 && { text: m2.nt.text, kids: m2.kids });
+  check('Zweite Erklärung (zwei Zeilen) gespeichert', m2 && m2.nt.text === 'Höhensatz' && m2.kids === word.flat().length && !m2.nt.imgs.length && m2.nt.ink.length === 0, m2 && { text: m2.nt.text, kids: m2.kids });
   // Radierer über den Rand der Markierung (zwischen den Zeilen, weit weg von der Schrift): Markierung bleibt
   await p.evaluate(() => setTool('eraser'));
   { const [lx, ty] = await scr(m2.box[0], m2.box[1]), [, by2] = await scr(m2.box[2], m2.box[3]), ym = (ty + by2) / 2;
@@ -226,20 +226,23 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   await p.click('#ncDel'); await wait(300);
   check('Mülleimer: Erklärung entfernt, Karte zu', !(await card()).open && (await marks()).length === 1 && await p.evaluate(ids => S.items.filter(i => ids.includes(i.id) && i.on).length, word.flat()) === 0);
 
-  // ---------- Strg + V in die offene Karte: Bild austauschen; Aufräumen beim Schließen der Seite ----------
+  // ---------- Strg + V in die offene Karte: zweites Bild dazu, das erste mit ✕ weg; Aufräumen beim Schließen der Seite ----------
   await fingerTap(...mid); await wait(200);
   await p.evaluate(async () => { const dt = new DataTransfer(); dt.items.add(new File([window.__clipB], 'b.png', { type: 'image/png' })); document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })); });
-  await p.waitForFunction(a => ncCur && ncCur.nt.img && ncCur.nt.img !== a, imgA, { timeout: 8000 });
-  const imgB = await p.evaluate(() => ncCur.nt.img), nImg = await p.evaluate(() => S.items.filter(i => i.t === 'i').length);
-  check('Strg + V mit offener Karte: Bild kommt in die Karte, nicht auf die Seite', imgB !== imgA && nImg === 0, { imgB, nImg });
+  await p.waitForFunction(() => ncCur && ncCur.nt.imgs.length === 2, null, { timeout: 8000 });
+  const both = await p.evaluate(() => ncCur.nt.imgs.slice()), imgB = both[1], nImg = await p.evaluate(() => S.items.filter(i => i.t === 'i').length);
+  check('Strg + V mit offener Karte: Bild kommt dazu (in die Karte, nicht auf die Seite)', both[0] === imgA && imgB !== imgA && nImg === 0, { both, nImg });
+  await p.click('#ncImgBox .ncim:first-child .ncimdel'); await wait(150);
+  { const left = await p.evaluate(() => ({ imgs: ncCur.nt.imgs.slice(), n: $$('#ncImgBox .ncim').length, many: $('#ncImgBox').classList.contains('many') }));
+    check('✕ am ersten Bild: nur das zweite bleibt', left.imgs.length === 1 && left.imgs[0] === imgB && left.n === 1 && !left.many, left); }
   await p.keyboard.press('Escape'); await wait(300);
   const noteId = await p.evaluate(() => S.note.id);
   await p.click('#bBack'); await wait(800);
   const kept = await p.evaluate(async ([a, bb]) => [!!(await dbImageGet(a)), !!(await dbImageGet(bb))], [imgA, imgB]);
-  check('Seite zu: altes Bild der Karte gelöscht, neues bleibt', !kept[0] && kept[1], kept);
+  check('Seite zu: entferntes Bild der Karte gelöscht, das andere bleibt', !kept[0] && kept[1], kept);
   await p.evaluate(async id => openNote(await dbIndexGet(id)), noteId); await wait(600);
   [m] = await marks();
-  check('Nach dem Wiederöffnen: Erklärung gespeichert', m && m.nt.img === imgB && m.nt.ink.length === 4 && m.kids === text.length, m && { img: m.nt.img, kids: m.kids });
+  check('Nach dem Wiederöffnen: Erklärung gespeichert', m && m.nt.imgs.length === 1 && m.nt.imgs[0] === imgB && m.nt.ink.length === 4 && m.kids === text.length, m && { imgs: m.nt.imgs, kids: m.kids });
 
   // ---------- Sicherung: als Kopie wiederhergestellt, Bild der Erklärung mit neuer id ----------
   await p.click('#bBack'); await wait(600);
@@ -251,8 +254,8 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
   await p.setInputFiles('#fRestore', bk); await p.waitForFunction(() => !navBusy, null, { timeout: 20000 }); await wait(500);
   const rest = await p.evaluate(async () => {
     const copy = (await dbIndexAll()).find(x => / \(Sicherung\)$/.test(x.name)); if (!copy) return null;
-    const mk = (await dbItems(copy.id)).find(i => i.nt); const im = mk && await dbImageGet(mk.nt.img);
-    return { name: copy.name, img: mk && mk.nt.img, has: !!im, n: im && im.n === copy.id, text: mk && mk.nt.text };
+    const mk = (await dbItems(copy.id)).find(i => i.nt); const im = mk && await dbImageGet(mk.nt.imgs[0]);
+    return { name: copy.name, img: mk && mk.nt.imgs[0], has: !!im, n: im && im.n === copy.id, text: mk && mk.nt.text };
   });
   check('Sicherung als Kopie: Erklärung mit eigenem Bild', rest && rest.has && rest.n && rest.img !== imgB && rest.text === m.nt.text, rest);
   fs.unlinkSync(bk);
@@ -269,7 +272,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
       inkX: c.getBoundingClientRect().left - m.getBoundingClientRect().left };
   });
   await p.evaluate(async id => openNote(await dbIndexGet(id)), noteId); await wait(600);
-  await fingerTap(...mid, 0); await p.waitForFunction(() => $('#ncImg').naturalWidth > 0, null, { timeout: 5000 }).catch(() => {}); await wait(300);
+  await fingerTap(...mid, 0); await p.waitForFunction(() => $('#ncImgBox img') && $('#ncImgBox img').naturalWidth > 0, null, { timeout: 5000 }).catch(() => {}); await wait(300);
   const g0 = await glanceInfo();
   await p.click('#ncGrow'); await wait(800);
   const g1 = await glanceInfo();
@@ -366,7 +369,7 @@ const near = (a, b, e = 0.5) => Math.abs(a - b) <= e;
 
   // ---------- Bilder im modernen Aussehen (klein, dann groß) ----------
   await p.evaluate(async id => { toggleTheme(); await openNote(await dbIndexGet(id)); }, noteId); await wait(600);
-  await fingerTap(...mid); await p.waitForFunction(() => $('#ncImg').naturalWidth > 0, null, { timeout: 5000 }).catch(() => {}); await wait(400);
+  await fingerTap(...mid); await p.waitForFunction(() => $('#ncImgBox img') && $('#ncImgBox img').naturalWidth > 0, null, { timeout: 5000 }).catch(() => {}); await wait(400);
   await shotAround('notes_card_modern.png', (await card()).r);
   await p.click('#ncGrow'); await wait(800);
   await p.screenshot({ path: path.join(SHOTS, 'notes_glance_modern.png') });

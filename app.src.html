@@ -316,11 +316,22 @@ html.xp #txBar .txc{border-radius:2px;border:1px solid #fff;box-shadow:0 0 0 1px
 #noteCard.big{width:min(760px,calc(100vw - 16px))}
 #ncGrow{position:absolute;top:5px;right:5px;width:30px;height:30px;padding:0;justify-content:center;border-radius:8px;background:var(--panel);border:1px solid var(--border);color:var(--text);z-index:1}
 #ncGrow svg.i{width:17px;height:17px}
-#ncImgBox{position:relative}
-#ncImg{display:block;max-width:100%;max-height:180px;margin:0 auto;border-radius:8px;cursor:zoom-in}
-#noteCard.big #ncImg{max-height:min(560px,70vh);cursor:zoom-out}
-#ncImgDel{position:absolute;top:4px;right:4px;width:30px;height:30px;padding:0;justify-content:center;border-radius:50%;background:rgba(0,0,0,.5);color:#fff}
-#ncImgDel svg.i{width:16px;height:16px}
+/* Bilder der Notiz: eine Reihe, bei mehreren zum Wischen. Größe aus Seitenverhältnis (--r) und Breite (--w) des Bildes,
+   ehe es geladen ist: eines höchstens --mw breit und --mh hoch, mehrere als Vorschau --th hoch (zugeschnitten, höchstens
+   --tw breit); groß (Antippen) jedes ganz (höchstens so groß, wie es ist), eines nach dem anderen (einrasten) */
+#ncImgBox{position:relative;display:flex;align-items:center;justify-content:safe center;gap:6px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:thin;--mw:100%;--mh:180px;--th:108px;--tw:220px}
+.ncim{position:relative;flex:none;width:min(var(--mw),calc(var(--mh) * var(--r,1)),var(--w,9999px))}
+.ncim.wait{display:none}
+.ncim img{display:block;width:100%;height:auto;aspect-ratio:var(--r,1);object-fit:contain;border-radius:8px;cursor:zoom-in;-webkit-user-drag:none}
+#ncImgBox.many .ncim{width:min(var(--tw),calc(var(--th) * var(--r,1)))}
+#ncImgBox.many .ncim img{height:var(--th);object-fit:cover}
+#noteCard.big #ncImgBox{--mh:min(560px,70vh);--th:min(400px,52vh);--tw:100%;scroll-snap-type:x mandatory}
+#noteCard.big .ncim{scroll-snap-align:center}
+#noteCard.big .ncim img{cursor:zoom-out}
+#noteCard.big #ncImgBox.many .ncim{width:min(var(--tw),calc(var(--th) * var(--r,1)),var(--w,9999px))}
+#noteCard.big #ncImgBox.many .ncim img{height:auto}
+#ncImgBox .ncimdel{position:absolute;top:4px;right:4px;width:30px;height:30px;padding:0;justify-content:center;border-radius:50%;background:rgba(0,0,0,.5);color:#fff}
+#ncImgBox .ncimdel svg.i{width:16px;height:16px}
 #ncText{width:100%;min-height:58px;resize:vertical;font:inherit;font-size:14px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:7px 9px;-webkit-user-select:text;user-select:text}
 #ncText:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .ncink{position:relative;height:140px;border-radius:9px;border:1px solid var(--border);overflow:hidden;background:var(--paper)}
@@ -358,9 +369,8 @@ html.xp #txBar .txc{border-radius:2px;border:1px solid #fff;box-shadow:0 0 0 1px
 #ncDim{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.35)}
 #noteCard.glance{position:fixed!important;left:7.5vw!important;top:7.5vh!important;width:85vw!important;height:85vh;max-width:none;max-height:none!important;z-index:36;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);grid-template-areas:"img text btns" "ink ink ink";column-gap:12px;row-gap:12px;padding:14px;overflow:hidden;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.35)}
 #noteCard.glance:has(#ncImgBox.hidden){grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"text btns" "ink ink"}
-#noteCard.glance #ncImgBox{grid-area:img;align-self:start}
-#noteCard.glance #ncImg{max-height:120px;max-width:min(260px,22vw);margin:0}
-#noteCard.glance.big #ncImg{max-height:min(440px,45vh);max-width:min(640px,45vw)}
+#noteCard.glance #ncImgBox{grid-area:img;align-self:start;max-width:min(440px,34vw);--mw:min(260px,22vw);--mh:120px;--th:96px;--tw:180px}
+#noteCard.glance.big #ncImgBox{max-width:min(640px,45vw);--mw:min(640px,45vw);--mh:min(440px,45vh);--th:min(380px,42vh);--tw:min(600px,42vw)}
 #noteCard.glance #ncText{grid-area:text;height:auto!important;min-height:76px;resize:none;align-self:stretch}
 #noteCard.glance .ncink{grid-area:ink;height:auto;min-height:0}
 #noteCard.glance .ncrow{grid-area:btns;display:grid;grid-template-columns:repeat(2,auto);gap:4px;align-content:start}
@@ -518,7 +528,8 @@ html.xp #noteCard::before{margin:-10px -12px 2px;top:-10px;flex-shrink:0}
 html.xp #ncText{border:1px solid #7f9db9;border-radius:0;background:#fff;color:#000;font-family:Tahoma,Verdana,sans-serif}
 html.xp #ncText:focus{outline:none;border-color:#316ac5;box-shadow:0 0 0 1px #c1d2ee}
 html.xp .ncink{border-radius:0;border:2px solid;border-color:#808080 #fff #fff #808080}
-html.xp #ncImg{border-radius:0;box-shadow:0 0 0 1px #aca899}
+html.xp #ncImgBox{padding:1px}
+html.xp .ncim img{border-radius:0;box-shadow:0 0 0 1px #aca899}
 html.xp .ncrow button{border:1px solid #003c74;border-radius:3px;background:var(--xp-btn);color:#000}
 html.xp .ncrow button:hover{box-shadow:inset 0 0 0 1px #fff0cf,inset 0 0 0 2px #f6b43a}
 html.xp .ncrow .del{color:#c0201a}
@@ -843,10 +854,10 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
 <div id="txBar" class="hidden" role="toolbar" aria-label="Text formatieren"><select id="txFont" title="Schrift" aria-label="Schrift"></select><button id="txMinus" title="Kleiner" aria-label="Kleiner">A<small>−</small></button><span id="txSize" title="Schriftgröße"></span><button id="txPlus" title="Größer" aria-label="Größer">A<small>+</small></button><i class="txsep"></i><button class="txf" data-cmd="bold" title="Fett (Strg + B)" aria-label="Fett"><b>F</b></button><button class="txf" data-cmd="italic" title="Kursiv (Strg + I)" aria-label="Kursiv"><i>K</i></button><button class="txf" data-cmd="underline" title="Unterstrichen (Strg + U)" aria-label="Unterstrichen"><u>U</u></button><button class="txf" data-cmd="strikeThrough" title="Durchgestrichen" aria-label="Durchgestrichen"><s>S</s></button><i class="txsep"></i><span id="txColors"></span><i class="txsep"></i><button class="txa" data-al="l" title="Linksbündig" aria-label="Linksbündig"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg></button><button class="txa" data-al="c" title="Zentriert" aria-label="Zentriert"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></svg></button><button class="txa" data-al="r" title="Rechtsbündig" aria-label="Rechtsbündig"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M10 10h10M4 14h16M10 18h10"/></svg></button><i class="txsep"></i><button id="txDel" title="Text löschen" aria-label="Text löschen"><svg class="i"><use href="#ic-trash"/></svg></button><button id="txOk" title="Fertig (Esc)" aria-label="Fertig"><svg class="i" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></div>
 <div id="ncDim" class="hidden"></div>
 <div id="noteCard" class="menu hidden" data-title="Notiz" role="dialog" aria-label="Notiz">
-  <div id="ncImgBox" class="hidden"><img id="ncImg" alt="Bild der Notiz" title="Antippen: groß / klein"><button id="ncImgDel" title="Bild entfernen"><svg class="i"><use href="#ic-x"/></svg></button></div>
+  <div id="ncImgBox" class="hidden" role="list" aria-label="Bilder der Notiz"></div>
   <textarea id="ncText" rows="3" placeholder="Kurze Notiz …" spellcheck="false" aria-label="Text der Notiz"></textarea>
   <div class="ncink"><canvas id="ncInk"></canvas><canvas id="ncLive"></canvas><span class="nchint">Hier mit dem Stift schreiben</span><div id="ncDot"></div><button id="ncZoom" class="hidden" title="Zoom zurücksetzen (100 %)" aria-label="Zoom der Schreibfläche zurücksetzen">100 %</button><button id="ncTools" title="Stift: Werkzeug, Farbe und Dicke" aria-label="Stift: Werkzeug, Farbe und Dicke"><svg class="i"><use href="#ic-pen"/></svg><i></i></button><div id="ncPal" class="hidden" role="toolbar" aria-label="Werkzeug, Farbe und Dicke"></div><button id="ncGrow" title="Schreibfläche vergrößern" aria-label="Schreibfläche vergrößern"><svg class="i"><use href="#ic-grow"/></svg></button></div>
-  <div class="ncrow"><button id="ncPaste" title="Text oder Bild aus der Zwischenablage (auch Strg + V)"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button><button id="ncFile" title="Bild aus einer Datei"><svg class="i"><use href="#ic-img"/></svg>Bild</button><button id="ncClear" title="Geschriebenes löschen"><svg class="i"><use href="#ic-eraser"/></svg>Leeren</button><button id="ncDel" class="del" title="Notiz entfernen"><svg class="i"><use href="#ic-trash"/></svg></button></div>
+  <div class="ncrow"><button id="ncPaste" title="Text oder Bild aus der Zwischenablage (auch Strg + V)"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button><button id="ncFile" title="Bilder aus Dateien (auch mehrere auf einmal)"><svg class="i"><use href="#ic-img"/></svg>Bild</button><button id="ncClear" title="Geschriebenes löschen"><svg class="i"><use href="#ic-eraser"/></svg>Leeren</button><button id="ncDel" class="del" title="Notiz entfernen"><svg class="i"><use href="#ic-trash"/></svg></button></div>
 </div>
 <div id="pasteMenu" class="menu hidden"><button id="pmPaste"><svg class="i"><use href="#ic-clip"/></svg>Einfügen</button></div>
 <div id="tapeMenu" class="menu hidden" role="dialog" aria-label="Dieses Tape"><span id="tmPic" aria-hidden="true"></span><button id="tmCover" role="switch" aria-checked="true"><span>Abgedeckt</span><i class="tmsw" aria-hidden="true"></i></button><i class="tmsep"></i><button id="tmDel" title="Dieses Tape entfernen (mit dem, was darauf steht)" aria-label="Dieses Tape entfernen"><svg class="i"><use href="#ic-trash"/></svg></button><div id="tmColors" role="group" aria-label="Farbe dieses Tapes"></div><div id="tmPats" role="group" aria-label="Muster dieses Tapes"></div></div>
@@ -906,7 +917,7 @@ html.xp #toast::before{content:'i';position:absolute;left:10px;top:50%;width:17p
 <div id="homeMenu" class="menu hidden"></div>
 
 <input type="file" id="fImg" accept="image/*" multiple class="hidden">
-<input type="file" id="fNoteImg" accept="image/*" class="hidden">
+<input type="file" id="fNoteImg" accept="image/*" multiple class="hidden">
 <input type="file" id="fPdf" accept="application/pdf,.pdf" class="hidden">
 <input type="file" id="fRestore" accept=".notizen,.json,application/json" class="hidden">
 <div id="dlg" class="hidden"><form id="dlgBox" data-title="Notizen"><div id="dlgPrev" class="hidden"><span class="pgs"></span><span class="cover"><span class="gl"></span><span class="lbl"><span class="t"></span></span></span></div><div id="dlgMsg"></div><div id="dlgFmt" class="hidden"><div class="fmts"><button type="button" data-f="inf"><span class="pv"><i></i></span><b>Unendlich</b><small>Freie Fläche</small></button><button type="button" data-f="a4"><span class="pv"><i></i></span><b>DIN A4</b><small>210 × 297 mm</small></button><button type="button" data-f="a3"><span class="pv"><i></i></span><b>DIN A3</b><small>297 × 420 mm</small></button><button type="button" data-f="cornell"><span class="pv"><i></i></span><b>Cornell</b><small>A4 · zum Lernen</small></button></div><div class="ori"><button type="button" data-o="p"><svg viewBox="0 0 24 24"><rect x="6.5" y="3.5" width="11" height="17" rx="2"/></svg>Hochformat</button><button type="button" data-o="l"><svg viewBox="0 0 24 24"><rect x="3.5" y="6.5" width="17" height="11" rx="2"/></svg>Querformat</button></div><div id="dlgFmtHint"></div></div><input id="dlgIn" spellcheck="false" maxlength="80"><div id="dlgSw" class="hidden"></div><div class="row"><button type="button" class="btn" id="dlgNo">Abbrechen</button><button type="submit" class="btn primary" id="dlgOk">OK</button></div></form></div>
@@ -5498,17 +5509,21 @@ function noteBadgeAt(x, y) {
 }
 // ohne die Markierung id; was an ihr hing, ist wieder frei
 const dropNote = id => S.items.filter(x => x.id !== id).map(x => x.on === id ? (({ on, ...r }) => r)(x) : x);
+// Bilder einer Erklärung (ids, in ihrer Reihenfolge): früher genau eines (nt.img), jetzt eine Liste (nt.imgs)
+const noteImgs = nt => nt.imgs ? nt.imgs.slice() : nt.img ? [nt.img] : [];
 // id: vorhandene Markierung; ids: neu zu markieren; box: wo sie liegt (Welt), die Karte kommt darunter oder darüber
 function openNoteCard(id, ids, box) {
   closeMenus(); clearSel();
   const it = id ? noteOf(id) : null; if (id && !it) return;
-  const nt = it ? it.nt : { text: '', img: null, ink: [] };
-  ncCur = { id: it ? it.id : null, ids: it ? null : ids, box, nt: { text: nt.text || '', img: nt.img || null, ink: (nt.ink || []).map(s => ({ ...s })) }, orig: it ? JSON.stringify(nt) : null, url: null };
+  const nt = it ? it.nt : { text: '', imgs: [], ink: [] }, imgs = noteImgs(nt);
+  // orig so, wie syncNoteCard schreibt: eine ältere Erklärung (nt.img) öffnen und schließen ist kein Schritt
+  ncCur = { id: it ? it.id : null, ids: it ? null : ids, box, nt: { text: nt.text || '', imgs, ink: (nt.ink || []).map(s => ({ ...s })) },
+    orig: it ? JSON.stringify({ text: nt.text || '', imgs, ink: nt.ink || [] }) : null, pics: new Map() };
   const m = $('#noteCard'); m.classList.remove('big', 'glance'); ncDraw = null; liveInkClear(); ncResetView();
   ncPal.getAnimations().forEach(a => a.cancel()); delete ncPal.dataset.closing; ncPal.classList.add('hidden'); ncToolBtn();
   $('#ncText').value = ncCur.nt.text;
   m.classList.remove('hidden');
-  growBtn(); fitNoteText(); drawNoteInk(); placeNoteCard(); showNoteImg();
+  growBtn(); fitNoteText(); drawNoteInk(); placeNoteCard(); showNoteImgs();
   popIn(m, null);
 }
 // Pfeil oben rechts in der Schreibfläche: großes Fenster auf bzw. zurück zur kleinen Karte
@@ -5559,8 +5574,8 @@ function placeNoteCard() {
 // ganz leer heißt keine Erklärung
 function syncNoteCard(final) {
   const c = ncCur; if (!c || !S.note) return;
-  const nt = { text: $('#ncText').value.trim(), img: c.nt.img || null, ink: c.nt.ink.slice() };
-  const empty = !nt.text && !nt.img && !nt.ink.length, js = JSON.stringify(nt);
+  const nt = { text: $('#ncText').value.trim(), imgs: c.nt.imgs.slice(), ink: c.nt.ink.slice() };
+  const empty = !nt.text && !nt.imgs.length && !nt.ink.length, js = JSON.stringify(nt);
   if (c.id) {
     if (!noteOf(c.id)) return;
     if (empty) { if (final) commit(dropNote(c.id)); return; }
@@ -5575,25 +5590,72 @@ function syncNoteCard(final) {
 function saveNoteCard() {
   const c = ncCur; if (!c) return;
   syncNoteCard(true); ncCur = null;
-  if (c.url) URL.revokeObjectURL(c.url);
+  dropPics(c);
 }
-async function setNoteImage(file) {
-  const c = ncCur; if (!c || !S.note) return;
-  try {
-    const { blob, low, w, h } = await prepareImage(file), id = uid();
-    await dbImagePut({ id, n: S.note.id, blob, low, w, h });
-    if (ncCur !== c) return;
-    c.nt.img = id; showNoteImg(blob);
-  } catch (e) { toast('Das Bild kann nicht geöffnet werden', 3500); }
+const dropPics = c => { for (const p of c.pics.values()) if (p.url) URL.revokeObjectURL(p.url); c.pics.clear(); };
+// Bilder in die Notiz, hinten an die Reihe (Datei, Zwischenablage, Strg + V oder hineingezogen, auch mehrere auf einmal)
+async function addNoteImages(files) {
+  const c = ncCur, note = S.note, list = [...files].filter(f => f.type.startsWith('image/'));
+  if (!c || !note || !list.length) return;
+  const many = list.length > 1; let bad = 0, gone = false;
+  if (many) toast('Bilder werden eingefügt …', 0);
+  for (const f of list) {
+    try {
+      const { blob, low, w, h } = await prepareImage(f), id = uid();
+      await dbImagePut({ id, n: note.id, blob, low, w, h });
+      if (ncCur !== c) { gone = true; break; }   // Karte inzwischen zu: das Bild räumt das Schließen der Seite weg
+      c.nt.imgs.push(id); c.pics.set(id, { rec: { blob, low, w, h } }); showNoteImgs(id);
+    } catch (e) { bad++; }
+  }
+  if (bad) toast(bad === list.length ? (many ? 'Die Bilder können' : 'Das Bild kann') + ' nicht geöffnet werden'
+    : (bad === 1 ? '1 Bild von ' : bad + ' Bilder von ') + list.length + (bad === 1 ? ' kann' : ' können') + ' nicht geöffnet werden', 3500);
+  else if (many && !gone) toast(list.length + ' Bilder eingefügt', 1600);
+  else if (many) $('#toast').style.opacity = 0;   // Karte schon zu: Hinweis weg
 }
-async function showNoteImg(blob) {
+// Bilder der Karte als Reihe (bei mehreren zum Wischen), jedes mit ✕. Klein die kleine Fassung (low), groß die volle.
+// Die Größe steht schon vor dem Laden fest (Seitenverhältnis --r und Breite --w aus dem Datensatz): nichts springt,
+// wenn ein Bild oder seine volle Fassung kommt. focus: dieses Bild in die Mitte der Reihe holen
+function showNoteImgs(focus) {
   const c = ncCur, box = $('#ncImgBox'); if (!c) return;
-  if (c.url) { URL.revokeObjectURL(c.url); c.url = null; }
-  if (c.nt.img && !blob) { const rec = await dbImageGet(c.nt.img).catch(() => null); if (ncCur !== c) return; blob = rec && rec.blob; }
-  if (!c.nt.img || !blob) { box.classList.add('hidden'); placeNoteCard(); return; }
-  c.url = URL.createObjectURL(blob);
-  const img = $('#ncImg'); img.onload = () => { if (ncCur === c) placeNoteCard(); }; img.src = c.url;
-  box.classList.remove('hidden');
+  const ids = c.nt.imgs, big = $('#noteCard').classList.contains('big');
+  for (const [id, p] of c.pics) if (!ids.includes(id)) { if (p.url) URL.revokeObjectURL(p.url); c.pics.delete(id); }
+  let wait = false, shown = 0;
+  const els = ids.map((id, i) => {
+    let p = c.pics.get(id); if (!p) c.pics.set(id, p = { rec: null });
+    if (!p.el) {
+      p.el = document.createElement('div'); p.el.className = 'ncim'; p.el.dataset.id = id; p.el.setAttribute('role', 'listitem');
+      p.el.innerHTML = '<img alt="" draggable="false" title="Antippen: groß / klein"><button class="ncimdel" title="Bild entfernen"><svg class="i"><use href="#ic-x"/></svg></button>';
+    }
+    const n = ids.length > 1 ? ' ' + (i + 1) : '';
+    p.el.firstChild.alt = 'Bild' + n + ' der Notiz'; p.el.lastChild.setAttribute('aria-label', 'Bild' + n + ' entfernen');
+    if (!p.rec) wait = true; else if (!p.rec.missing) { picSrc(c, p, big); shown++; }
+    p.el.classList.toggle('wait', !p.rec || !!p.rec.missing);   // noch nicht geladen oder fehlt: nicht zeigen
+    return p.el;
+  });
+  els.forEach((el, i) => { if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null); });
+  while (box.children.length > els.length) box.lastChild.remove();
+  box.classList.toggle('hidden', !shown); box.classList.toggle('many', shown > 1);
+  placeNoteCard();
+  const f = focus && c.pics.get(focus); if (f && f.rec) box.scrollLeft = f.el.offsetLeft + f.el.offsetWidth / 2 - box.clientWidth / 2;
+  if (wait && !c.picsLoading) loadPics(c);
+}
+// Datensätze der Bilder, die noch fehlen, alle zugleich (dann einmal neu, nicht Bild für Bild)
+async function loadPics(c) {
+  c.picsLoading = true;
+  const todo = [...c.pics].filter(([, p]) => !p.rec), recs = await Promise.all(todo.map(([id]) => dbImageGet(id).catch(() => null)));
+  c.picsLoading = false;
+  if (ncCur !== c) return;
+  todo.forEach(([, p], k) => { p.rec = recs[k] && recs[k].blob ? recs[k] : { missing: true }; });
+  showNoteImgs();
+}
+// Quelle eines Bildes: klein die kleine Fassung, groß (oder ohne kleine Fassung) die volle
+function picSrc(c, p, big) {
+  const r = p.rec, blob = big || !r.low ? r.blob : r.low; if (p.blob === blob) return;
+  const im = p.el.firstChild;
+  if (r.w && r.h) { p.el.style.setProperty('--r', r.w / r.h); p.el.style.setProperty('--w', r.w + 'px'); }
+  else im.onload = () => { if (im.naturalWidth && ncCur === c) { p.el.style.setProperty('--r', im.naturalWidth / im.naturalHeight); placeNoteCard(); } };   // alte Sicherung ohne Maße
+  if (p.url) URL.revokeObjectURL(p.url);   // das gezeigte Bild bleibt, bis das neue da ist
+  p.blob = blob; p.url = URL.createObjectURL(blob); im.src = p.url;
 }
 // Schreibfläche der Karte, wie auf der Seite: Papier und Muster der Seite; Stift, Textmarker und Tape mit Farbe, Dicke,
 // Deckkraft und Muster der Leiste (gemeinsam mit der Seite) und demselben Filter (Glättung, Druck); Textmarker und Tape
@@ -5879,19 +5941,36 @@ $('#noteCard').addEventListener('click', e => { if (ncPalm && e.target.closest('
 $('#ncText').addEventListener('input', fitNoteText);
 $('#ncGrow').onclick = () => setGlance(!$('#noteCard').classList.contains('glance'));
 $('#ncClear').onclick = () => { if (ncCur) { ncCur.nt.ink = []; drawNoteInk(); } };
-// Einfügen in der Notiz: ein Bild wird ihr Bild, Text kommt ins Textfeld (dorthin, wo der Cursor steht)
+// Einfügen in der Notiz: Bilder kommen zu ihren Bildern, Text ins Textfeld (dorthin, wo der Cursor steht)
 $('#ncPaste').onclick = async () => {
   const r = await clipRead(); if (!r || !ncCur) return;
-  if (r.files.length) setNoteImage(r.files[0]);
+  if (r.files.length) addNoteImages(r.files);
   else if (r.text.trim()) insertNoteText(r.text);
   else toast('In der Zwischenablage ist weder Text noch ein Bild', 3500);
 };
 function insertNoteText(text) { const ta = $('#ncText'); ta.setRangeText(text, ta.selectionStart, ta.selectionEnd, 'end'); fitNoteText(); }
 $('#ncFile').onclick = () => $('#fNoteImg').click();
-$('#fNoteImg').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) setNoteImage(f); };
-$('#ncImgDel').onclick = () => { if (ncCur) { ncCur.nt.img = null; showNoteImg(); } };
-$('#ncImg').onclick = () => { const m = $('#noteCard'); m.classList.toggle('big'); drawNoteInk(); if (!m.classList.contains('glance')) placeNoteCard(); };   // groß ansehen und wieder klein
-$('#ncDel').onclick = () => { const c = ncCur; if (!c) return; ncCur = null; if (c.url) URL.revokeObjectURL(c.url); if (c.id) commit(dropNote(c.id)); closeMenus(); };
+$('#fNoteImg').onchange = e => { const fs = [...e.target.files]; e.target.value = ''; addNoteImages(fs); };
+// Bild antippen: groß ansehen (das angetippte in der Mitte, zum Wischen) und wieder klein; ✕: dieses Bild aus der Notiz
+$('#ncImgBox').addEventListener('click', e => {
+  const c = ncCur, el = e.target.closest('.ncim'), m = $('#noteCard'); if (!c || !el) return;
+  if (e.target.closest('.ncimdel')) {
+    c.nt.imgs = c.nt.imgs.filter(x => x !== el.dataset.id);
+    if (!c.nt.imgs.length && m.classList.contains('big')) { m.classList.remove('big'); drawNoteInk(); }   // kein Bild mehr: wieder klein
+    showNoteImgs(); return;
+  }
+  m.classList.toggle('big'); drawNoteInk(); showNoteImgs(el.dataset.id);
+});
+// Mausrad über der Reihe (klein): seitlich blättern; am Ende scrollt wieder die Karte
+$('#ncImgBox').addEventListener('wheel', e => {
+  const b = e.currentTarget, max = b.scrollWidth - b.clientWidth;
+  if (e.ctrlKey || e.deltaX || max < 1 || $('#noteCard').classList.contains('big')) return;
+  const x = clamp(b.scrollLeft + e.deltaY * (e.deltaMode === 1 ? 40 : 1), 0, max); if (x === b.scrollLeft) return;
+  e.preventDefault(); b.scrollLeft = x;
+}, { passive: false });
+// Bilder auf die offene Karte gezogen: in die Notiz (nicht auf die Seite)
+$('#noteCard').addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); if (ncCur) addNoteImages(e.dataTransfer.files); });
+$('#ncDel').onclick = () => { const c = ncCur; if (!c) return; ncCur = null; dropPics(c); if (c.id) commit(dropNote(c.id)); closeMenus(); };
 $('#sNote').onclick = () => {
   if (!S.sel) return;
   const sel = S.items.filter(it => S.sel.ids.has(it.id)), mark = sel.find(it => it.nt);
@@ -6100,7 +6179,7 @@ $('#fPdf').onchange = e => { if (e.target.files[0]) insertPdf(e.target.files[0])
 document.addEventListener('paste', e => {
   if ($('#editor').classList.contains('hidden') || e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
   const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
-  if (ncCur && files.length) { e.preventDefault(); setNoteImage(files[0]); return; }   // offene Notiz: Bild hinein
+  if (ncCur && files.length) { e.preventDefault(); addNoteImages(files); return; }   // offene Notiz: Bilder hinein
   if (e.target.tagName === 'TEXTAREA') return;
   if (ncCur) { const text = e.clipboardData?.getData('text/plain'); if (text) { e.preventDefault(); insertNoteText(text); } return; }   // offene Notiz: Text ins Textfeld
   if (files.length) { e.preventDefault(); insertImages(files); }
@@ -7050,7 +7129,7 @@ async function closeNote() {
   if (S.saveError) { navBusy = false; toast('Die Notiz konnte nicht gespeichert werden und bleibt offen: ' + S.saveError.message, 7000); return; }
   // Bilder, die in der Notiz nicht mehr vorkommen, aus dem Speicher entfernen
   const note = S.note, used = new Set(S.items.filter(i => i.t === 'i').map(i => i.img));
-  for (const it of S.items) if (it.nt && it.nt.img) used.add(it.nt.img);   // Bild einer Erklärung
+  for (const it of S.items) if (it.nt) for (const id of noteImgs(it.nt)) used.add(id);   // Bilder der Erklärungen
   S.note = null; S.items = []; S.saved = new Map(); S.savedList = null; S.undo = []; S.redo = [];
   clearTiles(); pathCache.clear(); releaseImages();
   $('#editor').classList.add('hidden'); $('#home').classList.remove('hidden');
@@ -7165,7 +7244,7 @@ $('#fRestore').onchange = async e => {
         noteMap.set(r.id, { id: newId, copy, meta, replace: !copy, done: false });
       } else if (r.k === 'items') {
         const m = noteMap.get(r.n); if (!m || m.skip || m.done) continue;
-        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts), ...(it.nt && it.nt.img ? { nt: { ...it.nt, img: mapImg(r.n, it.nt.img) } } : {}) } : it.t === 'i' ? { img: mapImg(r.n, it.img) } : {}) }));
+        const items = r.items.map(it => ({ ...it, n: m.id, ...(it.t === 's' ? { pts: Float32Array.from(it.pts), ...(it.nt ? { nt: { ...it.nt, ...(it.nt.img ? { img: mapImg(r.n, it.nt.img) } : {}), ...(it.nt.imgs ? { imgs: it.nt.imgs.map(id => mapImg(r.n, id)) } : {}) } } : {}) } : it.t === 'i' ? { img: mapImg(r.n, it.img) } : {}) }));
         await writeRecords(m.meta, items, [], m.replace); m.done = true; count++;
       } else if (r.k === 'img') {
         const m = noteMap.get(r.n); if (!m || m.skip) continue;
