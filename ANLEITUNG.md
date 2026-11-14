@@ -1,4 +1,9 @@
-# Notizen für das Surface Pro 11 (Version 1.6.3)
+# Notizen für das Surface Pro 11 (Version 1.6.4)
+
+## Neu in 1.6.4: Zoomen auf PDF-Seiten ohne Flackern
+- **Kein Flackern mehr beim Reinzoomen:** Zoomt man mit zwei Fingern in PDF-Folien hinein, blitzt nicht mehr kurz eine weiße (ohne PDF schwarze) Fläche auf. Die scharfe Ansicht bleibt stehen, bis die neue fertig ist.
+- **Schärfer beim Rauszoomen:** Wo beim Rauszoomen noch nachgeladen wird, zeigt die App eine deutlich schärfere Vorschau. In einem langen Skript (54 Folien untereinander) ist eine Folie darin etwa 140 statt 26 Pixel breit, also mit Titel und Aufbau erkennbar statt als graue Fläche.
+- **Browser im Energiesparmodus:** In Browsern mit Energiesparmodus (z. B. Helium) wird die Seite beim Aufsetzen des Stifts nicht mehr schwarz. Die Windows-App schreibt weiter über die schnelle Ebene.
 
 ## Neu in 1.6.3: Desktop-App mit neuem Chromium, sparsamer
 - **Neues Chromium in der Desktop-App:** Die Windows-App läuft jetzt auf Electron 45 (Chromium 156) statt Electron 38 (Chromium 140), dieselbe Generation wie aktuelle Browser und mit allen Sicherheitsupdates. Auf dem PC gemessen braucht sie fürs Schreiben, Tape, Formen und Verschieben zusammen etwa ein Fünftel weniger Rechenzeit.
