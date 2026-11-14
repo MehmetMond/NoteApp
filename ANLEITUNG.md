@@ -1,4 +1,9 @@
-# Notizen für das Surface Pro 11 (Version 1.6.2)
+# Notizen für das Surface Pro 11 (Version 1.6.3)
+
+## Neu in 1.6.3: Desktop-App mit neuem Chromium, sparsamer
+- **Neues Chromium in der Desktop-App:** Die Windows-App läuft jetzt auf Electron 45 (Chromium 156) statt Electron 38 (Chromium 140), dieselbe Generation wie aktuelle Browser und mit allen Sicherheitsupdates. Auf dem PC gemessen braucht sie fürs Schreiben, Tape, Formen und Verschieben zusammen etwa ein Fünftel weniger Rechenzeit.
+- **Keine Akku-Falle mehr beim Start:** Ein zweites Antippen des Symbols, während die App noch lädt, schaltet sie nicht mehr dauerhaft auf Darstellung ohne Grafikkarte (dann zeichnet der Prozessor alles, das kostet viel Akku). Musste die App einmal ohne Grafikkarte laufen, versucht sie es nach einem Update wieder mit.
+- **Protokoll:** `%APPDATA%\Notizen\notizen-log.txt` zeigt bei jedem Start, ob die Grafikbeschleunigung läuft.
 
 ## Neu in 1.6.2: Mehrere Bilder in einer Notiz, Zoomen in Notizen, Notiz geht mit ihrer Stelle, flüssigerer Werkzeugwechsel
 - **Mehrere Bilder in einer Notiz:** „Einfügen“, „Bild“ (jetzt auch mehrere Dateien auf einmal), Strg + V und Bilder, die man auf die Karte zieht, kommen zu den Bildern der Notiz dazu, statt das bisherige zu ersetzen. Mehrere Bilder stehen nebeneinander in einer Reihe: mit dem Finger wischen (oder mit dem Mausrad) blättert durch. Ein Bild antippen zeigt die Bilder groß, das angetippte in der Mitte, zum Durchwischen; nochmal antippen wieder klein. Jedes Bild hat sein eigenes ✕. Notizen mit einem Bild bleiben, wie sie sind.
