@@ -148,9 +148,10 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   const y = box[1] + box[3] / 2, x0 = box[0] + 20, x1 = box[0] + box[2] - 20;
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x0, y, pointerType: 'pen' }); await pen('mousePressed', x0, y);
   const before = await p.evaluate(() => window.__redraws);
-  // viele Bewegungen ohne Pause (wie ein schneller Stift): höchstens ein Neuzeichnen pro Bild
+  // viele Bewegungen ohne Pause (wie ein schneller Stift): höchstens ein Neuzeichnen pro Bild. Ohne auf jede Bestätigung
+  // zu warten: im Browser (normale Live-Ebene) bestätigt Chromium eine Bewegung erst mit dem nächsten Bild
   const t0 = Date.now(); let moves = 0;
-  for (let i = 1; i <= 60; i++) { await pen('mouseMoved', x0 + (x1 - x0) * i / 60, y + 6 * Math.sin(i / 5)); moves++; }
+  await Promise.all(Array.from({ length: 60 }, (_, k) => { moves++; const i = k + 1; return pen('mouseMoved', x0 + (x1 - x0) * i / 60, y + 6 * Math.sin(i / 5)); }));
   const dt = Date.now() - t0; await frames();
   const during = (await p.evaluate(() => window.__redraws)) - before;
   await pen('mouseReleased', x1, y); await p.waitForTimeout(200);

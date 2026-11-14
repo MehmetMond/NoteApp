@@ -2192,9 +2192,12 @@ $('#tmDel').onclick = () => {
    der gerade geschrieben wird, sowie Lasso und Auswahl. */
 const cvMain = $('#cvMain'), cvLive = $('#cvLive'), penDot = $('#penDot');
 const ctxMain = cvMain.getContext('2d', { alpha: false });
-// Wenig Verzögerung beim Schreiben nur unter Windows (Surface): Laut Chrome darf über so einer durchsichtigen Fläche
-// nichts liegen, hier liegt die Leiste darüber. Auf Android (Pixel 8) war damit die ganze Notiz schwarz, nur die Leiste zu sehen
-const ctxLive = cvLive.getContext('2d', { desynchronized: /Windows/.test(navigator.userAgent) });
+// Wenig Verzögerung beim Schreiben nur im Windows-Programm (Surface): Laut Chrome darf über so einer durchsichtigen Fläche
+// nichts liegen, hier liegt die Leiste darüber. Auf Android (Pixel 8) war damit die ganze Notiz schwarz, nur die Leiste zu
+// sehen. Im Browser nicht: Mit dem Energiesparmodus von Chromium (Helium 157, „bei Akkubetrieb“) zeigt er die Ebene als
+// schwarze Fläche über der ganzen Notiz, sobald der Stift schwebt oder schreibt (und gibt der Seite nur 8 Bilder/s)
+const LOW_LATENCY = /Windows/.test(navigator.userAgent) && /Electron\//.test(navigator.userAgent);
+const ctxLive = cvLive.getContext('2d', { desynchronized: LOW_LATENCY });
 let VW = 0, VH = 0, DPR = 1;
 const T = 512, MAX_TILES = 110;
 const tiles = new Map();
@@ -5708,7 +5711,7 @@ function picSrc(c, p, big) {
 // radieren ganze Striche. Werkzeug, Farbe und Dicke: Knopf oben links, ein Tipp klappt die Auswahl auf.
 const ncInk = $('#ncInk'), ncLive = $('#ncLive'), ncDot = $('#ncDot'), ncPal = $('#ncPal'), inkPaths = new WeakMap(); let ncDraw = null;
 const ncBase = ncInk.getContext('2d', { alpha: false });
-const ncLiveCtx = ncLive.getContext('2d', { desynchronized: /Windows/.test(navigator.userAgent) });
+const ncLiveCtx = ncLive.getContext('2d', { desynchronized: LOW_LATENCY });
 let ncTool = 'pen';   // Werkzeug der Schreibfläche: pen, hl, tape, eraser
 const NC_TOOLS = [['pen', 'ic-pen', 'Stift'], ['hl', 'ic-hl', 'Textmarker'], ['tape', 'ic-tape', 'Tape'], ['eraser', 'ic-eraser', 'Radierer']];
 // Maßstab der Schreibfläche: 1, außer das Geschriebene ist größer als die Fläche (im großen Fenster geschrieben) –

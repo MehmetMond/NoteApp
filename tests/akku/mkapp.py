@@ -18,5 +18,5 @@ json.dump({k: pk[k] for k in ('name', 'productName', 'version', 'description', '
 shutil.copy(os.path.join(repo, 'Notizen.html'), os.path.join(app, 'app', 'index.html'))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import asar
 asar.pack(app, asar_path, ['app/index.html', 'icon.png', 'main.js', 'package.json'])
-print('app.asar', os.path.getsize(asar_path)); shutil.rmtree(app, ignore_errors=True)
-print('ok', os.path.getsize(os.path.join(app, 'app', 'index.html')))
+print('app.asar', os.path.getsize(asar_path), 'index.html', os.path.getsize(os.path.join(app, 'app', 'index.html'))); shutil.rmtree(app, ignore_errors=True)
+print('ok')
