@@ -53,6 +53,20 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     settleZoom(); out.push(fallbackL); renderTile = window.__rt; requestDraw(); return { L0, out };
   });
   check('Zoomen über mehrere Stufen: Ersatz bleibt die Stufe mit Kacheln', res.fallback.out.every(f => f === res.fallback.L0), res.fallback);
+  // Wie mit echten Fingern (je Bild eine Bewegung pro Finger): im Bild direkt nach einem Wechsel stimmt die Stufe, und
+  // draw() malt schon bis zu 3 Kacheln der neuen Stufe. Beim nächsten Wechsel bleibt Ersatz trotzdem die Stufe, die den
+  // Bildschirm abdeckt (in 1.6.4 wurde es die fast leere Zwischenstufe)
+  await p.evaluate(() => setView(0, 0, 1, true));
+  await p.waitForTimeout(700);   // Kacheln der Stufe 1 fertig
+  res.fallbackDrawn = await p.evaluate(() => {
+    const L0 = S.level, fb0 = fallbackL; wheelT = 1;   // mitten in einer Geste
+    zoomAt(VW / 2, VH / 2, 1.9, false); draw();
+    const made = [...tiles.values()].filter(t => t.L === S.level).length;
+    zoomAt(VW / 2, VH / 2, 3.5, false); const fb = fallbackL;
+    wheelT = null; settleZoom(); requestDraw();
+    return { L0, fb0, made, fb };
+  });
+  check('Zoomen, nach dem Wechsel schon Kacheln der neuen Stufe: Ersatz bleibt die Stufe, die den Bildschirm abdeckt', res.fallbackDrawn.fb0 === null && res.fallbackDrawn.made > 0 && res.fallbackDrawn.fb === res.fallbackDrawn.L0, res.fallbackDrawn);
   // Schreiben: nur ergänzt (dieselbe Leinwand); Radieren: erst nach kurzer Ruhe neu (neue Leinwand)
   await p.evaluate(() => setView(0, 0, 1, true));
   const cdp = await p.context().newCDPSession(p);

@@ -2166,14 +2166,24 @@ const tilePool = [];
 const stale = new Map();
 let fallbackL = null;
 const tkey = (L, i, j) => L + ':' + i + ':' + j;
-// Neue Zoomstufe: die bisherige wird Ersatz (ihre Kacheln skaliert, wo die neuen noch fehlen) – aber nur, wenn es für sie
-// Kacheln gibt. In einer Geste wechselt die Stufe mehrmals, ohne dass für die Zwischenstufen Kacheln entstehen; mit einer
-// leeren Ersatzstufe blieb dann auf dem ganzen Bildschirm nur die unscharfe Übersicht (bei PDFs weißes, ohne Übersicht
-// schwarzes Flackern beim Zoomen). So bleibt die letzte Stufe mit Kacheln der Ersatz
+// Neue Zoomstufe: die bisherige wird Ersatz (ihre Kacheln skaliert, wo die neuen noch fehlen), wenn sie vom Bildschirm
+// mindestens so viel abdeckt wie der bisherige Ersatz; sonst bleibt der. In einer Geste wechselt die Stufe mehrmals, und
+// die Zwischenstufen haben keine oder nur wenige Kacheln: im Bild direkt nach dem Wechsel malt draw() bis zu 3, je nachdem,
+// welcher Finger die Schwelle überschritten hat (je Bild kommt eine Bewegung pro Finger). Mit so einer Ersatzstufe blieb
+// fast der ganze Bildschirm unscharfe Übersicht (bei PDFs weißes, ohne Übersicht schwarzes Flackern beim Zoomen).
+// Bei gleich viel die neuere Stufe (näher am Zoom, schärfer)
 function switchLevel(z) {
-  let has = false; for (const t of tiles.values()) if (t.L === S.level) { has = true; break; }
-  if (has || fallbackL == null) fallbackL = S.level;
+  if (fallbackL == null || levelCover(S.level) >= levelCover(fallbackL) - 1) fallbackL = S.level;
   S.level = z;
+}
+// Fläche der Ansicht (Welt), die Kacheln der Stufe L abdecken (fertige und Platzhalter)
+function levelCover(L) {
+  const [x0, y0] = toWorld(0, 0), [x1, y1] = toWorld(VW, VH); let a = 0;
+  for (const m of [tiles, stale]) for (const t of m.values()) if (t.L === L) {
+    const w = Math.min(x1, t.wb[2]) - Math.max(x0, t.wb[0]), h = Math.min(y1, t.wb[3]) - Math.max(y0, t.wb[1]);
+    if (w > 0 && h > 0) a += w * h;
+  }
+  return a;
 }
 function clearTiles() {
   for (const t of tiles.values()) tilePool.push(t); for (const t of stale.values()) tilePool.push(t);
