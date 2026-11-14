@@ -1192,6 +1192,15 @@ const tilePool = [];
 const stale = new Map();
 let fallbackL = null;
 const tkey = (L, i, j) => L + ':' + i + ':' + j;
+// Neue Zoomstufe: die bisherige wird Ersatz (ihre Kacheln skaliert, wo die neuen noch fehlen) – aber nur, wenn es für sie
+// Kacheln gibt. In einer Geste wechselt die Stufe mehrmals, ohne dass für die Zwischenstufen Kacheln entstehen; mit einer
+// leeren Ersatzstufe blieb dann auf dem ganzen Bildschirm nur die unscharfe Übersicht (bei PDFs weißes, ohne Übersicht
+// schwarzes Flackern beim Zoomen). So bleibt die letzte Stufe mit Kacheln der Ersatz
+function switchLevel(z) {
+  let has = false; for (const t of tiles.values()) if (t.L === S.level) { has = true; break; }
+  if (has || fallbackL == null) fallbackL = S.level;
+  S.level = z;
+}
 function clearTiles() {
   for (const t of tiles.values()) tilePool.push(t); for (const t of stale.values()) tilePool.push(t);
   tiles.clear(); stale.clear(); fallbackL = null; requestDraw();
@@ -1485,11 +1494,13 @@ function schedulePrefetch() {
     if (ring.length) schedulePrefetch();
   }, { timeout: 1000 });
 }
-/* Unscharfe Übersicht der ganzen Seite: alle Striche und Bilder einmal klein (höchstens OV_MAX Gerätepixel je Seite).
-   Wo beim Rauszoomen oder schnellen Verschieben noch Kacheln fehlen, zeigt draw() sie vergrößert statt leerem Papier,
-   bis die scharfen Kacheln da sind. Kosten für den Akku: beim Schreiben kommen nur die neuen Striche dazu; nach anderen
+/* Unscharfe Übersicht der ganzen Seite: alle Striche und Bilder einmal klein (höchstens OV_PX Pixel Fläche und OV_DIM
+   je Seite). Wo beim Rauszoomen oder schnellen Verschieben noch Kacheln fehlen, zeigt draw() sie vergrößert statt leerem
+   Papier, bis die scharfen Kacheln da sind. Begrenzt wird die Fläche, nicht die längste Seite: bei einer langen Notiz
+   (54 PDF-Folien untereinander) war eine Folie mit 1536 px für die ganze Höhe nur 26 px breit und beim Zoomen ein weißer
+   Fleck; jetzt etwa 140 px. Kosten für den Akku: beim Schreiben kommen nur die neuen Striche dazu; nach anderen
    Änderungen (Radieren, Verschieben, Rückgängig …) wird sie erst nach 1,2 s Ruhe im Leerlauf neu gezeichnet, in Stücken. */
-const OV_MAX = 1536;
+const OV_PX = 3e6, OV_DIM = 8192;
 let ov = null, ovT = 0;   // ov: { c, box, s, items, note, dark }
 function overviewCheck() {
   if (!S.note || ovT || (ov && ov.note === S.note && ov.items === S.items && ov.dark === S.dark)) return;
@@ -1513,13 +1524,14 @@ function buildOverview(dl) {
   const cb = contentBox(items);
   if (!cb) { dropOverview(); return; }
   // Rahmen mit Reserve, damit Weiterschreiben (nächste Zeile darunter) meist nur dazukommt statt alles neu zu zeichnen:
-  // DIN-Seiten alle Blätter, unendliche Fläche ein Viertel der Größe rundum
+  // DIN-Seiten alle Blätter, unendliche Fläche ein Viertel der Größe rundum (400 bis 1500: bei einer langen Notiz sonst
+  // vor allem leerer Rand, eine 43 000 hohe Notiz bekam rundum 10 800)
   let box;
   if (paperSize()) { const a = sheetRect(0), z = sheetRect(sheetCount() - 1); box = [Math.min(cb[0], a[0]) - 24, Math.min(cb[1], a[1]) - 24, Math.max(cb[2], z[2]) + 24, Math.max(cb[3], z[3]) + 24]; }
-  else { const m = Math.max(400, (cb[2] - cb[0]) / 4, (cb[3] - cb[1]) / 4); box = [cb[0] - m, cb[1] - m, cb[2] + m, cb[3] + m]; }
+  else { const m = clamp(Math.max(cb[2] - cb[0], cb[3] - cb[1]) / 4, 400, 1500); box = [cb[0] - m, cb[1] - m, cb[2] + m, cb[3] + m]; }
   const w = box[2] - box[0], h = box[3] - box[1];
-  const s = Math.min(1, OV_MAX / w, OV_MAX / h), c = document.createElement('canvas');
-  c.width = Math.max(1, Math.ceil(w * s - 1e-6)); c.height = Math.max(1, Math.ceil(h * s - 1e-6));   // 1536,0000001 ist 1536
+  const s = Math.min(1, Math.sqrt(OV_PX / (w * h)), OV_DIM / w, OV_DIM / h), c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(w * s - 1e-6)); c.height = Math.max(1, Math.ceil(h * s - 1e-6));   // 8192,0000001 ist 8192
   const ctx = c.getContext('2d'); ctx.setTransform(s, 0, 0, s, -box[0] * s, -box[1] * s);
   const order = paintOrder(items); let k = 0;
   const step = d => {
@@ -1755,12 +1767,12 @@ function setView(tx, ty, z, settle) {
     else { liveWorld(); ctxLive.fillStyle = colorOf(a.c); livePiece(a); }
   }
   if (settle) settleZoom();
-  else if (z / S.level < 0.6 || z / S.level > 1.8) { fallbackL = S.level; S.level = z; }
+  else if (z / S.level < 0.6 || z / S.level > 1.8) switchLevel(z);
   requestDraw(); if (S.sel || (action && action.kind !== 'draw')) requestLive();
   viewChanged();
 }
 function settleZoom() {
-  if (S.level !== S.view.z) { fallbackL = S.level; S.level = S.view.z; requestDraw(); }
+  if (S.level !== S.view.z) { switchLevel(S.view.z); requestDraw(); }
 }
 function zoomAt(sx, sy, nz, settle = true) {
   nz = clamp(nz, 0.1, 8);

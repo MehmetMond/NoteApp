@@ -30,7 +30,7 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   });
   await p.waitForTimeout(1500);   // Kacheln fertig, Übersicht im Leerlauf aufgebaut
   res.built = await p.evaluate(() => ov && { w: ov.c.width, h: ov.c.height, upToDate: ov.items === S.items });
-  check('Übersicht nach dem Öffnen im Leerlauf aufgebaut, höchstens 1536 px', res.built && res.built.upToDate && Math.max(res.built.w, res.built.h) <= 1536, res.built);
+  check('Übersicht nach dem Öffnen im Leerlauf aufgebaut, höchstens 3 Mpx und 8192 px je Seite', res.built && res.built.upToDate && res.built.w * res.built.h <= 3e6 + res.built.w + res.built.h + 1 && Math.max(res.built.w, res.built.h) <= 8192, res.built);
   res.buildMs = await p.evaluate(() => { const t = []; for (let r = 0; r < 3; r++) { const t0 = performance.now(); dropOverview(); buildOverview({ timeRemaining: () => 1e9 }); t.push(performance.now() - t0); } return +Math.min(...t).toFixed(1); });
   check('Aufbau schnell (4000 Striche)', res.buildMs < 60, res.buildMs);
   // der Augenblick nach dem Rauszoomen: neue Kacheln angehalten, auf 35 % wie mit dem Mausrad
@@ -45,6 +45,14 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
   res.sharp = await px(sx, sy);
   check('Direkt nach dem Rauszoomen: am neuen Rand die Übersicht statt Papier', res.edge.marker[2] < 215 && res.edge.paper[2] > 235, res.edge);
   check('Danach die scharfe Kachel an derselben Stelle', res.sharp[2] < 215, res.sharp);
+  // Zwei-Finger-Zoom über mehrere Stufen, ohne dass für die Zwischenstufen Kacheln entstehen: Ersatz bleibt die Stufe
+  // mit Kacheln (vorher wurde es die leere Zwischenstufe, und der ganze Bildschirm zeigte kurz nur die Übersicht)
+  res.fallback = await p.evaluate(() => {
+    const L0 = S.level, out = []; renderTile = () => null;
+    for (const z of [0.7, 1.4, 2.8]) { zoomAt(VW / 2, VH / 2, z, false); out.push(fallbackL); }
+    settleZoom(); out.push(fallbackL); renderTile = window.__rt; requestDraw(); return { L0, out };
+  });
+  check('Zoomen über mehrere Stufen: Ersatz bleibt die Stufe mit Kacheln', res.fallback.out.every(f => f === res.fallback.L0), res.fallback);
   // Schreiben: nur ergänzt (dieselbe Leinwand); Radieren: erst nach kurzer Ruhe neu (neue Leinwand)
   await p.evaluate(() => setView(0, 0, 1, true));
   const cdp = await p.context().newCDPSession(p);
@@ -69,6 +77,13 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     return { gone, empty: ov === null };
   });
   check('Andere Seite: keine Übersicht der vorigen, leere Seite ohne Übersicht', res.other.gone && res.other.empty, res.other);
+  // lange Notiz (wie 54 PDF-Folien untereinander: 1094 breit, 43 000 hoch): eine Folie war in der Übersicht nur 26 px breit
+  res.tall = await p.evaluate(async () => {
+    commit(appendItems([], [makeStroke([0, 0, .5, 1094, 0, .5], 'ink', 2, false), makeStroke([0, 43000, .5, 1094, 43000, .5], 'ink', 2, false)]));
+    await new Promise(r => setTimeout(r, 1500));
+    return ov && { w: ov.c.width, h: ov.c.height, folie: Math.round(1094 * ov.s), upToDate: ov.items === S.items };
+  });
+  check('Lange Notiz: Übersicht nach Fläche begrenzt, eine Folie über 100 px breit', res.tall && res.tall.upToDate && res.tall.folie > 100 && res.tall.w * res.tall.h <= 3e6 + res.tall.w + res.tall.h + 1, res.tall);
   check('Keine Fehler', !errs.length, errs);
   res.fails = fails; res.errors = errs;
   console.log(JSON.stringify(res, null, 1));
