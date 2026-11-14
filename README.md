@@ -16,7 +16,7 @@ Bücher mit Seiten, unendliche Arbeitsfläche oder Dokument aus Blättern DIN A4
   (`app.js` beginnt mit `"use strict";`.) Die Platzhalter `@@PDFJS@@` und `@@PDFWORKER@@` nicht anfassen (beide stehen als Text in der Seite, pdf.js wird erst beim ersten PDF ausgeführt).
 - `build.py` – baut `Notizen.html` und fügt pdf.js 3.11.174 aus `pdfjs/` ein. Die Datei läuft auch direkt im Browser.
 - `Notizen-Browser.html` – die gebaute Datei (wie `Notizen.html`) für GitHub Pages: <https://mehmetmond.github.io/NoteApp/>. Dazu gehören `index.html` (leitet weiter), `sw.js` (Service Worker für den Offline-Start), `manifest.webmanifest` und `icon-180.png` (Home-Bildschirm, iPad). Der Service Worker läuft nur bei `http(s)://`, nicht im Windows-Programm.
-- `electron/` – Windows-Hülle (Electron 38, electron-builder).
+- `electron/` – Windows-Hülle (Electron 45, electron-builder).
 - `tests/` – Playwright-Tests (Chromium); Pfade in den Skripten ggf. anpassen.
 - `tests/akku/` – Messen und Prüfen in der echten Windows-App (Python, siehe unten).
 - `docs/` – Entwurfsnotizen für Version 1.4.
@@ -72,3 +72,10 @@ python tests/akku/test_screen.py <Notizen.exe> <Profilordner> <Ordner>   # Bilds
 python tests/akku/test_pdf.py <Notizen.exe> <Profilordner>           # PDF-Import mit nachgeladenem pdf.js
 ```
 `gpu_kosten.py` und `verschieben.py` sind die Versuche, mit denen die Akkufresser gefunden wurden (GPU-Zeit je Bild).
+
+Desktop-App gegen Browser (Node mit `playwright` oder `playwright-core`, keine Tastendrücke ans System): dieselbe Seite und dieselben Abläufe (Ruhe, Schreiben, Tape, Formen, Verschieben) in einer Testkopie der Hülle mit beliebigem `electron.exe` und in einem Browser mit eigenem Profil; gemessen wird die CPU-Zeit des ganzen Prozessbaums und die GPU-Laufzeit. Fenster standardmäßig außerhalb des Bildschirms (`ENG_POS=0,0`: sichtbar), DPR 2 wie das Surface.
+```sh
+node tests/akku/engines.js e45 electron <electron.exe> <leerer Profilordner> e45_1.json
+node tests/akku/engines.js helium browser <chrome.exe von Helium> <leerer Profilordner> hel_1.json
+node tests/akku/sum_engines.js e45_*.json hel_*.json
+```

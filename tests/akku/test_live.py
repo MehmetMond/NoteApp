@@ -85,7 +85,8 @@ try:
     for k in ('rect', 'ellipse', 'arrow', 'axes2'):
         c.js(f"setShape('{k}'); setTool('shape')")
         stroke([(300 + i * 4, 300 + i * 3) for i in range(60)])
-    settle(); st = state(); check(st['bb'] is None and st['nbad'] == 0, 'Formen: leer, Fehler %s' % st['bad'])
+    # eine neue Form bleibt im Formen-Werkzeug ausgewählt (seit 1.6.0): ohne Auswahl muss die Live-Ebene leer sein
+    settle(); c.js('clearSel()'); settle(); st = state(); check(st['bb'] is None and st['nbad'] == 0, 'Formen: leer, Fehler %s' % st['bad'])
     # eigene Formen: klein (genaue Vorschau) und groß (> 4000 Punkte, Vorschau als Bild)
     c.js(r'''(async () => {
       const mk = (id, n) => { const strokes = []; for (let k = 0; k < n; k++) { const p = new Float32Array(300); for (let i = 0; i < 100; i++) { p[i*3] = k * 6 + i * 0.4; p[i*3+1] = 20 * Math.sin(i / 9 + k); p[i*3+2] = 0.5; } strokes.push({ c: 'ink', w: 2, hl: false, pts: p }); }
@@ -97,7 +98,7 @@ try:
         c.js(f"setShape('{k}'); setTool('shape')")
         stroke([(300 + i * 5, 300 + i * 3) for i in range(60)], hold=0.4)
         stroke([(500, 500), (500, 500)])
-    settle(); time.sleep(0.4); st = state(); check(st['bb'] is None and st['nbad'] == 0, 'eigene Formen: leer, Fehler %s' % st['bad'])
+    settle(); time.sleep(0.4); c.js('clearSel()'); settle(); st = state(); check(st['bb'] is None and st['nbad'] == 0, 'eigene Formen: leer, Fehler %s' % st['bad'])
 
     # Zoomen während des Schreibens (Strg+Rad), Strich über den Rand, dann Zoom zurück
     key('p')

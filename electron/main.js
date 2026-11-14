@@ -18,10 +18,17 @@ function log(...a) {
 const exists = p => { try { return fs.existsSync(p); } catch (e) { return false; } };
 const touch = p => { try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(p, String(Date.now())); } catch (e) {} };
 const remove = p => { try { fs.unlinkSync(p); } catch (e) {} };
+// Merkt sich, unter welcher Version die Software-Darstellung nötig wurde
+const markSoftware = () => { try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(softwarePath, app.getVersion() + ' ' + Date.now()); } catch (e) {} };
 
 const gotLock = app.requestSingleInstanceLock();
+// Ohne Grafikbeschleunigung zeichnet die CPU alles, das kostet viel Akku. Deshalb gilt die Software-Darstellung nur für
+// die Version, unter der sie nötig wurde: eine neue Version (meist mit neuerem Electron) versucht es einmal wieder mit
+// Grafikbeschleunigung. Hängt auch die, greift wieder der Notfall-Modus.
+const swOld = (() => { try { return fs.readFileSync(softwarePath, 'utf8').split(' ')[0]; } catch (e) { return null; } })();
+if (gotLock && swOld !== null && swOld !== app.getVersion()) { log('Software-Darstellung von', swOld, '-> neue Version, wieder mit Grafikbeschleunigung'); remove(softwarePath); }
 // Ist der letzte Start hängen geblieben, läuft die App ab jetzt ohne Grafikbeschleunigung.
-if (gotLock && exists(pendingPath)) { log('letzter Start wurde nicht fertig -> Software-Darstellung'); touch(softwarePath); }
+if (gotLock && exists(pendingPath)) { log('letzter Start wurde nicht fertig -> Software-Darstellung'); markSoftware(); }
 const software = exists(softwarePath) || process.argv.includes('--software');
 if (gotLock && software) app.disableHardwareAcceleration();
 // Unter Windows kann die Verdeckungsberechnung neue Fenster als "verdeckt" einstufen und das erste Zeichnen verhindern
@@ -33,17 +40,25 @@ process.on('uncaughtException', e => {
   try { dialog.showErrorBox('Notizen – Fehler', String(e && e.message || e) + '\n\nProtokoll: ' + logPath); } catch (x) {}
 });
 
-let win = null, quitting = false, loaded = false;
+let win = null, quitting = false, loaded = false, createdAt = 0;
+// Wie die Grafik läuft (steht im Protokoll, sobald der Grafikprozess sie meldet, nur bei Änderung): schaltet ein neues
+// Electron den Grafiktreiber ab, zeichnet die CPU alles (viel Akku)
+let gpuLogged = '';
+app.on('gpu-info-update', () => {
+  let s = '';
+  try { const f = app.getGPUFeatureStatus(); s = ['gpu_compositing', '2d_canvas', 'rasterization'].map(k => k + '=' + f[k]).join(' '); } catch (e) {}
+  if (s && s !== gpuLogged) { gpuLogged = s; log('Grafik:', s); }
+});
 
 function restartInSoftwareMode(reason) {
   if (software) { log('Neustart nicht möglich, schon im Software-Modus:', reason); return; }
   log('Neustart ohne Grafikbeschleunigung:', reason);
-  touch(softwarePath); remove(pendingPath);
+  markSoftware(); remove(pendingPath);
   app.relaunch(); app.exit(0);
 }
 
 function createWindow() {
-  loaded = false;
+  loaded = false; createdAt = Date.now();
   touch(pendingPath);
   win = new BrowserWindow({
     width: 1400, height: 900, show: true,
@@ -64,7 +79,7 @@ function createWindow() {
     else if (!quitting && win && !win.isDestroyed()) wc.reload();
   });
   wc.on('unresponsive', () => log('Seite reagiert nicht'));
-  wc.on('console-message', (e, level, message) => { const l = e.level ?? level, m = e.message ?? message; if (l === 'error' || l >= 3) log('Seite:', m); });
+  wc.on('console-message', e => { if (e.level === 'error') log('Seite:', e.message); });
   win.loadFile(path.join(__dirname, 'app', 'index.html')).catch(e => log('loadFile:', e.message));
   // Nach 20 s immer noch nicht geladen: ohne Grafikbeschleunigung neu starten
   setTimeout(() => { if (!loaded && !quitting) restartInSoftwareMode('Seite nach 20 s nicht geladen'); }, 20000);
@@ -99,8 +114,13 @@ if (!gotLock) {
   app.on('second-instance', () => {
     log('zweiter Start');
     if (!win || win.isDestroyed()) { if (!quitting) createWindow(); return; }
-    // Fenster hängt beim Start: ohne Grafikbeschleunigung neu starten
-    if (!loaded) { restartInSoftwareMode('zweiter Start, Seite noch nicht geladen'); return; }
+    // Fenster hängt beim Start: ohne Grafikbeschleunigung neu starten. Erst wenn die Seite schon länger lädt; sonst schaltete
+    // ein zweites Antippen des Symbols während des Ladens dauerhaft auf Software-Darstellung (viel Akku)
+    if (!loaded) {
+      if (Date.now() - createdAt > 8000) restartInSoftwareMode('zweiter Start, Seite nach 8 s noch nicht geladen');
+      else { win.show(); win.focus(); }
+      return;
+    }
     if (win.isMinimized()) win.restore();
     win.show(); win.focus();
   });
