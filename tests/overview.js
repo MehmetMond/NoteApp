@@ -98,6 +98,27 @@ const check = (name, ok, info) => { res[name] = info === undefined ? !!ok : info
     return ov && { w: ov.c.width, h: ov.c.height, folie: Math.round(1094 * ov.s), upToDate: ov.items === S.items };
   });
   check('Lange Notiz: Übersicht nach Fläche begrenzt, eine Folie über 100 px breit', res.tall && res.tall.upToDate && res.tall.folie > 100 && res.tall.w * res.tall.h <= 3e6 + res.tall.w + res.tall.h + 1, res.tall);
+  // Notiz mit Bildern kalt geöffnet (wie nach einem App-Start, nur das sichtbare Bild ist geladen): die Übersicht wartet
+  // auf die kleinen Fassungen aller Bilder, statt die übrigen als Platzhalter zu zeichnen und dabei zu bleiben
+  res.imgs = await p.evaluate(async () => {
+    await closeNote();
+    const now = Date.now(), id = uid(), items = [];
+    for (let k = 0; k < 12; k++) {
+      const c = document.createElement('canvas'); c.width = 800; c.height = 600; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 800, 600);
+      const blob = await canvasToBlob(c, 'image/jpeg', 0.9), low = await makeLow(c, 'image/jpeg'), img = uid();
+      await dbImagePut({ id: img, n: id, blob, low, w: 800, h: 600 });
+      items.push({ t: 'i', id: uid(), img, x: 0, y: k * 2000, w: 800, h: 600, o: k, n: id });
+    }
+    const n = { id, name: 'Bilder', created: now, updated: now, thumb: null, bg: 'dots', view: { tx: 100, ty: 100, z: 0.5 } };
+    await writeRecords(n, items, [], true);
+    releaseImages(); await openNote(n);
+    await new Promise(r => setTimeout(r, 2000));
+    if (!ov) return { ov: false };
+    const g = ov.c.getContext('2d'); let ok = 0;
+    for (const it of S.items) { const d = g.getImageData(Math.round((it.x + it.w / 2 - ov.box[0]) * ov.s), Math.round((it.y + it.h / 2 - ov.box[1]) * ov.s), 1, 1).data; if (d[3] > 200 && d[0] > 200 && d[1] > 200 && d[2] > 200) ok++; }
+    return { ov: true, upToDate: ov.items === S.items, bilder: S.items.length, inDerUebersicht: ok, volleFassungen: [...IM.values()].filter(e => e.full || e.fullLoading).length };
+  });
+  check('Kalt geöffnet: alle Bilder in der Übersicht, keine Platzhalter', res.imgs.ov && res.imgs.upToDate && res.imgs.inDerUebersicht === 12, res.imgs);
   check('Keine Fehler', !errs.length, errs);
   res.fails = fails; res.errors = errs;
   console.log(JSON.stringify(res, null, 1));

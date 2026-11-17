@@ -2375,7 +2375,20 @@ const shownSlots = new Map();
 cvMain.addEventListener('contextrestored', () => { shownSig = ''; requestDraw(); });
 // cur: Ebene L ist die aktuelle (merkt sich die Plätze); only: nur geänderte Plätze malen; r: Bereich (mainRange)
 function drawLevel(ctx, L, cur, only, r) {
-  if ((r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400) return;
+  if ((r.i1 - r.i0 + 1) * (r.j1 - r.j0 + 1) > 400) {
+    // Weit herausgezoomt gegenüber dieser Stufe: nicht alle Plätze absuchen. Die Ersatzstufe bleibt über mehrere
+    // Stufenwechsel einer Geste stehen (switchLevel); ihre wenigen Kacheln werden dann einzeln gezeichnet, sonst
+    // verschwände die scharfe Mitte mitten im Rauszoomen
+    if (cur) return;
+    for (const [key, t] of tiles) {
+      if (t.L !== L) continue;
+      const [, i, j] = key.split(':').map(Number); if (i < r.i0 || i > r.i1 || j < r.j0 || j > r.j1) continue;
+      const x0 = Math.floor(i * T * r.k + r.txD), x1 = Math.floor((i + 1) * T * r.k + r.txD);
+      const y0 = Math.floor(j * T * r.k + r.tyD), y1 = Math.floor((j + 1) * T * r.k + r.tyD);
+      ctx.drawImage(t.c, x0, y0, x1 - x0, y1 - y0);
+    }
+    return;
+  }
   for (let j = r.j0; j <= r.j1; j++) for (let i = r.i0; i <= r.i1; i++) {
     const key = tkey(L, i, j), fresh = tiles.get(key), t = fresh || stale.get(key); if (!t) continue;
     if (cur && fresh) { tiles.delete(key); tiles.set(key, t); }
@@ -2527,9 +2540,9 @@ function schedulePrefetch() {
    Fleck; jetzt etwa 140 px. Kosten für den Akku: beim Schreiben kommen nur die neuen Striche dazu; nach anderen
    Änderungen (Radieren, Verschieben, Rückgängig …) wird sie erst nach 1,2 s Ruhe im Leerlauf neu gezeichnet, in Stücken. */
 const OV_PX = 3e6, OV_DIM = 8192;
-let ov = null, ovT = 0;   // ov: { c, box, s, items, note, dark }
+let ov = null, ovT = 0, ovWait = false;   // ov: { c, box, s, items, note, dark }; ovWait: wartet auf kleine Bildfassungen
 function overviewCheck() {
-  if (!S.note || ovT || (ov && ov.note === S.note && ov.items === S.items && ov.dark === S.dark)) return;
+  if (!S.note || ovT || ovWait || (ov && ov.note === S.note && ov.items === S.items && ov.dark === S.dark)) return;
   const same = ov && ov.note === S.note;
   ovT = setTimeout(() => { ovT = 0; idle(buildOverview, { timeout: 4000 }); }, same ? 1200 : 300);
 }
@@ -2538,12 +2551,24 @@ function buildOverview(dl) {
   const items = S.items, note = S.note, dark = S.dark;
   if (!note) return;
   if (gesture || action) { overviewCheck(); return; }
+  // Erst wenn von allen Bildern die kleine Fassung da ist. Beim Öffnen sind nur die sichtbaren geladen: die übrigen kamen
+  // als fast unsichtbare Platzhalter in die Übersicht und blieben es, weil sie danach als aktuell gilt. Nach dem Blättern
+  // in einem PDF fehlten beim Rauszoomen dann die Seiten überall dort, wo noch keine Kachel war
+  const pend = [];
+  for (const it of items) if (it.t === 'i') { const e = imgEntry(it.img); if (e.state === 'new' || e.state === 'loading') pend.push(e.ready); }
+  if (pend.length) {
+    ovWait = true;
+    Promise.all(pend).then(() => { ovWait = false; if (S.note === note) idle(buildOverview, { timeout: 4000 }); else overviewCheck(); });
+    return;
+  }
+  // Bilder immer in der kleinen Fassung: die Übersicht ist ohnehin unscharf und soll keine vollen Fassungen dekodieren
+  const put = (ctx, it, s) => it.t === 'i' ? drawImageItem(ctx, it, s, false) : drawItem(ctx, it, s);
   // beim Schreiben: die bisherigen Striche stehen unverändert vorne, die neuen liegen im Rechteck der Übersicht
   if (ov && ov.note === note && ov.dark === dark && ov.items.length < items.length && ov.items.every((it, k) => items[k] === it)) {
     const add = new Set(items.slice(ov.items.length)), b = ov.box;
     if ([...add].every(it => { const q = itemBox(it); return q[0] >= b[0] && q[1] >= b[1] && q[2] <= b[2] && q[3] <= b[3]; })) {
       const ctx = ov.c.getContext('2d'); ctx.setTransform(ov.s, 0, 0, ov.s, -b[0] * ov.s, -b[1] * ov.s);
-      for (const it of paintOrder(items)) if (add.has(it)) drawItem(ctx, it, ov.s);
+      for (const it of paintOrder(items)) if (add.has(it)) put(ctx, it, ov.s);
       ov.items = items; return;
     }
   }
@@ -2562,7 +2587,7 @@ function buildOverview(dl) {
   const order = paintOrder(items); let k = 0;
   const step = d => {
     if (S.items !== items || S.note !== note || S.dark !== dark) { c.width = c.height = 0; overviewCheck(); return; }   // inzwischen geändert
-    do { for (let n = 0; n < 150 && k < order.length; n++) drawItem(ctx, order[k++], s); } while (k < order.length && d.timeRemaining() > 3);
+    do { for (let n = 0; n < 150 && k < order.length; n++) put(ctx, order[k++], s); } while (k < order.length && d.timeRemaining() > 3);
     if (k < order.length) { idle(step, { timeout: 2000 }); return; }
     if (ov) ov.c.width = ov.c.height = 0;
     ov = { c, box, s, items, note, dark };
