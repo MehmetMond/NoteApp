@@ -1,4 +1,9 @@
-# Notizen für das Surface Pro 11 (Version 1.6.4)
+# Notizen für das Surface Pro 11 (Version 1.6.5)
+
+## Neu in 1.6.5: PDF-Seiten verschwinden beim Zoomen nicht mehr
+- **Seiten bleiben beim Rauszoomen da:** Wer in einem PDF-Skript weitergeblättert und dort rausgezoomt hat, sah außerhalb der Mitte oft nur leeres Papier oder abgeschnittene Seiten, bis die scharfe Ansicht fertig war. Die Vorschau der ganzen Notiz enthält jetzt alle Seiten, nicht nur die, die beim Öffnen zu sehen waren.
+- **Scharfe Mitte bleibt stehen:** Beim weiten Rauszoomen verschwindet die scharfe Ansicht in der Mitte nicht mehr mitten in der Geste.
+- **Weniger Flackern mit echten Fingern:** Beim Reinzoomen mit zwei Fingern konnte je nach Geschwindigkeit trotz 1.6.4 kurz fast der ganze Bildschirm unscharf werden. Als Ersatz dient jetzt immer die Ansicht, die am meisten vom Bildschirm abdeckt.
 
 ## Neu in 1.6.4: Zoomen auf PDF-Seiten ohne Flackern
 - **Kein Flackern mehr beim Reinzoomen:** Zoomt man mit zwei Fingern in PDF-Folien hinein, blitzt nicht mehr kurz eine weiße (ohne PDF schwarze) Fläche auf. Die scharfe Ansicht bleibt stehen, bis die neue fertig ist.
