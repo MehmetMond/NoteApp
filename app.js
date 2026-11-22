@@ -681,7 +681,8 @@ const TEXT_FONTS = {
 };
 const fontStack = ff => (TEXT_FONTS[ff] || TEXT_FONTS.sans)[1];
 const textFontStr = (it, r) => `${r.i ? 'italic ' : ''}${r.b ? 700 : 400} ${it.fs}px ${fontStack(it.ff)}`;
-const txMeasure = document.createElement('canvas').getContext('2d'), txLayouts = new WeakMap();
+const txMeasure = document.createElement('canvas').getContext('2d');
+let txLayouts = new WeakMap();   // neu angelegt, wenn eine Schrift dazukommt oder wegfällt (fontsChanged)
 function textLayout(it) {
   let L = txLayouts.get(it); if (L) return L;
   const g = txMeasure, W = it.w, lh = it.fs * 1.35, lines = [], sp = f => /^ +$/.test(f.t);
@@ -5063,7 +5064,8 @@ $('#sNote').onclick = () => {
    ein leerer Text verschwindet. Enter und Einfügen setzen nur Text (keine Blöcke, keine fremden Formate). */
 const TEXT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64, 80];
 S.text = { ff: 'sans', fs: 20, al: 'l' };
-{ const v = store.get('text'); if (v && TEXT_FONTS[v.ff]) S.text.ff = v.ff; if (v && v.fs > 4 && v.fs < 400) S.text.fs = v.fs; if (v && /^[lcr]$/.test(v.al)) S.text.al = v.al; }
+let pendingFf = null;   // gemerkte eigene Schrift: erst gültig, wenn loadFonts sie registriert hat
+{ const v = store.get('text'); if (v && /^u:/.test(v.ff)) pendingFf = v.ff; if (v && TEXT_FONTS[v.ff]) S.text.ff = v.ff; if (v && v.fs > 4 && v.fs < 400) S.text.fs = v.fs; if (v && /^[lcr]$/.test(v.al)) S.text.al = v.al; }
 const storeText = () => store.set('text', S.text);
 let txEd = null, txClosedAt = -1;   // offener Text: { id (vorhanden) oder null, x, y, w, ff, fs, c, al, orig }
 const txEdEl = $('#txEd'), txBar = $('#txBar'), txGrip = $('#txGrip'), txMove = $('#txMove');
@@ -5182,7 +5184,7 @@ function renderTextBar() {
     b.style.background = colorOf(c); b.onclick = () => { document.execCommand('foreColor', false, colorOf(c)); syncTextBar(); };
     box.appendChild(b);
   }
-  $('#txFont').value = txEd.ff; $('#txSize').textContent = fmtSize(Math.round(txEd.fs * 10) / 10);
+  fillFontOptions(); $('#txSize').textContent = fmtSize(Math.round(txEd.fs * 10) / 10);
   syncTextBar();
 }
 function syncTextBar() {
@@ -5190,11 +5192,99 @@ function syncTextBar() {
   for (const b of $$('#txBar .txf')) b.classList.toggle('on', document.queryCommandState(b.dataset.cmd));
   for (const b of $$('#txBar .txa')) b.classList.toggle('on', b.dataset.al === txEd.al);
 }
-$('#txFont').innerHTML = Object.entries(TEXT_FONTS).map(([k, [name, st]]) => `<option value="${k}" style="font-family:${st.replace(/"/g, '&quot;')}">${name}</option>`).join('');
+/* ---------- Eigene Schriften ----------
+   Schriftdateien (.otf, .ttf, .woff, .woff2), die man in der Textleiste unter „Schrift hinzufügen …“ wählt. Sie liegen nur
+   im Speicher dieses Geräts (eigene Datenbank „notizen-fonts“, die Notizen und Sicherungen bleiben unberührt) und stehen
+   weder in der App noch in der Sicherung: viele Schriften erlauben keine Weitergabe der Dateien. Der Schlüssel ff ist
+   'u:' + Dateiname (klein, ohne Endung und „-regular“) und damit auf jedem Gerät derselbe: wer dieselbe Datei dort
+   hinzufügt, sieht seine Texte wieder in dieser Schrift. Fehlt sie, zeigt der Text die Standardschrift (ff bleibt).
+   Zeichen, die die Schrift nicht hat (bei Demo-Schriften oft Umlaute), setzt der Browser einzeln aus der Standardschrift. */
+const fontFaces = new Map();   // Schlüssel -> FontFace
+let fontsReady = Promise.resolve(), fontDBp = null;
+const fontDB = () => fontDBp || (fontDBp = new Promise((res, rej) => {
+  const r = indexedDB.open('notizen-fonts', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('fonts', { keyPath: 'id' });
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+}));
+const fontsAll = async () => reqP((await fontDB()).transaction('fonts').objectStore('fonts').getAll());
+async function fontPut(rec) { const tx = (await fontDB()).transaction('fonts', 'readwrite'); tx.objectStore('fonts').put(rec); return txDone(tx); }
+async function fontDel(id) { const tx = (await fontDB()).transaction('fonts', 'readwrite'); tx.objectStore('fonts').delete(id); return txDone(tx); }
+const fontBase = file => file.replace(/\.[^.]+$/, '').replace(/[-_ ]?(regular|normal|book)$/i, '');
+const fontKey = file => {
+  const b = fontBase(file), s = b.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return 'u:' + (s || 'f' + [...b].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36));
+};
+async function registerFont(rec) {
+  const fam = 'nf-' + rec.id.slice(2), old = fontFaces.get(rec.id);
+  const face = new FontFace(fam, await rec.blob.arrayBuffer());
+  await face.load();   // wirft bei einer ungültigen Datei
+  if (old) document.fonts.delete(old);
+  document.fonts.add(face); fontFaces.set(rec.id, face);
+  TEXT_FONTS[rec.id] = [rec.name, `"${fam}", ${TEXT_FONTS.sans[1]}`];
+}
+async function loadFonts() {
+  let recs = []; try { recs = await fontsAll(); } catch (e) { /* kein Speicher: nur die eingebauten Schriften */ }
+  await Promise.all(recs.map(r => registerFont(r).catch(() => {})));   // eine kaputte Datei lässt nur ihre Schrift weg
+  if (pendingFf && TEXT_FONTS[pendingFf]) S.text.ff = pendingFf;
+  fillFontOptions();
+}
+// Das Auswahlfeld: eingebaute und eigene Schriften, dann „hinzufügen“ (und bei einer eigenen „entfernen“)
+function fillFontOptions() {
+  const cur = txEd ? txEd.ff : S.text.ff, esc = s => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const miss = cur && !TEXT_FONTS[cur] ? `<option value="${esc(cur)}" disabled>${esc(cur.replace(/^u:/, ''))} (fehlt)</option>` : '';
+  $('#txFont').innerHTML = miss + Object.entries(TEXT_FONTS).map(([k, [name, st]]) => `<option value="${esc(k)}" style="font-family:${esc(st)}">${esc(name)}</option>`).join('')
+    + '<option value="__add">Schrift hinzufügen …</option>' + (fontFaces.has(cur) ? '<option value="__del">Diese Schrift entfernen …</option>' : '');
+  $('#txFont').value = cur;
+}
+// Eine Schrift kam dazu oder fiel weg: Satz und Kacheln mit ihr stimmen nicht mehr (Canvas zeichnet ohne die Schrift still
+// die Ersatzschrift und die Kacheln, Übersicht und Satz-Cache behielten das)
+function fontsChanged(key) {
+  txLayouts = new WeakMap();
+  if (S.note) {
+    for (const it of S.items) if (it.t === 'x' && it.ff === key) it.h = textLayout(it).h;
+    clearTiles(); dropOverview();
+  }
+  fillFontOptions(); if (txEd) styleTextEd();
+}
+async function importFonts(files) {
+  const added = [];
+  for (const f of files) {
+    if (f.size > 25e6) { toast('„' + f.name + '“ ist zu groß für eine Schrift', 4000); continue; }
+    const rec = { id: fontKey(f.name), name: fontBase(f.name).replace(/_+/g, ' ').trim() || f.name, blob: new Blob([await f.arrayBuffer()], { type: f.type || 'font/otf' }), added: Date.now() };
+    try { await registerFont(rec); } catch (e) { toast('„' + f.name + '“ ist keine gültige Schrift', 4000); continue; }
+    try { await fontPut(rec); } catch (e) { toast('Schrift konnte nicht gespeichert werden: ' + e.message, 5000); }
+    added.push(rec);
+  }
+  if (!added.length) return;
+  for (const r of added) fontsChanged(r.id);
+  if (txEd) { txEd.ff = S.text.ff = added[0].id; storeText(); fillFontOptions(); styleTextEd(); txEdEl.focus({ preventScroll: true }); }
+  toast(added.length === 1 ? '„' + added[0].name + '“ hinzugefügt' : added.length + ' Schriften hinzugefügt', 2400);
+}
+async function removeFont(key) {
+  const face = fontFaces.get(key); if (face) document.fonts.delete(face);
+  fontFaces.delete(key); delete TEXT_FONTS[key];
+  try { await fontDel(key); } catch (e) { /* bleibt im Speicher, kommt beim nächsten Start wieder */ }
+  if (S.text.ff === key) { S.text.ff = 'sans'; storeText(); }
+  if (txEd && txEd.ff === key) txEd.ff = 'sans';
+  fontsChanged(key);
+}
+$('#fFont').onchange = e => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) importFonts(fs); };
+fillFontOptions();
 txBar.addEventListener('pointerdown', e => { if (e.target.tagName !== 'SELECT') e.preventDefault(); });   // Fokus und Markierung bleiben im Text
 for (const b of $$('#txBar .txf')) b.onclick = () => { document.execCommand(b.dataset.cmd); syncTextBar(); };
 for (const b of $$('#txBar .txa')) b.onclick = () => { if (!txEd) return; txEd.al = S.text.al = b.dataset.al; storeText(); styleTextEd(); syncTextBar(); };
-$('#txFont').onchange = e => { if (!txEd) return; txEd.ff = S.text.ff = e.target.value; storeText(); styleTextEd(); txEdEl.focus({ preventScroll: true }); };
+$('#txFont').onchange = async e => {
+  if (!txEd) return;
+  const v = e.target.value;
+  if (v === '__add') { fillFontOptions(); $('#fFont').click(); return; }
+  if (v === '__del') {
+    const key = txEd.ff, name = (TEXT_FONTS[key] || [key])[0]; fillFontOptions();
+    if (await askYes('Schrift „' + name + '“ von diesem Gerät entfernen? Texte in dieser Schrift erscheinen dann in der Standardschrift, bis du die Datei wieder hinzufügst.', { ok: 'Entfernen', danger: true })) await removeFont(key);
+    if (txEd) txEdEl.focus({ preventScroll: true });
+    return;
+  }
+  txEd.ff = S.text.ff = v; storeText(); fillFontOptions(); styleTextEd(); txEdEl.focus({ preventScroll: true });
+};
 $('#txMinus').onclick = () => setTextSize(-1);
 $('#txPlus').onclick = () => setTextSize(1);
 $('#txDel').onclick = deleteText;
@@ -6156,6 +6246,7 @@ let navBusy = false;
 async function openNote(meta) {
   if (navBusy || S.note) return; navBusy = true;
   try {
+    await fontsReady;   // eigene Schriften sind registriert, bevor der erste Text gesetzt wird (sonst blieben Satz und Kacheln in der Ersatzschrift)
     // aktueller Stand aus dem Speicher (die Karte kann älter sein: verschoben, umbenannt, gelöscht)
     const fresh = await dbIndexGet(meta.id);
     if (!fresh) { navBusy = false; toast('Diese Seite gibt es nicht mehr'); renderHome(); return; }
@@ -6341,6 +6432,7 @@ window.addEventListener('pagehide', () => { if (S.note) { syncNoteCard(); if (tx
 
 /* ---------- Start ---------- */
 applyDark(); applyTheme();
+fontsReady = loadFonts();
 openDB().then(() => { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); loadCustomShapes(); renderHome().then(scheduleWarmUp); })
   .catch(e => { $('#grid').innerHTML = '<div id="empty">Der Speicher ist nicht verfügbar (' + e.message + ').<br>Bitte nicht im privaten Fenster öffnen.</div>'; });
 // Browser-Version im Netz (GitHub Pages): Offline-Start über sw.js; das Windows-Programm lädt die Datei lokal

@@ -1,5 +1,11 @@
 # Notizen für das Surface Pro 11 (Version 1.6.5)
 
+## Bald in 1.6.6: Eigene Schriften im Text
+- **Schrift hinzufügen:** In der Leiste über dem Textfeld, im Auswahlfeld der Schrift, ganz unten „Schrift hinzufügen …“. Eine oder mehrere Dateien wählen (.otf, .ttf, .woff, .woff2); die Schrift gilt sofort für den Text und steht danach immer in der Auswahl.
+- **Nur auf diesem Gerät:** Die Schriftdatei bleibt in der App auf dem Gerät, sie steht nicht in der Sicherung. Auf einem anderen Gerät dieselbe Datei hinzufügen, dann zeigen die Texte dort wieder diese Schrift; bis dahin erscheinen sie in der Standardschrift.
+- **Entfernen:** Ist eine eigene Schrift gewählt, steht unten „Diese Schrift entfernen …“. Texte in dieser Schrift bleiben, erscheinen aber in der Standardschrift.
+- **Hinweis:** Zeichen, die eine Schrift nicht hat (bei Demo-Schriften oft Umlaute und Satzzeichen), kommen einzeln aus der Standardschrift.
+
 ## Neu in 1.6.5: PDF-Seiten verschwinden beim Zoomen nicht mehr
 - **Seiten bleiben beim Rauszoomen da:** Wer in einem PDF-Skript weitergeblättert und dort rausgezoomt hat, sah außerhalb der Mitte oft nur leeres Papier oder abgeschnittene Seiten, bis die scharfe Ansicht fertig war. Die Vorschau der ganzen Notiz enthält jetzt alle Seiten, nicht nur die, die beim Öffnen zu sehen waren.
 - **Scharfe Mitte bleibt stehen:** Beim weiten Rauszoomen verschwindet die scharfe Ansicht in der Mitte nicht mehr mitten in der Geste.
