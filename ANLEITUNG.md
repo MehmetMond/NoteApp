@@ -1,6 +1,6 @@
-# Notizen für das Surface Pro 11 (Version 1.6.5)
+# Notizen für das Surface Pro 11 (Version 1.6.6)
 
-## Bald in 1.6.6: Eigene Schriften im Text
+## Neu in 1.6.6: Eigene Schriften im Text
 - **Schrift hinzufügen:** In der Leiste über dem Textfeld, im Auswahlfeld der Schrift, ganz unten „Schrift hinzufügen …“. Eine oder mehrere Dateien wählen (.otf, .ttf, .woff, .woff2); die Schrift gilt sofort für den Text und steht danach immer in der Auswahl.
 - **Nur auf diesem Gerät:** Die Schriftdatei bleibt in der App auf dem Gerät, sie steht nicht in der Sicherung. Auf einem anderen Gerät dieselbe Datei hinzufügen, dann zeigen die Texte dort wieder diese Schrift; bis dahin erscheinen sie in der Standardschrift.
 - **Entfernen:** Ist eine eigene Schrift gewählt, steht unten „Diese Schrift entfernen …“. Texte in dieser Schrift bleiben, erscheinen aber in der Standardschrift.
